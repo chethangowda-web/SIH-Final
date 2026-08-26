@@ -126,7 +126,12 @@ class ConstraintValidationEngine:
         db_truck_cap = 10000.0
         db_depot_stock = float(route_info["depot_stock"]) if route_info and route_info["depot_stock"] else 50000.0
 
-        if scenario.upper() == "FAILURE_SIMULATION" or override.get("force_failure"):
+        if scenario.upper() in ["STORAGE_FAILURE_SIMULATION", "CAPACITY_EXCEPTION_SIMULATION"] or override.get("force_storage_failure"):
+            is_failure_sim = True
+            capacity_kg = float(override.get("capacity_kg", 1500.0))
+            selected_truck_capacity_kg = float(override.get("truck_capacity_kg", db_truck_cap))
+            available_depot_stock_kg = float(override.get("depot_stock_kg", db_depot_stock))
+        elif scenario.upper() == "FAILURE_SIMULATION" or override.get("force_failure"):
             is_failure_sim = True
             if total_dispatch_kg <= 2000.0:
                 total_dispatch_kg = 3120.0
@@ -525,10 +530,19 @@ class ConstraintValidationEngine:
         fail_count = 0
 
         for fid in fps_ids:
-            if scenario.upper() in ["STORAGE_FAILURE_SIMULATION", "CAPACITY_EXCEPTION_SIMULATION"] and fid == "FPS-KA-BLR-001":
-                self.set_simulation_override(fid, {"capacity_kg": 1500.0, "force_storage_failure": True})
-            elif scenario.upper() == "NORMAL" and fid in self.simulation_overrides and self.simulation_overrides[fid].get("force_storage_failure"):
+            if scenario.upper() in ["STORAGE_FAILURE_SIMULATION", "CAPACITY_EXCEPTION_SIMULATION"]:
+                if fid == "FPS-KA-BLR-001":
+                    self.set_simulation_override(fid, {"capacity_kg": 1500.0, "force_storage_failure": True})
+                else:
+                    self.set_simulation_override(fid, None)
+            elif scenario.upper() == "FAILURE_SIMULATION":
+                if fid == "FPS-KA-BLR-001":
+                    self.set_simulation_override(fid, {"truck_capacity_kg": 2000.0, "force_failure": True})
+                else:
+                    self.set_simulation_override(fid, None)
+            elif scenario.upper() == "NORMAL":
                 self.set_simulation_override(fid, None)
+
             res = self.validate_fps_constraints(cursor, fid, cycle_id, scenario=scenario)
             fps_results.append(res)
             if res["overall_status"] == "PASS":
