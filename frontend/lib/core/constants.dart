@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class AppConstants {
   // App Branding
@@ -10,8 +11,13 @@ class AppConstants {
       'DEMO DATA — NOT GOVERNMENT DATA (100% Synthetic Pilot Dataset)';
 
   // API Endpoints
-  static const String apiBaseUrl = 'http://127.0.0.1:8000/api';
-  static const String healthEndpoint = '$apiBaseUrl/health';
+  static String get apiBaseUrl {
+    if (kIsWeb) {
+      return '${Uri.base.origin}/api';
+    }
+    return 'http://127.0.0.1:8000/api';
+  }
+  static String get healthEndpoint => '$apiBaseUrl/health';
 
   // Modern Government Digital Infrastructure Color Palette
   static const Color primaryNavy = Color(0xFF0B2942); // Deep Government Navy
