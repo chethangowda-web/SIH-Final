@@ -32,5 +32,7 @@ COPY --from=frontend-builder /app/frontend/build/web ./frontend/build/web
 # Set the working directory to backend so server.py/uvicorn runs correctly
 WORKDIR /app/backend
 
-# The start command that respects Railway's dynamic $PORT variable
-CMD python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+ENV PORT=8000
+EXPOSE 8000
+
+CMD python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
