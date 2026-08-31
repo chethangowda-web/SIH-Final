@@ -924,7 +924,7 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
 
   // CTA: SUBMIT BUTTON
   Widget _buildPrimarySubmitButton(double transportFee) {
-    final isReady = _isChoiceWindowOpen && _selectedFps != null;
+    final isReady = _selectedFps != null;
 
     return SizedBox(
       width: double.infinity,

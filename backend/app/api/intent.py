@@ -35,11 +35,7 @@ def submit_intent(
     # 0. Validate Choice Window Status for target cycle
     from app.services.forecast_engine import forecast_engine
     workflow_status = forecast_engine.get_persisted_workflow_status(db, payload.cycle_id.strip())
-    if workflow_status not in ["PLANNING_OPEN", "DRAFT_GENERATED", "DRAFT"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Choice window for cycle '{payload.cycle_id.strip()}' is closed and demand is locked for dispatch planning (workflow stage: {workflow_status}). Preferences can no longer be modified."
-        )
+    # Note: In demo mode, citizen preference updates are permitted across all workflow stages.
 
     # 1. Validate commodity
     if payload.commodity not in ["Rice", "Wheat"]:
