@@ -34,4 +34,4 @@ COPY --from=frontend-builder /app/frontend/build/web ./frontend/build/web
 WORKDIR /app/backend
 
 # The start command that respects Railway's dynamic $PORT variable
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
