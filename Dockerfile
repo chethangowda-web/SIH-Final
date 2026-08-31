@@ -15,8 +15,7 @@ ENV ENVIRONMENT=production
 # Provide a default secure secret key (for Railway deployment)
 ENV SECRET_KEY=a_very_long_secure_random_production_secret_key_minimum_32_characters_railway
 ENV HOST=0.0.0.0
-# Railway passes PORT environment variable dynamically
-ENV PORT=8000
+
 # Ensure stdout/stderr are unbuffered for logs
 ENV PYTHONUNBUFFERED=1
 
