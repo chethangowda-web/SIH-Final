@@ -54,9 +54,9 @@ class _AdminFpsDetailDialogState extends State<AdminFpsDetailDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 820, maxHeight: 780),
+        constraints: const BoxConstraints(maxWidth: 1140, maxHeight: 840),
         child: _isLoading
             ? const Padding(
                 padding: EdgeInsets.all(48),

@@ -34,7 +34,7 @@ class HealthModel {
       subtitle: json['subtitle'] ?? '',
       version: json['version'] ?? '1.0.0',
       databaseStatus: json['database_status'] ?? 'unknown',
-      district: json['district'] ?? 'Bengaluru Urban - Demo District',
+      district: json['district'] ?? 'Bengaluru Urban PDS Pilot',
       activeCycle: json['active_cycle'] ?? json['current_cycle'] ?? '2026-09',
       fpsCount: json['fps_count'] ?? 20,
       beneficiariesCount: json['beneficiaries_count'] ?? 2000,

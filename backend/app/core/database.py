@@ -1,18 +1,23 @@
-"""SQLite Database Connection, Schema Definitions, and Utilities."""
+"""SQLite Database Connection, Schema Definitions, Deterministic Migrations, and Recovery Utilities."""
 import os
 import sqlite3
-from typing import Generator
+import hashlib
+from typing import Generator, List, Dict, Any, Optional
+from datetime import datetime
 from app.core.config import settings
 
-def get_db_connection() -> sqlite3.Connection:
+def get_db_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     """Create and return a configured SQLite connection with row factory."""
+    target_path = db_path or settings.DB_PATH
     conn = sqlite3.connect(
-        settings.DB_PATH,
-        check_same_thread=False
+        target_path,
+        check_same_thread=False,
+        timeout=30.0
     )
     conn.row_factory = sqlite3.Row
-    # Enable WAL mode and foreign keys for performance and data integrity
+    # Enable WAL mode and foreign keys for performance and referential integrity
     conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA busy_timeout = 30000;")
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
@@ -24,29 +29,26 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
     finally:
         conn.close()
 
-def init_db(conn: sqlite3.Connection = None) -> None:
-    """Initialize database tables with exact Demo V1 schemas."""
-    should_close = False
-    if conn is None:
-        conn = get_db_connection()
-        should_close = True
+# -----------------------------------------------------------------------------
+# DETERMINISTIC MIGRATION RUNNER
+# -----------------------------------------------------------------------------
 
+def ensure_migration_table(conn: sqlite3.Connection) -> None:
+    """Ensure the schema_migrations tracking table exists."""
     cursor = conn.cursor()
-
-    # 1. beneficiaries
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS beneficiaries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        pseudonymous_beneficiary_id TEXT NOT NULL UNIQUE,
-        name_for_demo TEXT NOT NULL,
-        registered_fps_id TEXT NOT NULL,
-        language TEXT NOT NULL DEFAULT 'kn',
-        status TEXT NOT NULL DEFAULT 'ACTIVE',
-        FOREIGN KEY (registered_fps_id) REFERENCES fps (fps_id)
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        checksum TEXT
     );
     """)
+    conn.commit()
 
-    # 2. fps
+def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
+    """001: Core Master Tables and Operational Lifecycles."""
+    # 1. fps (Master Parent)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS fps (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +67,6 @@ def init_db(conn: sqlite3.Connection = None) -> None:
         status TEXT NOT NULL DEFAULT 'ACTIVE'
     );
     """)
-
     for col_def in [
         ("stockout_frequency", "REAL NOT NULL DEFAULT 0.05"),
         ("portability_rate", "REAL NOT NULL DEFAULT 0.12"),
@@ -79,7 +80,73 @@ def init_db(conn: sqlite3.Connection = None) -> None:
         except Exception:
             pass
 
-    # 3. intent
+    # 2. depots (Master Parent)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS depots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        depot_id TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        district TEXT NOT NULL,
+        location TEXT NOT NULL,
+        capacity_mt REAL NOT NULL DEFAULT 500.0,
+        available_stock_mt REAL NOT NULL DEFAULT 400.0,
+        loading_capacity_mt_day REAL NOT NULL DEFAULT 120.0,
+        rice_stock_mt REAL NOT NULL DEFAULT 250.0,
+        wheat_stock_mt REAL NOT NULL DEFAULT 150.0,
+        status TEXT NOT NULL DEFAULT 'OPERATIONAL'
+    );
+    """)
+    for col_def in [
+        ("available_stock_mt", "REAL NOT NULL DEFAULT 400.0"),
+        ("loading_capacity_mt_day", "REAL NOT NULL DEFAULT 120.0"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE depots ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
+
+    # 3. vehicles (Fleet Logistics)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS vehicles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        truck_id TEXT NOT NULL UNIQUE,
+        model TEXT NOT NULL,
+        vehicle_type TEXT NOT NULL DEFAULT '10-Ton Heavy Haulage Carrier',
+        corridor TEXT NOT NULL,
+        max_payload_kg REAL NOT NULL DEFAULT 10000.0,
+        current_location TEXT NOT NULL DEFAULT 'Bengaluru Central FCI Godown (Hebbal)',
+        operating_cost_per_km REAL NOT NULL DEFAULT 32.0,
+        driver_name TEXT NOT NULL,
+        driver_phone TEXT NOT NULL,
+        source_depot_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'AVAILABLE',
+        FOREIGN KEY (source_depot_id) REFERENCES depots (depot_id)
+    );
+    """)
+    for col_def in [
+        ("vehicle_type", "TEXT NOT NULL DEFAULT '10-Ton Heavy Haulage Carrier'"),
+        ("current_location", "TEXT NOT NULL DEFAULT 'Bengaluru Central FCI Godown (Hebbal)'"),
+        ("operating_cost_per_km", "REAL NOT NULL DEFAULT 32.0"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE vehicles ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
+
+    # 4. beneficiaries (Master Parent)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS beneficiaries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pseudonymous_beneficiary_id TEXT NOT NULL UNIQUE,
+        name_for_demo TEXT NOT NULL,
+        registered_fps_id TEXT NOT NULL,
+        language TEXT NOT NULL DEFAULT 'kn',
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        FOREIGN KEY (registered_fps_id) REFERENCES fps (fps_id)
+    );
+    """)
+
+    # 5. intent (Forward Beneficiary Signal)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS intent (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,7 +164,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 4. historical_demand
+    # 6. historical_demand
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS historical_demand (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,7 +177,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 5. inventory
+    # 7. inventory
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS inventory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,7 +189,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 6. forecast
+    # 8. forecast
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS forecast (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,14 +210,12 @@ def init_db(conn: sqlite3.Connection = None) -> None:
         UNIQUE(fps_id, cycle_id, commodity)
     );
     """)
-
-    # Ensure recommended_dispatch_kg column exists if table was created in an earlier migration
     try:
         cursor.execute("ALTER TABLE forecast ADD COLUMN recommended_dispatch_kg REAL NOT NULL DEFAULT 0.0;")
     except Exception:
         pass
 
-    # 7. dispatch
+    # 9. dispatch
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS dispatch (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,19 +233,16 @@ def init_db(conn: sqlite3.Connection = None) -> None:
         UNIQUE(fps_id, cycle_id, commodity)
     );
     """)
+    for col_def in [
+        ("cycle_id", "TEXT NOT NULL DEFAULT '2026-09'"),
+        ("source_godown", "TEXT NOT NULL DEFAULT 'Bengaluru Central FCI Godown (Hebbal)'"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE dispatch ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
 
-    # Ensure cycle_id and source_godown exist if table was created in an earlier migration
-    try:
-        cursor.execute("ALTER TABLE dispatch ADD COLUMN cycle_id TEXT NOT NULL DEFAULT '2026-09';")
-    except Exception:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE dispatch ADD COLUMN source_godown TEXT NOT NULL DEFAULT 'Bengaluru Central FCI Godown (Hebbal)';")
-    except Exception:
-        pass
-
-    # 8. actual_distribution
+    # 10. actual_distribution
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS actual_distribution (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -197,32 +259,25 @@ def init_db(conn: sqlite3.Connection = None) -> None:
         UNIQUE(fps_id, cycle_id, commodity)
     );
     """)
+    for col_def in [
+        ("dispatch_quantity_kg", "REAL NOT NULL DEFAULT 0.0"),
+        ("variance_kg", "REAL NOT NULL DEFAULT 0.0"),
+        ("variance_pct", "REAL NOT NULL DEFAULT 0.0"),
+        ("status", "TEXT NOT NULL DEFAULT 'DISTRIBUTED'"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE actual_distribution ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
 
-    try:
-        cursor.execute("ALTER TABLE actual_distribution ADD COLUMN dispatch_quantity_kg REAL NOT NULL DEFAULT 0.0;")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE actual_distribution ADD COLUMN variance_kg REAL NOT NULL DEFAULT 0.0;")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE actual_distribution ADD COLUMN variance_pct REAL NOT NULL DEFAULT 0.0;")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE actual_distribution ADD COLUMN status TEXT NOT NULL DEFAULT 'DISTRIBUTED';")
-    except Exception:
-        pass
-
-    # 9. forecast_evaluation
+    # 11. forecast_evaluation
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS forecast_evaluation (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         forecast_id INTEGER,
-        fps_id TEXT NOT NULL,
+        fps_id TEXT NOT NULL DEFAULT '',
         cycle_id TEXT NOT NULL DEFAULT '2026-09',
-        commodity TEXT NOT NULL CHECK(commodity IN ('Rice', 'Wheat')),
+        commodity TEXT NOT NULL DEFAULT 'Rice' CHECK(commodity IN ('Rice', 'Wheat')),
         forecast_quantity_kg REAL NOT NULL DEFAULT 0.0,
         actual_quantity_kg REAL NOT NULL,
         absolute_error REAL NOT NULL,
@@ -234,25 +289,18 @@ def init_db(conn: sqlite3.Connection = None) -> None:
         UNIQUE(fps_id, cycle_id, commodity)
     );
     """)
+    for col_def in [
+        ("fps_id", "TEXT NOT NULL DEFAULT ''"),
+        ("cycle_id", "TEXT NOT NULL DEFAULT '2026-09'"),
+        ("commodity", "TEXT NOT NULL DEFAULT 'Rice'"),
+        ("forecast_quantity_kg", "REAL NOT NULL DEFAULT 0.0"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE forecast_evaluation ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
 
-    try:
-        cursor.execute("ALTER TABLE forecast_evaluation ADD COLUMN fps_id TEXT NOT NULL DEFAULT '';")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE forecast_evaluation ADD COLUMN cycle_id TEXT NOT NULL DEFAULT '2026-09';")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE forecast_evaluation ADD COLUMN commodity TEXT NOT NULL DEFAULT 'Rice';")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE forecast_evaluation ADD COLUMN forecast_quantity_kg REAL NOT NULL DEFAULT 0.0;")
-    except Exception:
-        pass
-
-    # 10. model_calibration
+    # 12. model_calibration
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS model_calibration (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -270,62 +318,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 11. depots (Central & Buffer Depots)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS depots (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        depot_id TEXT NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        district TEXT NOT NULL,
-        location TEXT NOT NULL,
-        capacity_mt REAL NOT NULL DEFAULT 500.0,
-        available_stock_mt REAL NOT NULL DEFAULT 400.0,
-        loading_capacity_mt_day REAL NOT NULL DEFAULT 120.0,
-        rice_stock_mt REAL NOT NULL DEFAULT 250.0,
-        wheat_stock_mt REAL NOT NULL DEFAULT 150.0,
-        status TEXT NOT NULL DEFAULT 'OPERATIONAL'
-    );
-    """)
-
-    for col_def in [
-        ("available_stock_mt", "REAL NOT NULL DEFAULT 400.0"),
-        ("loading_capacity_mt_day", "REAL NOT NULL DEFAULT 120.0"),
-    ]:
-        try:
-            cursor.execute(f"ALTER TABLE depots ADD COLUMN {col_def[0]} {col_def[1]};")
-        except Exception:
-            pass
-
-    # 12. vehicles (Dedicated Transport Fleet)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS vehicles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        truck_id TEXT NOT NULL UNIQUE,
-        model TEXT NOT NULL,
-        vehicle_type TEXT NOT NULL DEFAULT '10-Ton Heavy Haulage Carrier',
-        corridor TEXT NOT NULL,
-        max_payload_kg REAL NOT NULL DEFAULT 10000.0,
-        current_location TEXT NOT NULL DEFAULT 'Bengaluru Central FCI Godown (Hebbal)',
-        operating_cost_per_km REAL NOT NULL DEFAULT 32.0,
-        driver_name TEXT NOT NULL,
-        driver_phone TEXT NOT NULL,
-        source_depot_id TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'AVAILABLE',
-        FOREIGN KEY (source_depot_id) REFERENCES depots (depot_id)
-    );
-    """)
-
-    for col_def in [
-        ("vehicle_type", "TEXT NOT NULL DEFAULT '10-Ton Heavy Haulage Carrier'"),
-        ("current_location", "TEXT NOT NULL DEFAULT 'Bengaluru Central FCI Godown (Hebbal)'"),
-        ("operating_cost_per_km", "REAL NOT NULL DEFAULT 32.0"),
-    ]:
-        try:
-            cursor.execute(f"ALTER TABLE vehicles ADD COLUMN {col_def[0]} {col_def[1]};")
-        except Exception:
-            pass
-
-    # 13. routes (Supply-Chain Delivery Corridors & Road Conditions)
+    # 13. routes
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS routes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -342,7 +335,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 14. gatepasses (Digital Pre-Dispatch Gatepasses)
+    # 14. gatepasses
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS gatepasses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -371,7 +364,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 15. notifications (Simulated Multi-Channel Pre-Dispatch Alerts)
+    # 15. notifications
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS notifications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -391,7 +384,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 16. constraint_logs (Audit Trail for Constraint Validation & Fixes)
+    # 16. constraint_logs
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS constraint_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -406,7 +399,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 17. manifests (Auditable Dispatch Manifests)
+    # 17. manifests
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS manifests (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -440,7 +433,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 18. manifest_audit_logs (Immutable Audit Trail for Manifest Actions)
+    # 18. manifest_audit_logs
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS manifest_audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -458,7 +451,45 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 19. depot_stock_cycles (Cycle-specific depot inventory for shortage simulation)
+    # 19. cycle_workflow_states & workflow_audit_logs
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS cycle_workflow_states (
+        cycle_id TEXT PRIMARY KEY,
+        current_state TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS workflow_audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cycle_id TEXT NOT NULL,
+        previous_state TEXT,
+        new_state TEXT NOT NULL,
+        actor_name TEXT NOT NULL,
+        actor_role TEXT NOT NULL,
+        reason TEXT,
+        correlation_id TEXT,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    # 20. users
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL,
+        beneficiary_id TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (beneficiary_id) REFERENCES beneficiaries (pseudonymous_beneficiary_id)
+    );
+    """)
+
+
+def _migration_002_scarcity_allocation(cursor: sqlite3.Cursor) -> None:
+    """002: AI Stockout Prediction & Fair-Share Scarcity Allocation Engine."""
+    # 1. depot_stock_cycles
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS depot_stock_cycles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -475,7 +506,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 20. stockout_risk_predictions (ML Stockout Risk Predictions)
+    # 2. stockout_risk_predictions
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS stockout_risk_predictions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -494,7 +525,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 21. scarcity_allocation_plans (Fair-Share Scarcity Allocation Plans)
+    # 3. scarcity_allocation_plans
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS scarcity_allocation_plans (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -516,7 +547,7 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # 22. scarcity_allocation_items (Itemized FPS Scarcity Allocations)
+    # 4. scarcity_allocation_items
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS scarcity_allocation_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -535,27 +566,436 @@ def init_db(conn: sqlite3.Connection = None) -> None:
     );
     """)
 
-    # Indexes for high-performance lookup
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_beneficiaries_fps ON beneficiaries (registered_fps_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_intent_lookup ON intent (beneficiary_id, cycle_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_intent_fps ON intent (intended_fps_id, cycle_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_fps ON historical_demand (fps_id, cycle_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_inventory_fps ON inventory (fps_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gatepasses_cycle ON gatepasses (cycle_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_cycle ON notifications (cycle_id, recipient_type);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_routes_dest ON routes (destination_fps_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_manifests_cycle ON manifests (cycle_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_manifest_audit_mid ON manifest_audit_logs (manifest_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_depot_cycles ON depot_stock_cycles (depot_id, cycle_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stockout_risk ON stockout_risk_predictions (fps_id, cycle_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_scarcity_plans ON scarcity_allocation_plans (cycle_id, depot_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_scarcity_items ON scarcity_allocation_items (plan_id, fps_id);")
 
-    conn.commit()
+def _migration_003_citizen_requests_and_disputes(cursor: sqlite3.Cursor) -> None:
+    """003: Citizen Requests, Policy Rules, and Delivery Disputes."""
+    # 1. citizen_requests
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS citizen_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        request_id TEXT NOT NULL UNIQUE,
+        beneficiary_id TEXT NOT NULL,
+        card_type TEXT NOT NULL DEFAULT 'PHH',
+        family_members_count INTEGER NOT NULL DEFAULT 4,
+        statutory_entitlement_rice_kg REAL NOT NULL DEFAULT 20.0,
+        statutory_entitlement_wheat_kg REAL NOT NULL DEFAULT 5.0,
+        cycle_id TEXT NOT NULL DEFAULT '2026-09',
+        registered_fps_id TEXT NOT NULL,
+        intended_fps_id TEXT NOT NULL,
+        commodity TEXT NOT NULL CHECK(commodity IN ('Rice', 'Wheat')),
+        requested_quantity_kg REAL NOT NULL CHECK(requested_quantity_kg > 0),
+        authorized_quantity_kg REAL NOT NULL DEFAULT 0.0,
+        request_type TEXT NOT NULL DEFAULT 'PORTABILITY_PREFERENCE',
+        status TEXT NOT NULL DEFAULT 'PENDING_OFFICER_REVIEW',
+        
+        ai_recommendation TEXT NOT NULL DEFAULT 'APPROVE',
+        ai_recommended_qty_kg REAL NOT NULL DEFAULT 0.0,
+        ai_recommended_fps_id TEXT,
+        ai_risk_level TEXT NOT NULL DEFAULT 'LOW',
+        ai_confidence REAL NOT NULL DEFAULT 0.95,
+        ai_factors_json TEXT NOT NULL DEFAULT '[]',
+        ai_evaluation_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        officer_name TEXT,
+        officer_role TEXT,
+        officer_justification TEXT,
+        authorized_at TIMESTAMP,
+        
+        delivery_mode TEXT NOT NULL DEFAULT 'FPS_COLLECTION',
+        delivery_address TEXT,
+        delivery_distance_km REAL NOT NULL DEFAULT 0.0,
+        transport_fee_inr REAL NOT NULL DEFAULT 0.0,
+        delivery_status TEXT NOT NULL DEFAULT 'SERVICE_REQUESTED',
+        received_rice_kg REAL DEFAULT 0.0,
+        received_wheat_kg REAL DEFAULT 0.0,
+        citizen_confirmed_at TIMESTAMP,
+        dispute_reason TEXT,
+        
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        FOREIGN KEY (beneficiary_id) REFERENCES beneficiaries (pseudonymous_beneficiary_id),
+        FOREIGN KEY (registered_fps_id) REFERENCES fps (fps_id),
+        FOREIGN KEY (intended_fps_id) REFERENCES fps (fps_id)
+    );
+    """)
+
+    for col_def in [
+        ("delivery_mode", "TEXT NOT NULL DEFAULT 'FPS_COLLECTION'"),
+        ("delivery_address", "TEXT"),
+        ("delivery_distance_km", "REAL NOT NULL DEFAULT 0.0"),
+        ("transport_fee_inr", "REAL NOT NULL DEFAULT 0.0"),
+        ("delivery_status", "TEXT NOT NULL DEFAULT 'SERVICE_REQUESTED'"),
+        ("received_rice_kg", "REAL DEFAULT 0.0"),
+        ("received_wheat_kg", "REAL DEFAULT 0.0"),
+        ("citizen_confirmed_at", "TIMESTAMP"),
+        ("dispute_reason", "TEXT"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE citizen_requests ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
+
+    # 2. entitlement_policies
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS entitlement_policies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        card_type TEXT NOT NULL UNIQUE,
+        label TEXT NOT NULL,
+        rice_per_member_kg REAL NOT NULL DEFAULT 0.0,
+        wheat_per_member_kg REAL NOT NULL DEFAULT 0.0,
+        family_fixed_rice_kg REAL NOT NULL DEFAULT 0.0,
+        family_fixed_wheat_kg REAL NOT NULL DEFAULT 0.0,
+        transport_base_fee_inr REAL NOT NULL DEFAULT 20.0,
+        transport_per_km_fee_inr REAL NOT NULL DEFAULT 5.0,
+        notes TEXT
+    );
+    """)
+
+    # Seed baseline policies if empty
+    cursor.execute("SELECT COUNT(*) FROM entitlement_policies;")
+    if cursor.fetchone()[0] == 0:
+        policies = [
+            ("AAY", "Antyodaya Anna Yojana (AAY)", 0.0, 0.0, 25.0, 10.0, 20.0, 5.0, "NFSA Sec 3: 35kg fixed family allocation"),
+            ("PHH", "Priority Household (PHH)", 5.0, 1.25, 20.0, 5.0, 20.0, 5.0, "NFSA Sec 3: 5kg per member (20kg Rice + 5kg Wheat standard family ceiling)"),
+            ("NPHH", "Non-Priority Household (NPHH)", 0.0, 0.0, 15.0, 5.0, 25.0, 6.0, "State Scheme: Subsidized standard allocation")
+        ]
+        cursor.executemany("""
+        INSERT OR IGNORE INTO entitlement_policies (
+            card_type, label, rice_per_member_kg, wheat_per_member_kg,
+            family_fixed_rice_kg, family_fixed_wheat_kg, transport_base_fee_inr,
+            transport_per_km_fee_inr, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, policies)
+
+    # 3. delivery_disputes
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS delivery_disputes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dispute_id TEXT NOT NULL UNIQUE,
+        request_id TEXT NOT NULL,
+        beneficiary_id TEXT NOT NULL,
+        cycle_id TEXT NOT NULL DEFAULT '2026-09',
+        commodity TEXT NOT NULL CHECK(commodity IN ('Rice', 'Wheat', 'Both')),
+        allocated_quantity_kg REAL NOT NULL,
+        received_quantity_kg REAL NOT NULL,
+        shortfall_kg REAL NOT NULL,
+        dispute_notes TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING_OFFICER_REVIEW' CHECK(status IN ('PENDING_OFFICER_REVIEW', 'OFFICER_RESOLVED', 'REJECTED')),
+        resolution_notes TEXT,
+        resolved_by TEXT,
+        resolved_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (request_id) REFERENCES citizen_requests (request_id),
+        FOREIGN KEY (beneficiary_id) REFERENCES beneficiaries (pseudonymous_beneficiary_id)
+    );
+    """)
+
+
+def _migration_004_unified_governance_trail(cursor: sqlite3.Cursor) -> None:
+    """004: Immutable Unified Governance Event Trail."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS governance_audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT UNIQUE,
+        event_type TEXT NOT NULL DEFAULT 'GOVERNANCE_ACTION',
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        cycle_id TEXT NOT NULL DEFAULT '2026-09',
+        actor_id TEXT,
+        actor_name TEXT NOT NULL,
+        actor_role TEXT NOT NULL,
+        before_state TEXT,
+        after_state TEXT,
+        notes TEXT NOT NULL,
+        correlation_id TEXT,
+        is_success INTEGER NOT NULL DEFAULT 1,
+        is_simulation INTEGER NOT NULL DEFAULT 0,
+        integrity_metadata TEXT,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    for col_def in [
+        ("event_id", "TEXT"),
+        ("event_type", "TEXT DEFAULT 'GOVERNANCE_ACTION'"),
+        ("actor_id", "TEXT"),
+        ("before_state", "TEXT"),
+        ("after_state", "TEXT"),
+        ("correlation_id", "TEXT"),
+        ("is_success", "INTEGER NOT NULL DEFAULT 1"),
+        ("is_simulation", "INTEGER NOT NULL DEFAULT 0"),
+        ("integrity_metadata", "TEXT"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE governance_audit_logs ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
+
+
+def _migration_005_indexes_and_constraints(cursor: sqlite3.Cursor) -> None:
+    """005: Performance Indexes, Foreign Key Indexes, and Integrity Acceleration."""
+    indexes = [
+        # Foreign key & relationship indexes
+        "CREATE INDEX IF NOT EXISTS idx_beneficiaries_fps ON beneficiaries (registered_fps_id);",
+        "CREATE INDEX IF NOT EXISTS idx_intent_lookup ON intent (beneficiary_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_intent_fps ON intent (intended_fps_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_intent_beneficiary_id ON intent (beneficiary_id);",
+        "CREATE INDEX IF NOT EXISTS idx_history_fps ON historical_demand (fps_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_inventory_fps ON inventory (fps_id);",
+        "CREATE INDEX IF NOT EXISTS idx_forecast_fps_cycle ON forecast (fps_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_dispatch_fps_cycle ON dispatch (fps_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_dispatch_forecast_id ON dispatch (forecast_id);",
+        "CREATE INDEX IF NOT EXISTS idx_distribution_fps_cycle ON actual_distribution (fps_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_evaluation_forecast_id ON forecast_evaluation (forecast_id);",
+        "CREATE INDEX IF NOT EXISTS idx_evaluation_fps_cycle ON forecast_evaluation (fps_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_vehicles_depot ON vehicles (source_depot_id);",
+        "CREATE INDEX IF NOT EXISTS idx_routes_source ON routes (source_depot_id);",
+        "CREATE INDEX IF NOT EXISTS idx_routes_dest ON routes (destination_fps_id);",
+        "CREATE INDEX IF NOT EXISTS idx_gatepasses_cycle ON gatepasses (cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_gatepasses_truck ON gatepasses (truck_id);",
+        "CREATE INDEX IF NOT EXISTS idx_gatepasses_depot ON gatepasses (source_depot_id);",
+        "CREATE INDEX IF NOT EXISTS idx_notifications_cycle ON notifications (cycle_id, recipient_type);",
+        "CREATE INDEX IF NOT EXISTS idx_notifications_fps ON notifications (fps_id);",
+        "CREATE INDEX IF NOT EXISTS idx_constraint_logs_fps ON constraint_logs (fps_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_manifests_cycle ON manifests (cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_manifests_truck ON manifests (truck_id);",
+        "CREATE INDEX IF NOT EXISTS idx_manifests_depot ON manifests (source_depot_id);",
+        "CREATE INDEX IF NOT EXISTS idx_manifest_audit_mid ON manifest_audit_logs (manifest_id);",
+        "CREATE INDEX IF NOT EXISTS idx_depot_cycles ON depot_stock_cycles (depot_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_stockout_risk ON stockout_risk_predictions (fps_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_scarcity_plans ON scarcity_allocation_plans (cycle_id, depot_id);",
+        "CREATE INDEX IF NOT EXISTS idx_scarcity_items ON scarcity_allocation_items (plan_id, fps_id);",
+        "CREATE INDEX IF NOT EXISTS idx_scarcity_items_fps ON scarcity_allocation_items (fps_id);",
+        "CREATE INDEX IF NOT EXISTS idx_citizen_req_cycle ON citizen_requests (cycle_id, status);",
+        "CREATE INDEX IF NOT EXISTS idx_citizen_req_fps ON citizen_requests (intended_fps_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_citizen_req_ben ON citizen_requests (beneficiary_id, cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_citizen_req_reg_fps ON citizen_requests (registered_fps_id);",
+        "CREATE INDEX IF NOT EXISTS idx_disputes_request ON delivery_disputes (request_id);",
+        "CREATE INDEX IF NOT EXISTS idx_disputes_beneficiary ON delivery_disputes (beneficiary_id);",
+        "CREATE INDEX IF NOT EXISTS idx_gov_audit_entity ON governance_audit_logs (entity_type, entity_id);",
+        "CREATE INDEX IF NOT EXISTS idx_gov_audit_cycle ON governance_audit_logs (cycle_id);",
+        "CREATE INDEX IF NOT EXISTS idx_gov_audit_event_type ON governance_audit_logs (event_type);",
+        "CREATE INDEX IF NOT EXISTS idx_gov_audit_event_id ON governance_audit_logs (event_id);",
+        "CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);",
+        "CREATE INDEX IF NOT EXISTS idx_users_beneficiary ON users (beneficiary_id);"
+    ]
+    for idx_sql in indexes:
+        cursor.execute(idx_sql)
+
+
+# Migration Registry
+MIGRATIONS = [
+    (1, "001_core_supply_chain_schema", _migration_001_core_supply_chain),
+    (2, "002_scarcity_allocation_engine", _migration_002_scarcity_allocation),
+    (3, "003_citizen_requests_and_disputes", _migration_003_citizen_requests_and_disputes),
+    (4, "004_unified_governance_trail", _migration_004_unified_governance_trail),
+    (5, "005_performance_and_fk_indexes", _migration_005_indexes_and_constraints),
+]
+
+
+def run_migrations(conn: Optional[sqlite3.Connection] = None) -> List[Dict[str, Any]]:
+    """
+    Executes unapplied migrations sequentially and idempotently inside transactions.
+    Records every applied migration in schema_migrations and updates PRAGMA user_version.
+    """
+    should_close = False
+    if conn is None:
+        conn = get_db_connection()
+        should_close = True
+
+    ensure_migration_table(conn)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT version FROM schema_migrations ORDER BY version ASC;")
+    applied_versions = {row["version"] for row in cursor.fetchall()}
+
+    applied_results = []
+    for version, name, migration_func in MIGRATIONS:
+        if version not in applied_versions:
+            checksum = hashlib.sha256(f"{version}:{name}".encode()).hexdigest()[:16]
+            migration_func(cursor)
+            cursor.execute("""
+            INSERT INTO schema_migrations (version, name, checksum)
+            VALUES (?, ?, ?);
+            """, (version, name, checksum))
+            cursor.execute(f"PRAGMA user_version = {version};")
+            conn.commit()
+            applied_results.append({
+                "version": version,
+                "name": name,
+                "status": "applied",
+                "checksum": checksum
+            })
+
     if should_close:
         conn.close()
 
-def drop_all_tables(conn: sqlite3.Connection = None) -> None:
+    return applied_results
+
+
+def get_schema_version(conn: Optional[sqlite3.Connection] = None) -> int:
+    """Return the current database schema version."""
+    should_close = False
+    if conn is None:
+        conn = get_db_connection()
+        should_close = True
+
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA user_version;")
+    version = cursor.fetchone()[0]
+
+    if should_close:
+        conn.close()
+
+    return version
+
+
+def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
+    """Initialize database schemas via deterministic idempotent migration pipeline."""
+    should_close = False
+    if conn is None:
+        conn = get_db_connection()
+        should_close = True
+
+    run_migrations(conn)
+
+    if should_close:
+        conn.close()
+
+
+# -----------------------------------------------------------------------------
+# DATABASE BACKUP, RECOVERY & INTEGRITY DIAGNOSTICS
+# -----------------------------------------------------------------------------
+
+def run_database_integrity_check(conn: Optional[sqlite3.Connection] = None) -> Dict[str, Any]:
+    """
+    Execute deep diagnostic PRAGMA integrity, quick_check, and foreign_key_check.
+    Returns structured diagnostic results.
+    """
+    should_close = False
+    if conn is None:
+        conn = get_db_connection()
+        should_close = True
+
+    cursor = conn.cursor()
+
+    # 1. PRAGMA integrity_check
+    cursor.execute("PRAGMA integrity_check;")
+    integrity_rows = [r[0] for r in cursor.fetchall()]
+    integrity_ok = len(integrity_rows) == 1 and integrity_rows[0] == "ok"
+
+    # 2. PRAGMA quick_check
+    cursor.execute("PRAGMA quick_check;")
+    quick_rows = [r[0] for r in cursor.fetchall()]
+    quick_ok = len(quick_rows) == 1 and quick_rows[0] == "ok"
+
+    # 3. PRAGMA foreign_key_check
+    cursor.execute("PRAGMA foreign_key_check;")
+    fk_violations = cursor.fetchall()
+    fk_ok = (len(fk_violations) == 0)
+
+    # 4. Migration & WAL diagnostics
+    cursor.execute("PRAGMA journal_mode;")
+    journal_mode = cursor.fetchone()[0]
+    cursor.execute("PRAGMA foreign_keys;")
+    fk_enabled = bool(cursor.fetchone()[0])
+    cursor.execute("PRAGMA user_version;")
+    user_version = cursor.fetchone()[0]
+
+    ensure_migration_table(conn)
+    cursor.execute("SELECT COUNT(*) FROM schema_migrations;")
+    migrations_count = cursor.fetchone()[0]
+
+    is_healthy = integrity_ok and quick_ok and fk_ok
+
+    if should_close:
+        conn.close()
+
+    return {
+        "status": "HEALTHY" if is_healthy else "UNHEALTHY",
+        "integrity_check_passed": integrity_ok,
+        "integrity_check_details": integrity_rows,
+        "quick_check_passed": quick_ok,
+        "foreign_keys_valid": fk_ok,
+        "foreign_key_violations_count": len(fk_violations),
+        "foreign_key_violations": [dict(r) for r in fk_violations] if fk_violations else [],
+        "journal_mode": journal_mode,
+        "foreign_keys_pragma_enabled": fk_enabled,
+        "user_version": user_version,
+        "applied_migrations_count": migrations_count,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC+05:30")
+    }
+
+
+def backup_database(target_path: Optional[str] = None, conn: Optional[sqlite3.Connection] = None) -> str:
+    """
+    Perform an online, non-blocking snapshot backup of the operational SQLite database.
+    Uses SQLite's online backup API to ensure zero write corruption under active WAL mode.
+    """
+    should_close = False
+    if conn is None:
+        conn = get_db_connection()
+        should_close = True
+
+    if not target_path:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_dir = os.path.join(os.path.dirname(settings.DB_PATH), "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        target_path = os.path.join(backup_dir, f"demand_sync_backup_{timestamp}.db")
+    else:
+        os.makedirs(os.path.dirname(os.path.abspath(target_path)), exist_ok=True)
+
+    dest_conn = sqlite3.connect(target_path)
+    with dest_conn:
+        conn.backup(dest_conn, pages=100, sleep=0.01)
+    dest_conn.close()
+
+    if should_close:
+        conn.close()
+
+    return os.path.abspath(target_path)
+
+
+def restore_database(source_backup_path: str, target_conn: Optional[sqlite3.Connection] = None) -> Dict[str, Any]:
+    """
+    Safely restore database from a verified backup snapshot.
+    Validates backup integrity before loading into the operational database.
+    """
+    if not os.path.exists(source_backup_path):
+        raise FileNotFoundError(f"Backup file not found at '{source_backup_path}'.")
+
+    # Validate source backup integrity first
+    backup_conn = sqlite3.connect(source_backup_path)
+    b_cursor = backup_conn.cursor()
+    b_cursor.execute("PRAGMA integrity_check;")
+    b_res = b_cursor.fetchone()[0]
+    if b_res != "ok":
+        backup_conn.close()
+        raise ValueError(f"Backup file at '{source_backup_path}' failed integrity check: {b_res}")
+
+    should_close = False
+    if target_conn is None:
+        target_conn = get_db_connection()
+        should_close = True
+
+    with target_conn:
+        backup_conn.backup(target_conn, pages=100, sleep=0.01)
+
+    backup_conn.close()
+
+    if should_close:
+        target_conn.close()
+
+    return {
+        "status": "RESTORED",
+        "source_backup": source_backup_path,
+        "restored_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC+05:30")
+    }
+
+
+def drop_all_tables(conn: Optional[sqlite3.Connection] = None) -> None:
     """Drop all tables cleanly in proper foreign-key order."""
     should_close = False
     if conn is None:
@@ -565,6 +1005,14 @@ def drop_all_tables(conn: sqlite3.Connection = None) -> None:
     cursor = conn.cursor()
     cursor.execute("PRAGMA foreign_keys = OFF;")
     tables = [
+        "schema_migrations",
+        "users",
+        "workflow_audit_logs",
+        "cycle_workflow_states",
+        "delivery_disputes",
+        "entitlement_policies",
+        "governance_audit_logs",
+        "citizen_requests",
         "scarcity_allocation_items",
         "scarcity_allocation_plans",
         "stockout_risk_predictions",
@@ -600,6 +1048,7 @@ def drop_all_tables(conn: sqlite3.Connection = None) -> None:
 
     if should_close:
         conn.close()
+
 
 def recreate_db() -> None:
     """Completely wipe and recreate the database schema from scratch."""

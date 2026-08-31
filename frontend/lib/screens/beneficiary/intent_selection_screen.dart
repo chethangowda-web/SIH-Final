@@ -3,16 +3,19 @@ import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../models/beneficiary_model.dart';
 import '../../services/api_service.dart';
+import '../../widgets/status_badge.dart';
 import 'intent_confirmation_screen.dart';
 
 class IntentSelectionScreen extends StatefulWidget {
   final Beneficiary beneficiary;
   final ApiService? apiService;
+  final String initialDeliveryMode;
 
   const IntentSelectionScreen({
     super.key,
     required this.beneficiary,
     this.apiService,
+    this.initialDeliveryMode = 'FPS_COLLECTION',
   });
 
   @override
@@ -23,11 +26,14 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
   late final ApiService _apiService;
   List<FpsShop> _fpsList = [];
   FpsShop? _selectedFps;
-  String _selectedCommodityOption = 'Both'; // 'Rice', 'Wheat', 'Both'
-  double _riceQuantityKg = 25.0;
-  double _wheatQuantityKg = 10.0;
-  bool _isLoadingFps = true;
-  bool _isSubmitting = false;
+  BeneficiaryEntitlementSummary? _entitlement;
+  late String _deliveryMode;
+  final TextEditingController _addressController = TextEditingController(
+    text: '12th Cross, 4th Main, Malleshwaram, Bengaluru - 560003',
+  );
+  String _searchQuery = '';
+
+  bool _isLoading = true;
   String? _errorMessage;
   bool _isChoiceWindowOpen = true;
 
@@ -35,12 +41,19 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
-    _loadFpsList();
+    _deliveryMode = widget.initialDeliveryMode;
+    _loadData();
   }
 
-  Future<void> _loadFpsList() async {
+  @override
+  void dispose() {
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
     setState(() {
-      _isLoadingFps = true;
+      _isLoading = true;
       _errorMessage = null;
     });
 
@@ -52,582 +65,197 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
         isOpen = win['is_open'] ?? true;
       } catch (_) {}
 
-      setState(() {
-        _fpsList = list;
-        _isChoiceWindowOpen = isOpen;
-        // Default to registered FPS if available, else first FPS
-        _selectedFps = _fpsList.firstWhere(
-          (fps) => fps.fpsId == widget.beneficiary.registeredFpsId,
-          orElse: () => _fpsList.first,
+      BeneficiaryEntitlementSummary? ent;
+      try {
+        ent = await _apiService.fetchBeneficiaryEntitlementSummary(
+          widget.beneficiary.pseudonymousBeneficiaryId,
+          cycleId: '2026-09',
         );
-        _isLoadingFps = false;
-      });
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _fpsList = list;
+          _entitlement = ent;
+          _isChoiceWindowOpen = isOpen;
+
+          // Default to home registered shop
+          _selectedFps = _fpsList.where((fps) => fps.fpsId == widget.beneficiary.registeredFpsId).firstOrNull ??
+              (_fpsList.isNotEmpty ? _fpsList.first : null);
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to load Fair Price Shops: $e';
-        _isLoadingFps = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load Fair Price Shops & Entitlement: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  // Calculate simulated distance in km based on coordinates or relative index
   double _getCalculatedDistance(FpsShop fps) {
     if (fps.fpsId == widget.beneficiary.registeredFpsId) {
-      return 0.4; // Home shop is walking distance
+      return 0.6; // Walking distance to home shop
     }
-    // Pseudo-distance based on lat/lng coordinate delta for demonstration
     final dLat = (fps.latitude - 12.9716).abs() * 111.0;
     final dLng = (fps.longitude - 77.5946).abs() * 105.0;
     final dist = sqrt(dLat * dLat + dLng * dLng) + 1.2;
     return double.parse(dist.toStringAsFixed(1));
   }
 
-  Future<void> _submitIntent() async {
+  double _calculateTransportFee(double distanceKm) {
+    if (_deliveryMode != 'HOME_DELIVERY') return 0.0;
+    const baseFee = 20.0;
+    final extraKm = max(0.0, distanceKm - 2.0);
+    return double.parse((baseFee + extraKm * 5.0).toStringAsFixed(2));
+  }
+
+  void _continueToReview() async {
     if (_selectedFps == null) return;
 
-    setState(() {
-      _isSubmitting = true;
-      _errorMessage = null;
-    });
+    final distance = _getCalculatedDistance(_selectedFps!);
+    final fee = _calculateTransportFee(distance);
 
-    try {
-      final results = await _apiService.submitIntent(
-        beneficiaryId: widget.beneficiary.pseudonymousBeneficiaryId,
-        intendedFpsId: _selectedFps!.fpsId,
-        commodityOption: _selectedCommodityOption,
-        riceQuantityKg: _riceQuantityKg,
-        wheatQuantityKg: _wheatQuantityKg,
-        cycleId: '2026-09',
-        confidence: 0.95,
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _isSubmitting = false;
-      });
-
-      // Navigate to Confirmation Screen
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => IntentConfirmationScreen(
-            beneficiary: widget.beneficiary,
-            intendedFps: _selectedFps!,
-            commodityOption: _selectedCommodityOption,
-            submittedRecords: results,
-            apiService: _apiService,
-          ),
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => IntentConfirmationScreen(
+          beneficiary: widget.beneficiary,
+          intendedFps: _selectedFps!,
+          commodityOption: 'Both',
+          apiService: _apiService,
+          deliveryMode: _deliveryMode,
+          deliveryAddress: _deliveryMode == 'HOME_DELIVERY' ? _addressController.text.trim() : null,
+          deliveryDistanceKm: distance,
+          transportFeeInr: fee,
+          entitlementSummary: _entitlement,
         ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isSubmitting = false;
-        _errorMessage = 'Error submitting intent: $e';
-      });
+      ),
+    );
+
+    if (result == true && mounted) {
+      Navigator.of(context).pop(true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isHomeFps =
-        _selectedFps?.fpsId == widget.beneficiary.registeredFpsId;
+    final selectedDist = _selectedFps != null ? _getCalculatedDistance(_selectedFps!) : 0.6;
+    final transportFee = _calculateTransportFee(selectedDist);
+
+    final riceTotal = _entitlement?.statutoryEntitlementRiceKg ?? 20.0;
+    final wheatTotal = _entitlement?.statutoryEntitlementWheatKg ?? 5.0;
+    final totalMonthly = riceTotal + wheatTotal;
+
+    final riceConsumed = _entitlement?.consumedRiceKg ?? 0.0;
+    final wheatConsumed = _entitlement?.consumedWheatKg ?? 0.0;
+    final totalConsumed = riceConsumed + wheatConsumed;
+
+    final remainingBalance = _entitlement?.totalEligibleBalanceKg ?? 25.0;
 
     return Scaffold(
-      backgroundColor: AppConstants.bgLight,
+      backgroundColor: AppConstants.backgroundLight,
       appBar: AppBar(
-        title: const Text(
-          'Select Intended FPS',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
+        backgroundColor: AppConstants.primaryNavy,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        titleSpacing: 16,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Express Collection Preference',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.2),
+            ),
+            Text(
+              'National Food Security Act • Cycle 7 · September 2026',
+              style: TextStyle(fontSize: 10.5, color: Colors.white70),
+            ),
+          ],
         ),
       ),
-      body: _isLoadingFps
+      body: _isLoading
           ? const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(strokeWidth: 3),
+                  CircularProgressIndicator(strokeWidth: 2.5, color: AppConstants.primaryNavy),
                   SizedBox(height: 16),
-                  Text('Loading available Fair Price Shops...'),
+                  Text('Loading Fair Price Shops and Entitlement...', style: TextStyle(color: AppConstants.textSecondary, fontSize: 13)),
                 ],
               ),
             )
           : SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: AppConstants.space20, vertical: AppConstants.space20),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
+                  constraints: const BoxConstraints(maxWidth: 820),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Header Prompt
-                      const Text(
-                        'Where do you intend to collect your ration next cycle?',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: AppConstants.primaryNavy,
-                          height: 1.3,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Select where you plan to pick up your ration for Cycle 7 (September 2026). You can choose your home shop or any other shop across the city.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppConstants.textSecondary,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      // STEPPER AT TOP: Step 1 -> Step 2 -> Step 3 -> Step 4
+                      _buildCitizenStepper(),
+                      const SizedBox(height: AppConstants.space20),
 
-                      // Choice Window Status Banner
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _isChoiceWindowOpen ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: _isChoiceWindowOpen ? const Color(0xFFA7F3D0) : const Color(0xFFFECACA),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _isChoiceWindowOpen ? Icons.timelapse : Icons.lock_clock,
-                              color: _isChoiceWindowOpen ? AppConstants.successGreen : Colors.red.shade700,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _isChoiceWindowOpen
-                                        ? 'CHOICE WINDOW: OPEN (Cycle 2026-09)'
-                                        : 'CHOICE WINDOW: CLOSED — DEMAND LOCKED',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                      color: _isChoiceWindowOpen ? const Color(0xFF065F46) : Colors.red.shade900,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _isChoiceWindowOpen
-                                        ? 'Portability preferences are currently being accepted. Window closes prior to godown dispatch planning.'
-                                        : 'Choice window for this cycle has closed. Demand baseline is frozen and locked into godown dispatch optimization.',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: _isChoiceWindowOpen ? const Color(0xFF047857) : Colors.red.shade800,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      // SECTION 1: How would you like to receive your ration? (Two large selectable cards)
+                      _buildSection1ServicePreference(),
+                      const SizedBox(height: AppConstants.space20),
 
-                      // Section 1: Fair Price Shop Options
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'SELECT FAIR PRICE SHOP (${_fpsList.length} AVAILABLE)',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppConstants.textSecondary,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
+                      // SECTION 2: If collecting from a shop -> Choose your intended Fair Price Shop
+                      _buildSection2FpsSelection(),
+                      const SizedBox(height: AppConstants.space20),
 
-                      ..._fpsList.map((fps) {
-                        final isSelected = _selectedFps?.fpsId == fps.fpsId;
-                        final isRegisteredHome =
-                            fps.fpsId == widget.beneficiary.registeredFpsId;
-                        final distance = _getCalculatedDistance(fps);
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                _selectedFps = fps;
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? AppConstants.accentBlue
-                                        .withValues(alpha: 0.08)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? AppConstants.accentBlue
-                                      : AppConstants.cardBorder,
-                                  width: isSelected ? 2.0 : 1.0,
-                                ),
-                                boxShadow: isSelected
-                                    ? [
-                                        BoxShadow(
-                                          color: AppConstants.accentBlue
-                                              .withValues(alpha: 0.12),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 3),
-                                        ),
-                                      ]
-                                    : [],
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: 22,
-                                    height: 22,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? AppConstants.accentBlue
-                                            : Colors.grey.shade400,
-                                        width: isSelected ? 6.5 : 2.0,
-                                      ),
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                fps.name,
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 14,
-                                                  color: isSelected
-                                                      ? AppConstants.primaryNavy
-                                                      : Colors.black87,
-                                                ),
-                                              ),
-                                            ),
-                                            if (isRegisteredHome)
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.green.shade50,
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  border: Border.all(
-                                                      color: Colors
-                                                          .green.shade300),
-                                                ),
-                                                child: Text(
-                                                  'CURRENT HOME FPS',
-                                                  style: TextStyle(
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.w800,
-                                                    color:
-                                                        Colors.green.shade800,
-                                                  ),
-                                                ),
-                                              )
-                                            else
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: AppConstants.accentAmber
-                                                      .withValues(alpha: 0.15),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Text(
-                                                  'PORTABILITY NODE',
-                                                  style: TextStyle(
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.w800,
-                                                    color:
-                                                        AppConstants.accentAmber,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            Text(
-                                              fps.fpsId,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontFamily: 'monospace',
-                                                color: Colors.grey.shade700,
-                                              ),
-                                            ),
-                                            const Text(' • ',
-                                                style: TextStyle(
-                                                    color: Colors.grey)),
-                                            Icon(Icons.location_on_outlined,
-                                                size: 13,
-                                                color:
-                                                    AppConstants.textSecondary),
-                                            const SizedBox(width: 2),
-                                            Text(
-                                              '$distance km away',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color:
-                                                    AppConstants.textSecondary,
-                                              ),
-                                            ),
-                                            const Text(' • ',
-                                                style: TextStyle(
-                                                    color: Colors.grey)),
-                                            Text(
-                                              'Cap: ${(fps.capacityKg / 1000).toStringAsFixed(0)} Ton',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color:
-                                                    AppConstants.textSecondary,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-
-                      const SizedBox(height: 20),
-
-                      // Section 2: Commodity Selection
-                      Text(
-                        'COMMODITY SELECTION',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppConstants.textSecondary,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildCommodityChoiceChip(
-                              'Both (Rice & Wheat)',
-                              'Both',
-                              Icons.all_inclusive,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildCommodityChoiceChip(
-                              'Rice Only',
-                              'Rice',
-                              Icons.grain,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildCommodityChoiceChip(
-                              'Wheat Only',
-                              'Wheat',
-                              Icons.bakery_dining,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Section 3: Quantity Adjusters
-                      Text(
-                        'DECLARED PLANNING QUANTITY (KG)',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppConstants.textSecondary,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-
-                      if (_selectedCommodityOption == 'Rice' ||
-                          _selectedCommodityOption == 'Both')
-                        _buildQuantitySlider(
-                          label: 'Rice Quota (kg)',
-                          value: _riceQuantityKg,
-                          min: 5.0,
-                          max: 35.0,
-                          icon: Icons.grain,
-                          color: AppConstants.primaryNavy,
-                          onChanged: (val) {
-                            setState(() {
-                              _riceQuantityKg = val;
-                            });
-                          },
-                        ),
-
-                      if (_selectedCommodityOption == 'Wheat' ||
-                          _selectedCommodityOption == 'Both') ...[
-                        const SizedBox(height: 10),
-                        _buildQuantitySlider(
-                          label: 'Wheat Quota (kg)',
-                          value: _wheatQuantityKg,
-                          min: 5.0,
-                          max: 15.0,
-                          icon: Icons.bakery_dining,
-                          color: AppConstants.accentAmber,
-                          onChanged: (val) {
-                            setState(() {
-                              _wheatQuantityKg = val;
-                            });
-                          },
-                        ),
+                      // SECTION 3: If Home Delivery is selected -> Logistics Cost Breakdown
+                      if (_deliveryMode == 'HOME_DELIVERY') ...[
+                        _buildSection3HomeDeliveryLogistics(selectedDist, transportFee),
+                        const SizedBox(height: AppConstants.space20),
                       ],
 
-                      const SizedBox(height: 24),
+                      // SECTION 4: Statutory Entitlement Summary (Non-editable)
+                      _buildSection4EntitlementSummary(totalMonthly, totalConsumed, remainingBalance),
+                      const SizedBox(height: AppConstants.space20),
 
-                      // IMPORTANT DISCLAIMER CALLOUT
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppConstants.accentAmber.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color:
-                                AppConstants.accentAmber.withValues(alpha: 0.6),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.info_outline,
-                                color: AppConstants.accentAmber, size: 22),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'OFFICIAL PLANNING NOTICE',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppConstants.accentAmber,
-                                      letterSpacing: 0.6,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'This selection is a planning signal. It does not change your entitlement or permanently lock your FPS.',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppConstants.primaryNavy,
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
+                      // Error message if any
                       if (_errorMessage != null) ...[
-                        const SizedBox(height: 16),
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.red.shade50,
+                            color: const Color(0xFFFEF2F2),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red.shade300),
+                            border: Border.all(color: const Color(0xFFFECACA)),
                           ),
-                          child: Text(
-                            _errorMessage!,
-                            style: TextStyle(
-                                color: Colors.red.shade800, fontSize: 12),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: AppConstants.dangerRed, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(_errorMessage!, style: const TextStyle(color: AppConstants.dangerRed, fontSize: 12)),
+                              ),
+                            ],
                           ),
                         ),
+                        const SizedBox(height: AppConstants.space16),
                       ],
 
-                      const SizedBox(height: 24),
+                      // CTA: "Continue to Review & Confirm"
+                      _buildPrimarySubmitButton(transportFee),
+                      const SizedBox(height: AppConstants.space16),
 
-                      // Submit Button
-                      ElevatedButton.icon(
-                        onPressed: (_isSubmitting || !_isChoiceWindowOpen) ? null : _submitIntent,
-                        icon: _isSubmitting
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Icon(_isChoiceWindowOpen ? Icons.check_circle_outline : Icons.lock_outline, size: 20),
-                        label: Text(
-                          _isSubmitting
-                              ? 'Recording Planning Signal...'
-                              : (!_isChoiceWindowOpen
-                                  ? 'Choice Window Closed (Demand Locked)'
-                                  : (isHomeFps
-                                      ? 'Confirm Home FPS Intent'
-                                      : 'Confirm Portability Intent Signal')),
-                          style: const TextStyle(
-                            fontSize: 15,
+                      // Subtle Policy Footer
+                      Center(
+                        child: Text(
+                          'FOODGRAINS ARE 100% SUBSIDIZED (₹0.00/KG) • DECLARING INTENT PREVENTS STOCKOUTS',
+                          style: TextStyle(
+                            fontSize: 10,
                             fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            color: Colors.grey.shade500,
                           ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: !_isChoiceWindowOpen
-                              ? Colors.grey.shade600
-                              : (isHomeFps
-                                  ? AppConstants.primaryNavy
-                                  : AppConstants.accentBlue),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          elevation: 2,
                         ),
                       ),
-
-                      const SizedBox(height: 20),
+                      const SizedBox(height: AppConstants.space16),
                     ],
                   ),
                 ),
@@ -636,108 +264,685 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
     );
   }
 
-  Widget _buildCommodityChoiceChip(
-      String label, String value, IconData icon) {
-    final isSelected = _selectedCommodityOption == value;
-    return ChoiceChip(
-      avatar: Icon(
-        icon,
-        size: 16,
-        color: isSelected ? Colors.white : AppConstants.primaryNavy,
+  // STEP INDICATOR AT TOP
+  Widget _buildCitizenStepper() {
+    final steps = [
+      {'num': '1', 'title': 'Service Mode', 'active': true},
+      {'num': '2', 'title': 'Location / FPS', 'active': true},
+      {'num': '3', 'title': 'Review', 'active': false},
+      {'num': '4', 'title': 'Confirmation', 'active': false},
+    ];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppConstants.space16, vertical: AppConstants.space12),
+      decoration: BoxDecoration(
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: AppConstants.cardBorder, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      label: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-          color: isSelected ? Colors.white : AppConstants.primaryNavy,
-        ),
+      child: Row(
+        children: steps.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final step = entry.value;
+          final isFirst = idx == 0;
+          final isSecond = idx == 1;
+
+          return Expanded(
+            child: Row(
+              children: [
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: isFirst || isSecond ? AppConstants.primaryNavy : const Color(0xFFE2E8F0),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      step['num'] as String,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: isFirst || isSecond ? Colors.white : AppConstants.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    step['title'] as String,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: isFirst || isSecond ? FontWeight.w800 : FontWeight.w500,
+                      color: isFirst || isSecond ? AppConstants.primaryNavy : AppConstants.textSecondary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (idx < steps.length - 1) ...[
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Container(
+                      height: 1.5,
+                      color: isFirst ? AppConstants.primaryNavy : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+              ],
+            ),
+          );
+        }).toList(),
       ),
-      selected: isSelected,
-      selectedColor: AppConstants.primaryNavy,
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(
-          color: isSelected ? AppConstants.primaryNavy : AppConstants.cardBorder,
-        ),
-      ),
-      onSelected: (selected) {
-        if (selected) {
-          setState(() {
-            _selectedCommodityOption = value;
-          });
-        }
-      },
     );
   }
 
-  Widget _buildQuantitySlider({
-    required String label,
-    required double value,
-    required double min,
-    required double max,
+  // SECTION 1: HOW WOULD YOU LIKE TO RECEIVE YOUR RATION?
+  Widget _buildSection1ServicePreference() {
+    final isFps = _deliveryMode == 'FPS_COLLECTION';
+    final isHome = _deliveryMode == 'HOME_DELIVERY';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'HOW WOULD YOU LIKE TO RECEIVE YOUR RATION?',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: AppConstants.primaryNavy,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Select your preferred distribution channel for Cycle 7 · September 2026.',
+          style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+        ),
+        const SizedBox(height: AppConstants.space12),
+
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth > 580;
+
+            final cardA = _buildSelectableServiceCard(
+              title: 'Collect from Fair Price Shop',
+              subtitle: 'Collect your entitled ration from a Fair Price Shop.',
+              icon: Icons.storefront_outlined,
+              isSelected: isFps,
+              costText: 'Cost: ₹0.00 (Zero Delivery Fee)',
+              costColor: const Color(0xFF15803D),
+              badgeText: 'STANDARD FREE PICKUP',
+              onTap: () => setState(() => _deliveryMode = 'FPS_COLLECTION'),
+            );
+
+            final cardB = _buildSelectableServiceCard(
+              title: 'Assisted Home Delivery',
+              subtitle: 'Have your entitled ration delivered to your registered address.',
+              icon: Icons.local_shipping_outlined,
+              isSelected: isHome,
+              costText: 'From ₹20.00 Doorstep Logistics Fee',
+              costColor: const Color(0xFFB45309),
+              badgeText: 'DOORSTEP SERVICE',
+              onTap: () => setState(() => _deliveryMode = 'HOME_DELIVERY'),
+            );
+
+            if (isWide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: cardA),
+                  const SizedBox(width: 14),
+                  Expanded(child: cardB),
+                ],
+              );
+            } else {
+              return Column(
+                children: [
+                  cardA,
+                  const SizedBox(height: 12),
+                  cardB,
+                ],
+              );
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectableServiceCard({
+    required String title,
+    required String subtitle,
     required IconData icon,
-    required Color color,
-    required ValueChanged<double> onChanged,
+    required bool isSelected,
+    required String costText,
+    required Color costColor,
+    required String badgeText,
+    required VoidCallback onTap,
   }) {
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: AppConstants.cardBorder),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+      child: Container(
+        padding: const EdgeInsets.all(AppConstants.space16),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFEFF6FF) : AppConstants.cardSurface,
+          borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+          border: Border.all(
+            color: isSelected ? AppConstants.accentBlue : AppConstants.cardBorder,
+            width: isSelected ? 2.0 : 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected ? AppConstants.accentBlue.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.02),
+              blurRadius: isSelected ? 8 : 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppConstants.accentBlue.withValues(alpha: 0.15) : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: isSelected ? AppConstants.accentBlue : AppConstants.primaryNavy, size: 22),
+                ),
                 Row(
                   children: [
-                    Icon(icon, size: 18, color: color),
-                    const SizedBox(width: 8),
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppConstants.primaryNavy,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppConstants.accentBlue.withValues(alpha: 0.12) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(4),
                       ),
+                      child: Text(
+                        badgeText,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: isSelected ? AppConstants.accentBlue : AppConstants.textSecondary,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppConstants.accentBlue : Colors.transparent,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected ? AppConstants.accentBlue : const Color(0xFFCBD5E1),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check, size: 13, color: Colors.white)
+                          : null,
                     ),
                   ],
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: isSelected ? AppConstants.primaryNavy : AppConstants.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary, height: 1.35),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              costText,
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: costColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // SECTION 2: CHOOSE YOUR INTENDED FAIR PRICE SHOP
+  Widget _buildSection2FpsSelection() {
+    final homeFpsId = widget.beneficiary.registeredFpsId;
+
+    // Filter list based on search query
+    final filteredFps = _fpsList.where((fps) {
+      if (_searchQuery.isEmpty) return true;
+      final q = _searchQuery.toLowerCase();
+      return fps.name.toLowerCase().contains(q) || fps.fpsId.toLowerCase().contains(q);
+    }).toList();
+
+    // Ensure home shop is sorted first
+    filteredFps.sort((a, b) {
+      if (a.fpsId == homeFpsId) return -1;
+      if (b.fpsId == homeFpsId) return 1;
+      return a.name.compareTo(b.name);
+    });
+
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.space16),
+      decoration: BoxDecoration(
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: AppConstants.cardBorder, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'CHOOSE YOUR INTENDED FAIR PRICE SHOP',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppConstants.primaryNavy,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${_fpsList.length} Active Centers',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppConstants.accentBlue),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Search Bar
+          TextField(
+            onChanged: (val) => setState(() => _searchQuery = val.trim()),
+            decoration: InputDecoration(
+              hintText: 'Search center name or FPS code...',
+              hintStyle: const TextStyle(fontSize: 12, color: AppConstants.textTertiary),
+              prefixIcon: const Icon(Icons.search, size: 18, color: AppConstants.textSecondary),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppConstants.cardBorder)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppConstants.cardBorder)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppConstants.accentBlue, width: 1.5)),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // FPS Cards List
+          ...filteredFps.map((fps) {
+            final isSelected = _selectedFps?.fpsId == fps.fpsId;
+            final isHome = fps.fpsId == homeFpsId;
+            final dist = _getCalculatedDistance(fps);
+
+            return InkWell(
+              onTap: () => setState(() => _selectedFps = fps),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSelected ? AppConstants.accentBlue : (isHome ? AppConstants.accentBlue.withValues(alpha: 0.3) : AppConstants.cardBorder),
+                    width: isSelected ? 1.8 : 1.0,
                   ),
-                  child: Text(
-                    '${value.toStringAsFixed(0)} kg',
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                      color: isSelected ? AppConstants.accentBlue : AppConstants.textSecondary,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  fps.name,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
+                                    color: AppConstants.primaryNavy,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              if (isHome) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: AppConstants.primaryNavy,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: const Text('Home FPS', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
+                                ),
+                              ] else ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF3E8FF),
+                                    borderRadius: BorderRadius.circular(3),
+                                    border: Border.all(color: const Color(0xFFE9D5FF)),
+                                  ),
+                                  child: const Text('Portability Node', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF7E22CE))),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '${fps.fpsId} • Distance: ${dist.toStringAsFixed(1)} km • Storage Capacity: ${(fps.capacityKg / 1000).toStringAsFixed(0)} MT',
+                            style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    StatusBadge(status: fps.currentInventoryTotalKg > 1000 ? 'ACTIVE' : 'WARNING', fontSize: 9.5),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // SECTION 3: HOME DELIVERY LOGISTICS SUMMARY
+  Widget _buildSection3HomeDeliveryLogistics(double distanceKm, double transportFee) {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.space16),
+      decoration: BoxDecoration(
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: const Color(0xFFFDE68A), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFEF3C7).withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.receipt_long_outlined, color: Color(0xFFB45309), size: 18),
+                  SizedBox(width: 8),
+                  Text(
+                    'DOORSTEP LOGISTICS FEE BREAKDOWN',
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w800,
-                      color: color,
+                      color: AppConstants.primaryNavy,
+                      letterSpacing: 0.5,
                     ),
                   ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('TRANSPARENT TARIFF', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFFB45309))),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Address Input
+          TextField(
+            controller: _addressController,
+            decoration: InputDecoration(
+              labelText: 'Delivery Address',
+              hintText: 'Enter complete house number, street, landmark...',
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              prefixIcon: const Icon(Icons.location_on_outlined, size: 18),
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Logistics Cost Breakdown Grid
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppConstants.backgroundLight,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppConstants.cardBorder),
+            ),
+            child: Column(
+              children: [
+                _buildFeeRow('RATION ENTITLEMENT', 'Government determined', '₹0 foodgrain cost', isBold: true, highlightGreen: true),
+                const Divider(height: 16),
+                _buildFeeRow('TRANSPORTATION', '${distanceKm.toStringAsFixed(1)} km from ${_selectedFps?.name ?? "FPS"}', '₹${transportFee.toStringAsFixed(2)}'),
+                const Divider(height: 16),
+                _buildFeeRow('TOTAL PAYABLE AT DELIVERY', 'Logistics conveyance fee only', '₹${transportFee.toStringAsFixed(2)}', isBold: true, highlightNavy: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Subtle Policy Clarification Panel
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7).withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFFDE68A)),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: Color(0xFFB45309)),
+                    SizedBox(width: 6),
+                    Text(
+                      'Foodgrain is not being purchased. You are paying only for transportation/logistics.',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'This request does not change your statutory entitlement.',
+                  style: TextStyle(fontSize: 10.5, color: Color(0xFF92400E)),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Slider(
-              value: value,
-              min: min,
-              max: max,
-              divisions: ((max - min) / 5).round(),
-              activeColor: color,
-              label: '${value.toStringAsFixed(0)} kg',
-              onChanged: onChanged,
-            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeeRow(String title, String subtitle, String value, {bool isBold = false, bool highlightGreen = false, bool highlightNavy = false}) {
+    Color valColor = AppConstants.textPrimary;
+    if (highlightGreen) valColor = const Color(0xFF15803D);
+    if (highlightNavy) valColor = AppConstants.primaryNavy;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(fontSize: 11, fontWeight: isBold ? FontWeight.w800 : FontWeight.w600, color: AppConstants.primaryNavy)),
+            Text(subtitle, style: const TextStyle(fontSize: 10, color: AppConstants.textSecondary)),
           ],
+        ),
+        Text(
+          value,
+          style: TextStyle(fontSize: isBold ? 14 : 12, fontWeight: isBold ? FontWeight.w900 : FontWeight.w600, color: valColor),
+        ),
+      ],
+    );
+  }
+
+  // SECTION 4: ENTITLEMENT SUMMARY (Non-editable)
+  Widget _buildSection4EntitlementSummary(double monthly, double consumed, double remaining) {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.space16),
+      decoration: BoxDecoration(
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: AppConstants.cardBorder, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'YOUR STATUTORY ENTITLEMENT SUMMARY',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppConstants.primaryNavy,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              Text(
+                'NON-EDITABLE',
+                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: AppConstants.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          Row(
+            children: [
+              Expanded(
+                child: _buildEntitlementBox('Monthly Entitlement', '${monthly.toStringAsFixed(1)} kg', 'Rice + Wheat'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildEntitlementBox('Consumed', '${consumed.toStringAsFixed(1)} kg', 'This Month'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildEntitlementBox('Remaining', '${remaining.toStringAsFixed(1)} kg', 'Available to Lift', isHighlight: true),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildEntitlementBox('Planning Cycle', 'Cycle 7', 'Sep 2026'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEntitlementBox(String label, String value, String sub, {bool isHighlight = false}) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isHighlight ? AppConstants.primaryNavy : AppConstants.backgroundLight,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isHighlight ? AppConstants.primaryNavy : AppConstants.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 10, color: isHighlight ? Colors.white70 : AppConstants.textSecondary, fontWeight: FontWeight.w600),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: isHighlight ? Colors.white : AppConstants.textPrimary),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            sub,
+            style: TextStyle(fontSize: 9, color: isHighlight ? Colors.white70 : AppConstants.textTertiary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // CTA: SUBMIT BUTTON
+  Widget _buildPrimarySubmitButton(double transportFee) {
+    final isReady = _isChoiceWindowOpen && _selectedFps != null;
+
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: isReady ? _continueToReview : null,
+        icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+        label: Text(
+          _deliveryMode == 'HOME_DELIVERY'
+              ? 'Continue to Review Home Delivery (Pay ₹${transportFee.toStringAsFixed(2)})'
+              : 'Continue to Review FPS Collection (₹0.00 Free)',
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppConstants.primaryNavy,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusMedium)),
+          elevation: 2,
         ),
       ),
     );

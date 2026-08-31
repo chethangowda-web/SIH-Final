@@ -6,11 +6,144 @@ import '../models/health_model.dart';
 import '../models/beneficiary_model.dart';
 import '../models/admin_model.dart';
 import '../models/scarcity_model.dart';
+import 'auth_session.dart';
+
+export 'auth_session.dart';
+
+class AuthenticatedClient extends http.BaseClient {
+  final http.Client _inner;
+  final AuthSession session;
+
+  AuthenticatedClient(this._inner, {AuthSession? session})
+      : session = session ?? AuthSession.instance;
+
+  String? get token => session.token;
+  set token(String? val) {
+    if (val == null) {
+      session.clear();
+    } else {
+      session.setSession(
+        token: val,
+        username: session.username ?? 'admin_user',
+        role: session.role ?? 'ADMIN',
+      );
+    }
+  }
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    // 1. Check expiration if token exists
+    if (session.token != null && session.isExpired) {
+      session.trigger401();
+      throw const UnauthorizedException('Session expired. Please log in again.');
+    }
+
+    // 2. Automatically inject Authorization header if authenticated
+    if (session.token != null && session.token!.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer ${session.token}';
+    }
+
+    // Ensure Accept header is set
+    request.headers.putIfAbsent('Accept', () => 'application/json');
+
+    final response = await _inner.send(request);
+
+    // 3. Intercept 401 / 403 status codes deterministically if authenticated
+    if (response.statusCode == 401) {
+      if (session.token != null && session.token!.isNotEmpty) {
+        session.trigger401();
+      }
+    } else if (response.statusCode == 403) {
+      session.trigger403('Access Denied: You do not have permission for this resource.');
+    }
+
+    return response;
+  }
+}
 
 class ApiService {
   final http.Client client;
+  final AuthenticatedClient authClient;
 
-  ApiService({http.Client? client}) : client = client ?? http.Client();
+  AuthSession get authSession => authClient.session;
+
+  ApiService({http.Client? client, AuthSession? session}) : 
+    this._internal(AuthenticatedClient(client ?? http.Client(), session: session));
+
+  ApiService._internal(AuthenticatedClient authenticated) :
+    authClient = authenticated,
+    client = authenticated;
+
+  /// Helper to extract clean error message and return appropriate typed ApiException.
+  ApiException parseError(http.Response response, [String defaultMessage = 'Request failed']) {
+    String detail = defaultMessage;
+    dynamic rawJson;
+    try {
+      rawJson = json.decode(response.body);
+      if (rawJson is Map<String, dynamic> && rawJson.containsKey('detail')) {
+        final d = rawJson['detail'];
+        if (d is List) {
+          detail = d.map((e) => e is Map ? (e['msg'] ?? e.toString()) : e.toString()).join('; ');
+        } else {
+          detail = d.toString();
+        }
+      } else if (rawJson is String) {
+        detail = rawJson;
+      }
+    } catch (_) {
+      detail = '$defaultMessage (status ${response.statusCode})';
+    }
+
+    if (response.statusCode == 401) {
+      return UnauthorizedException(detail);
+    } else if (response.statusCode == 403) {
+      return ForbiddenException(detail);
+    } else if (response.statusCode == 409) {
+      return ConflictException(detail, rawJson);
+    } else if (response.statusCode == 422) {
+      return ValidationException(detail, rawJson);
+    } else if (response.statusCode >= 500) {
+      return ServerException(detail, rawJson);
+    } else {
+      return ApiException(response.statusCode, detail, details: rawJson);
+    }
+  }
+
+  /// Authenticate credentials and store the returned token into centralized AuthSession.
+  Future<Map<String, dynamic>> login(String username, String password) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'username': username,
+        'password': password,
+      }),
+    ).timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final token = data['access_token'] as String;
+      final role = (data['role'] ?? 'BENEFICIARY') as String;
+      final beneficiaryId = data['beneficiary_id'] as String?;
+      final expiresIn = (data['expires_in'] ?? 36000) as int;
+
+      authSession.setSession(
+        token: token,
+        username: username,
+        role: role,
+        beneficiaryId: beneficiaryId,
+        expiresInSeconds: expiresIn,
+      );
+      return data;
+    } else {
+      throw parseError(response, 'Login failed');
+    }
+  }
+
+  /// Clear the token and reset the centralized AuthSession on logout.
+  void logout() {
+    authSession.clear();
+  }
 
   /// Performs a live health-check diagnostic ping against the FastAPI backend.
   Future<HealthModel> checkHealth({String? customUrl}) async {
@@ -29,7 +162,7 @@ class ApiService {
         final data = json.decode(response.body) as Map<String, dynamic>;
         return HealthModel.fromJson(data, latency);
       } else {
-        throw Exception(
+        throw parseError(response, 
             'Health-check failed with HTTP status ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
@@ -55,7 +188,7 @@ class ApiService {
       final items = data['items'] as List<dynamic>;
       return items.map((item) => Beneficiary.fromJson(item)).toList();
     } else {
-      throw Exception('Failed to fetch beneficiaries: ${response.statusCode}');
+      throw parseError(response, 'Failed to fetch beneficiaries: ${response.statusCode}');
     }
   }
 
@@ -70,7 +203,7 @@ class ApiService {
       final data = json.decode(response.body) as Map<String, dynamic>;
       return Beneficiary.fromJson(data);
     } else {
-      throw Exception('Failed to fetch beneficiary $id: ${response.statusCode}');
+      throw parseError(response, 'Failed to fetch beneficiary $id: ${response.statusCode}');
     }
   }
 
@@ -85,7 +218,7 @@ class ApiService {
       final list = json.decode(response.body) as List<dynamic>;
       return list.map((item) => FpsShop.fromJson(item)).toList();
     } else {
-      throw Exception('Failed to fetch FPS list: ${response.statusCode}');
+      throw parseError(response, 'Failed to fetch FPS list: ${response.statusCode}');
     }
   }
 
@@ -94,18 +227,26 @@ class ApiService {
     required String beneficiaryId,
     required String intendedFpsId,
     required String commodity,
-    required double quantityKg,
+    double? quantityKg,
+    String deliveryMode = 'FPS_COLLECTION',
+    String? deliveryAddress,
+    double deliveryDistanceKm = 0.0,
     String cycleId = '2026-09',
     double confidence = 0.95,
   }) async {
-    final payload = {
+    final payload = <String, dynamic>{
       'beneficiary_id': beneficiaryId,
       'cycle_id': cycleId,
       'intended_fps_id': intendedFpsId,
       'commodity': commodity,
-      'declared_quantity_kg': quantityKg,
       'confidence': confidence,
+      'delivery_mode': deliveryMode,
+      'delivery_address': deliveryAddress,
+      'delivery_distance_km': deliveryDistanceKm,
     };
+    if (quantityKg != null && quantityKg > 0) {
+      payload['declared_quantity_kg'] = quantityKg;
+    }
 
     final response = await client
         .post(
@@ -122,9 +263,7 @@ class ApiService {
       final data = json.decode(response.body) as Map<String, dynamic>;
       return IntentRecord.fromJson(data);
     } else {
-      final err = json.decode(response.body);
-      throw Exception(
-          'Failed to submit intent: ${err['detail'] ?? response.statusCode}');
+      throw parseError(response, 'Failed to submit preference');
     }
   }
 
@@ -133,8 +272,11 @@ class ApiService {
     required String beneficiaryId,
     required String intendedFpsId,
     required String commodityOption, // 'Rice', 'Wheat', 'Both'
-    required double riceQuantityKg,
-    required double wheatQuantityKg,
+    double? riceQuantityKg,
+    double? wheatQuantityKg,
+    String deliveryMode = 'FPS_COLLECTION',
+    String? deliveryAddress,
+    double deliveryDistanceKm = 0.0,
     String cycleId = '2026-09',
     double confidence = 0.95,
   }) async {
@@ -146,6 +288,9 @@ class ApiService {
         intendedFpsId: intendedFpsId,
         commodity: 'Rice',
         quantityKg: riceQuantityKg,
+        deliveryMode: deliveryMode,
+        deliveryAddress: deliveryAddress,
+        deliveryDistanceKm: deliveryDistanceKm,
         cycleId: cycleId,
         confidence: confidence,
       );
@@ -158,6 +303,9 @@ class ApiService {
         intendedFpsId: intendedFpsId,
         commodity: 'Wheat',
         quantityKg: wheatQuantityKg,
+        deliveryMode: deliveryMode,
+        deliveryAddress: deliveryAddress,
+        deliveryDistanceKm: deliveryDistanceKm,
         cycleId: cycleId,
         confidence: confidence,
       );
@@ -165,6 +313,146 @@ class ApiService {
     }
 
     return results;
+  }
+
+  /// Fetch authoritative government entitlement breakdown and remaining balance
+  Future<BeneficiaryEntitlementSummary> fetchBeneficiaryEntitlementSummary(
+    String beneficiaryId, {
+    String cycleId = '2026-09',
+  }) async {
+    final url =
+        '${AppConstants.apiBaseUrl}/beneficiary/$beneficiaryId/entitlement-summary?cycle_id=$cycleId';
+    final response = await client.get(
+      Uri.parse(url),
+      headers: {'Accept': 'application/json'},
+    ).timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      return BeneficiaryEntitlementSummary.fromJson(data);
+    } else {
+      throw parseError(response, 
+          'Failed to fetch entitlement summary: ${response.statusCode}');
+    }
+  }
+
+  /// Retrieve citizen active preference and delivery tracking records
+  Future<List<CitizenDeliveryRecord>> fetchBeneficiaryDeliveryRecords(
+    String beneficiaryId, {
+    String cycleId = '2026-09',
+  }) async {
+    final url =
+        '${AppConstants.apiBaseUrl}/beneficiary/$beneficiaryId/delivery-records?cycle_id=$cycleId';
+    final response = await client.get(
+      Uri.parse(url),
+      headers: {'Accept': 'application/json'},
+    ).timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final list = (data['items'] as List<dynamic>?) ?? [];
+      return list.map((e) => CitizenDeliveryRecord.fromJson(e)).toList();
+    } else {
+      throw parseError(response, 
+          'Failed to fetch delivery records: ${response.statusCode}');
+    }
+  }
+
+  /// Confirm delivery receipt or raise a discrepancy/dispute
+  Future<Map<String, dynamic>> confirmCitizenDelivery({
+    required String beneficiaryId,
+    required String requestId,
+    required String confirmationStatus, // 'DELIVERY_CONFIRMED' | 'DELIVERY_DISPUTE'
+    double? receivedRiceKg,
+    double? receivedWheatKg,
+    String? disputeNotes,
+  }) async {
+    final url =
+        '${AppConstants.apiBaseUrl}/beneficiary/$beneficiaryId/confirm-delivery';
+    final payload = <String, dynamic>{
+      'request_id': requestId,
+      'confirmation_status': confirmationStatus,
+      'received_rice_kg': receivedRiceKg,
+      'received_wheat_kg': receivedWheatKg,
+      'dispute_notes': disputeNotes,
+    };
+
+    final response = await client.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: json.encode(payload),
+    ).timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 
+          'Failed to process confirmation: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Fetch officer delivery dispute queue
+  Future<List<DeliveryDisputeModel>> fetchDeliveryDisputes({
+    String cycleId = '2026-09',
+    String? status,
+  }) async {
+    String url =
+        '${AppConstants.apiBaseUrl}/admin/delivery-disputes?cycle_id=$cycleId';
+    if (status != null && status.isNotEmpty) {
+      url += '&status=$status';
+    }
+
+    final response = await client.get(
+      Uri.parse(url),
+      headers: {'Accept': 'application/json'},
+    ).timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      final list = json.decode(response.body) as List<dynamic>;
+      return list.map((e) => DeliveryDisputeModel.fromJson(e)).toList();
+    } else {
+      throw parseError(response, 
+          'Failed to fetch delivery disputes: ${response.statusCode}');
+    }
+  }
+
+  /// Resolve a citizen delivery dispute
+  Future<Map<String, dynamic>> resolveDeliveryDispute({
+    required String disputeId,
+    required String decision, // 'OFFICER_RESOLVED' | 'REJECTED'
+    required String resolutionNotes,
+    String officerName = 'K. Srinivas Murthy (DSO)',
+    String officerRole = 'DISTRICT_SUPPLY_OFFICER',
+  }) async {
+    final url =
+        '${AppConstants.apiBaseUrl}/admin/delivery-disputes/$disputeId/resolve';
+    final payload = {
+      'officer_name': officerName,
+      'officer_role': officerRole,
+      'decision': decision,
+      'resolution_notes': resolutionNotes,
+    };
+
+    final response = await client.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: json.encode(payload),
+    ).timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 
+          'Failed to resolve dispute: ${err['detail'] ?? response.statusCode}');
+    }
   }
 
   /// Retrieve declared intent history for a beneficiary
@@ -184,7 +472,7 @@ class ApiService {
       final list = json.decode(response.body) as List<dynamic>;
       return list.map((item) => IntentRecord.fromJson(item)).toList();
     } else {
-      throw Exception('Failed to fetch intents: ${response.statusCode}');
+      throw parseError(response, 'Failed to fetch intents: ${response.statusCode}');
     }
   }
 
@@ -201,7 +489,7 @@ class ApiService {
       final data = json.decode(response.body) as Map<String, dynamic>;
       return AdminDashboardData.fromJson(data);
     } else {
-      throw Exception(
+      throw parseError(response, 
           'Failed to load admin dashboard data: ${response.statusCode}');
     }
   }
@@ -217,7 +505,7 @@ class ApiService {
       final data = json.decode(response.body) as Map<String, dynamic>;
       return AdminFpsDetail.fromJson(data);
     } else {
-      throw Exception(
+      throw parseError(response, 
           'Failed to load admin FPS detail for $fpsId: ${response.statusCode}');
     }
   }
@@ -232,7 +520,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
-      throw Exception(
+      throw parseError(response, 
           'Failed to trigger forecast generation: ${response.statusCode}');
     }
   }
@@ -247,7 +535,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
-      throw Exception('Failed to lock forecast: ${response.statusCode}');
+      throw parseError(response, 'Failed to lock forecast: ${response.statusCode}');
     }
   }
 
@@ -261,7 +549,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
-      throw Exception('Failed to fetch choice window status: ${response.statusCode}');
+      throw parseError(response, 'Failed to fetch choice window status: ${response.statusCode}');
     }
   }
 
@@ -276,7 +564,7 @@ class ApiService {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
       final err = json.decode(response.body);
-      throw Exception(err['detail'] ?? 'Failed to close choice window: ${response.statusCode}');
+      throw parseError(response, err['detail'] ?? 'Failed to close choice window: ${response.statusCode}');
     }
   }
 
@@ -295,7 +583,7 @@ class ApiService {
       return DispatchManifestData.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to generate dispatch: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -314,7 +602,7 @@ class ApiService {
       final data = json.decode(response.body) as Map<String, dynamic>;
       return DispatchManifestData.fromJson(data);
     } else {
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch dispatch manifest: ${response.statusCode}');
     }
   }
@@ -332,7 +620,63 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
-      throw Exception('Failed to reset demo workflow: ${response.statusCode}');
+      throw parseError(response, 'Failed to reset demo workflow: ${response.statusCode}');
+    }
+  }
+
+  /// Retrieve current workflow state, allowed next states, blockers, and transition history
+  Future<Map<String, dynamic>> fetchWorkflowStatus(
+      {String cycleId = '2026-09'}) async {
+    final response = await client
+        .get(
+            Uri.parse(
+                '${AppConstants.apiBaseUrl}/admin/workflow/status?cycle_id=$cycleId'),
+            headers: {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response, 
+          'Failed to fetch workflow status: ${response.statusCode}');
+    }
+  }
+
+  /// Manually trigger a workflow state transition
+  Future<Map<String, dynamic>> transitionWorkflowState({
+    required String cycleId,
+    required String newState,
+    required String actorName,
+    required String actorRole,
+    String? reason,
+    String? correlationId,
+  }) async {
+    final payload = <String, dynamic>{
+      'cycle_id': cycleId,
+      'new_state': newState,
+      'actor_name': actorName,
+      'actor_role': actorRole,
+      'reason': reason,
+      'correlation_id': correlationId,
+    };
+
+    final response = await client
+        .post(
+          Uri.parse('${AppConstants.apiBaseUrl}/admin/workflow/transition'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: json.encode(payload),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 
+          'Workflow state transition failed: ${err['detail'] ?? response.statusCode}');
     }
   }
 
@@ -373,7 +717,7 @@ class ApiService {
       );
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to simulate distribution: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -393,7 +737,7 @@ class ApiService {
       return ForecastEvaluationData.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch forecast evaluation: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -413,7 +757,7 @@ class ApiService {
       return ModelCalibrationData.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to calibrate model: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -435,7 +779,7 @@ class ApiService {
       return DistrictConstraintAudit.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to validate constraints: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -455,7 +799,7 @@ class ApiService {
       return FpsConstraintResult.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch FPS constraints: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -475,7 +819,7 @@ class ApiService {
       return DistrictOptimizationResult.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to run optimization: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -496,7 +840,7 @@ class ApiService {
       return list.map((e) => DigitalGatepass.fromJson(e)).toList();
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch gatepasses: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -516,7 +860,7 @@ class ApiService {
       return DigitalGatepass.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch truck gatepass: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -536,7 +880,7 @@ class ApiService {
       return DigitalGatepass.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to advance gatepass: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -556,7 +900,7 @@ class ApiService {
       return NotificationDispatchResult.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to dispatch notifications: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -580,7 +924,7 @@ class ApiService {
       return list.map((e) => NotificationLogRecord.fromJson(e)).toList();
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch notification logs: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -610,7 +954,7 @@ class ApiService {
       return CommandCenterData.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch command center data: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -630,7 +974,7 @@ class ApiService {
       return FpsAnalyticsProfile.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch FPS analytics: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -648,7 +992,7 @@ class ApiService {
       return list.map((e) => SupplyRoute.fromJson(e)).toList();
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch supply routes: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -670,7 +1014,7 @@ class ApiService {
       return PreDispatchAnalysisResult.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to execute pre-dispatch analysis: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -692,7 +1036,7 @@ class ApiService {
       return FpsForecastDetail.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch FPS forecast detail: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -729,7 +1073,7 @@ class ApiService {
       return WhatIfSimulationResult.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to simulate what-if forecast: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -748,7 +1092,7 @@ class ApiService {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch district forecast summary: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -770,7 +1114,7 @@ class ApiService {
       return DispatchDecisionProfile.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch dispatch decision: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -805,7 +1149,7 @@ class ApiService {
       return DispatchDecisionProfile.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to recalculate dispatch decision: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -838,7 +1182,7 @@ class ApiService {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to save dispatch decision: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -857,7 +1201,7 @@ class ApiService {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch district dispatch summary: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -879,7 +1223,7 @@ class ApiService {
       return ConstraintAuditResult.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to validate district constraints: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -901,7 +1245,7 @@ class ApiService {
       return SingleFpsConstraintResult.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch FPS constraints: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -934,7 +1278,7 @@ class ApiService {
       return ResolveConstraintResponse.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to resolve constraint: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -954,7 +1298,7 @@ class ApiService {
       return ConstraintAuditResult.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to revalidate constraints: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -976,7 +1320,7 @@ class ApiService {
       return DistrictOptimizationPayload.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch optimization payload: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -996,7 +1340,7 @@ class ApiService {
       return CorridorOptimizationDossier.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch corridor optimization: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1034,7 +1378,7 @@ class ApiService {
       return CorridorOptimizationDossier.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to simulate what-if optimization: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1056,7 +1400,7 @@ class ApiService {
       return ManifestListPayload.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch manifests list: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1076,7 +1420,7 @@ class ApiService {
       return DispatchManifestDossier.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch manifest details: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1098,7 +1442,7 @@ class ApiService {
       return DispatchManifestDossier.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to generate corridor manifest: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1141,7 +1485,7 @@ class ApiService {
       return DispatchManifestDossier.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to update manifest: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1175,7 +1519,7 @@ class ApiService {
       return DispatchManifestDossier.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to lock manifest: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1209,7 +1553,7 @@ class ApiService {
       return DispatchManifestDossier.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to revise manifest: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1232,7 +1576,7 @@ class ApiService {
       return list;
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch SIH demo scenarios: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1264,7 +1608,7 @@ class ApiService {
       return DemoScenarioExecutionResult.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to run SIH demo scenario: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1299,7 +1643,7 @@ class ApiService {
       return FpsOfftakeFeedbackResult.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to record actual offtake: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1319,7 +1663,7 @@ class ApiService {
       return SystemImpactDashboardData.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch system impact metrics: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1339,7 +1683,7 @@ class ApiService {
       return SihJudgeDefenseData.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch judge defense view: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1363,7 +1707,7 @@ class ApiService {
       return DepotBalanceModel.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to fetch depot balance: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1404,7 +1748,7 @@ class ApiService {
       return RiskPredictionResponseModel.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Stockout risk inference failed: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1449,7 +1793,7 @@ class ApiService {
       return ScarcityPlanSummaryModel.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to simulate fair-share scarcity plan: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1486,7 +1830,7 @@ class ApiService {
       return ApprovePlanResponseModel.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Officer approval failed: ${err['detail'] ?? response.statusCode}');
     }
   }
@@ -1504,9 +1848,319 @@ class ApiService {
       return ScarcityAuditTrailModel.fromJson(data);
     } else {
       final err = json.decode(response.body);
-      throw Exception(
+      throw parseError(response, 
           'Failed to retrieve scarcity audit trail: ${err['detail'] ?? response.statusCode}');
     }
+  }
+
+  // ----------------- Citizen Request Review Queue & Authorization APIs ----------------- //
+
+  /// Retrieve Paginated Citizen Request Review Queue with AI Decision Diagnostics
+  Future<CitizenRequestQueueResponse> fetchCitizenRequestsQueue({
+    String cycleId = '2026-09',
+    String? status,
+    String? fpsId,
+    String? riskLevel,
+  }) async {
+    String url = '${AppConstants.apiBaseUrl}/admin/citizen-requests?cycle_id=$cycleId';
+    if (status != null && status.isNotEmpty && status != 'ALL') {
+      url += '&status=$status';
+    }
+    if (fpsId != null && fpsId.isNotEmpty) {
+      url += '&fps_id=$fpsId';
+    }
+    if (riskLevel != null && riskLevel.isNotEmpty) {
+      url += '&risk_level=$riskLevel';
+    }
+
+    final response = await client
+        .get(Uri.parse(url), headers: {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      return CitizenRequestQueueResponse.fromJson(data);
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to fetch citizen requests: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Authorize, Partially Allocate, Redirect, or Defer a Citizen Request
+  Future<Map<String, dynamic>> authorizeCitizenRequest({
+    required String requestId,
+    required String officerName,
+    required String officerRole,
+    required String decision,
+    double? allocatedQuantityKg,
+    String? allocatedFpsId,
+    required String officerJustification,
+  }) async {
+    final uri = Uri.parse('${AppConstants.apiBaseUrl}/admin/citizen-requests/$requestId/authorize');
+    final response = await client
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+          body: json.encode({
+            'officer_name': officerName,
+            'officer_role': officerRole,
+            'decision': decision,
+            if (allocatedQuantityKg != null) 'allocated_quantity_kg': allocatedQuantityKg,
+            if (allocatedFpsId != null) 'allocated_fps_id': allocatedFpsId,
+            'officer_justification': officerJustification,
+          }),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Authorization failed: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  // ----------------- End-to-End Causal Pipeline Trace APIs ----------------- //
+
+  /// Fetch complete 7-stage causal trace for an operational planning cycle & FPS
+  Future<CausalTraceRun> fetchCausalTrace({
+    String cycleId = '2026-09',
+    String fpsId = 'FPS-KA-BLR-001',
+  }) async {
+    final uri = Uri.parse(
+        '${AppConstants.apiBaseUrl}/admin/causal-trace?cycle_id=$cycleId&fps_id=$fpsId');
+    final response = await client
+        .get(uri, headers: {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      return CausalTraceRun.fromJson(data);
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 
+          'Failed to fetch causal trace: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Trigger calculation run of the 7-stage causal pipeline trace
+  Future<CausalTraceRun> runCausalTraceCalculation({
+    String cycleId = '2026-09',
+    String fpsId = 'FPS-KA-BLR-001',
+  }) async {
+    final uri = Uri.parse(
+        '${AppConstants.apiBaseUrl}/admin/causal-trace/run?cycle_id=$cycleId&fps_id=$fpsId');
+    final response = await client
+        .post(uri, headers: {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      return CausalTraceRun.fromJson(data);
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 
+          'Failed to run causal trace calculation: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Controlled demo: Inject synthetic citizen intent shift and return full downstream delta
+  Future<CausalTraceResponse> simulateIntentShiftCausalTrace({
+    String cycleId = '2026-09',
+    String fpsId = 'FPS-KA-BLR-001',
+    double shiftDeltaKg = 150.0,
+    String beneficiaryId = 'BEN-KA-0001',
+  }) async {
+    final uri = Uri.parse(
+        '${AppConstants.apiBaseUrl}/admin/causal-trace/simulate-shift');
+    final response = await client
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: json.encode({
+            'cycle_id': cycleId,
+            'fps_id': fpsId,
+            'shift_delta_kg': shiftDeltaKg,
+            'beneficiary_id': beneficiaryId,
+          }),
+        )
+        .timeout(const Duration(seconds: 12));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      return CausalTraceResponse.fromJson(data);
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 
+          'Failed to simulate intent shift causal trace: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+}
+
+class CitizenRequestModel {
+  final int id;
+  final String requestId;
+  final String beneficiaryId;
+  final String beneficiaryName;
+  final String cardType;
+  final int familyMembersCount;
+  final double statutoryEntitlementRiceKg;
+  final double statutoryEntitlementWheatKg;
+  final double statutoryEntitlementCommodityKg;
+  final String cycleId;
+  final String registeredFpsId;
+  final String registeredFpsName;
+  final String intendedFpsId;
+  final String intendedFpsName;
+  final String commodity;
+  final double requestedQuantityKg;
+  final double authorizedQuantityKg;
+  final String requestType;
+  final String status;
+  final String? aiRecommendation;
+  final double aiRecommendedQtyKg;
+  final String? aiRecommendedFpsId;
+  final String? aiRecommendedFpsName;
+  final String? aiRiskLevel;
+  final double aiConfidence;
+  final List<String> aiFactors;
+  final double fpsCapacityKg;
+  final double currentInventoryKg;
+  final double statutoryFloorKg;
+  final double pendingDemandKg;
+  final double capacityHeadroomKg;
+  final String replenishmentEta;
+  final String? nearbyAlternativeFpsName;
+  final double? nearbyAlternativeDistanceKm;
+  final String? officerName;
+  final String? officerRole;
+  final String? officerJustification;
+  final String? authorizedAt;
+  final String createdAt;
+
+  CitizenRequestModel({
+    required this.id,
+    required this.requestId,
+    required this.beneficiaryId,
+    required this.beneficiaryName,
+    required this.cardType,
+    required this.familyMembersCount,
+    required this.statutoryEntitlementRiceKg,
+    required this.statutoryEntitlementWheatKg,
+    required this.statutoryEntitlementCommodityKg,
+    required this.cycleId,
+    required this.registeredFpsId,
+    required this.registeredFpsName,
+    required this.intendedFpsId,
+    required this.intendedFpsName,
+    required this.commodity,
+    required this.requestedQuantityKg,
+    required this.authorizedQuantityKg,
+    required this.requestType,
+    required this.status,
+    this.aiRecommendation,
+    required this.aiRecommendedQtyKg,
+    this.aiRecommendedFpsId,
+    this.aiRecommendedFpsName,
+    this.aiRiskLevel,
+    required this.aiConfidence,
+    required this.aiFactors,
+    this.fpsCapacityKg = 20000.0,
+    required this.currentInventoryKg,
+    required this.statutoryFloorKg,
+    this.pendingDemandKg = 0.0,
+    required this.capacityHeadroomKg,
+    required this.replenishmentEta,
+    this.nearbyAlternativeFpsName,
+    this.nearbyAlternativeDistanceKm,
+    this.officerName,
+    this.officerRole,
+    this.officerJustification,
+    this.authorizedAt,
+    required this.createdAt,
+  });
+
+  factory CitizenRequestModel.fromJson(Map<String, dynamic> json) {
+    return CitizenRequestModel(
+      id: json['id'] ?? 0,
+      requestId: json['request_id'] ?? '',
+      beneficiaryId: json['beneficiary_id'] ?? '',
+      beneficiaryName: json['beneficiary_name'] ?? 'Beneficiary Citizen',
+      cardType: json['card_type'] ?? 'PHH',
+      familyMembersCount: json['family_members_count'] ?? 1,
+      statutoryEntitlementRiceKg: (json['statutory_entitlement_rice_kg'] as num?)?.toDouble() ?? 0.0,
+      statutoryEntitlementWheatKg: (json['statutory_entitlement_wheat_kg'] as num?)?.toDouble() ?? 0.0,
+      statutoryEntitlementCommodityKg: (json['statutory_entitlement_commodity_kg'] as num?)?.toDouble() ?? 0.0,
+      cycleId: json['cycle_id'] ?? '2026-09',
+      registeredFpsId: json['registered_fps_id'] ?? '',
+      registeredFpsName: json['registered_fps_name'] ?? '',
+      intendedFpsId: json['intended_fps_id'] ?? '',
+      intendedFpsName: json['intended_fps_name'] ?? '',
+      commodity: json['commodity'] ?? 'Rice',
+      requestedQuantityKg: (json['requested_quantity_kg'] as num?)?.toDouble() ?? 0.0,
+      authorizedQuantityKg: (json['authorized_quantity_kg'] as num?)?.toDouble() ?? 0.0,
+      requestType: json['request_type'] ?? 'PORTABILITY_PREFERENCE',
+      status: json['status'] ?? 'PENDING_OFFICER_REVIEW',
+      aiRecommendation: json['ai_recommendation'],
+      aiRecommendedQtyKg: (json['ai_recommended_qty_kg'] as num?)?.toDouble() ?? 0.0,
+      aiRecommendedFpsId: json['ai_recommended_fps_id'],
+      aiRecommendedFpsName: json['ai_recommended_fps_name'],
+      aiRiskLevel: json['ai_risk_level'],
+      aiConfidence: (json['ai_confidence'] as num?)?.toDouble() ?? 0.95,
+      aiFactors: (json['ai_factors'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      fpsCapacityKg: (json['fps_capacity_kg'] as num?)?.toDouble() ?? 20000.0,
+      currentInventoryKg: (json['current_inventory_kg'] as num?)?.toDouble() ?? 0.0,
+      statutoryFloorKg: (json['statutory_floor_kg'] as num?)?.toDouble() ?? 0.0,
+      pendingDemandKg: (json['pending_demand_kg'] as num?)?.toDouble() ?? 0.0,
+      capacityHeadroomKg: (json['capacity_headroom_kg'] as num?)?.toDouble() ?? 0.0,
+      replenishmentEta: json['replenishment_eta'] ?? 'Morning Slot 08:30 AM',
+      nearbyAlternativeFpsName: json['nearby_alternative_fps_name'],
+      nearbyAlternativeDistanceKm: (json['nearby_alternative_distance_km'] as num?)?.toDouble(),
+      officerName: json['officer_name'],
+      officerRole: json['officer_role'],
+      officerJustification: json['officer_justification'],
+      authorizedAt: json['authorized_at'],
+      createdAt: json['created_at'] ?? '',
+    );
+  }
+}
+
+class CitizenRequestQueueResponse {
+  final int totalCount;
+  final int pendingCount;
+  final int approvedCount;
+  final int partialCount;
+  final int redirectedCount;
+  final int deferredCount;
+  final String cycleId;
+  final List<CitizenRequestModel> items;
+
+  CitizenRequestQueueResponse({
+    required this.totalCount,
+    required this.pendingCount,
+    required this.approvedCount,
+    required this.partialCount,
+    required this.redirectedCount,
+    required this.deferredCount,
+    required this.cycleId,
+    required this.items,
+  });
+
+  factory CitizenRequestQueueResponse.fromJson(Map<String, dynamic> json) {
+    final list = json['items'] as List<dynamic>? ?? [];
+    return CitizenRequestQueueResponse(
+      totalCount: json['total_count'] ?? 0,
+      pendingCount: json['pending_count'] ?? 0,
+      approvedCount: json['approved_count'] ?? 0,
+      partialCount: json['partial_count'] ?? 0,
+      redirectedCount: json['redirected_count'] ?? 0,
+      deferredCount: json['deferred_count'] ?? 0,
+      cycleId: json['cycle_id'] ?? '2026-09',
+      items: list.map((e) => CitizenRequestModel.fromJson(e)).toList(),
+    );
   }
 }
 

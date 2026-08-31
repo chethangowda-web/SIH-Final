@@ -92,11 +92,11 @@ class _ReadinessAlertsDialogState extends State<ReadinessAlertsDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Container(
-        width: 1050,
-        height: 750,
-        padding: const EdgeInsets.all(24),
+        width: 1140,
+        height: 840,
+        padding: const EdgeInsets.all(22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

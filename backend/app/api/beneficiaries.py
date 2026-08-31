@@ -5,9 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.core.database import get_db
 from app.models.schemas import BeneficiaryOut, BeneficiaryDetailOut, PaginatedBeneficiaries, DEMO_NOTICE
 
-router = APIRouter(tags=["Beneficiaries"])
+from app.core.auth import get_current_user, verify_owner, RoleChecker
 
-@router.get("/beneficiaries", response_model=PaginatedBeneficiaries)
+router = APIRouter(tags=["Beneficiaries"], dependencies=[Depends(get_current_user)])
+
+@router.get("/beneficiaries", response_model=PaginatedBeneficiaries, dependencies=[Depends(RoleChecker(["DSO", "ADMIN", "AUDITOR"]))])
 def list_beneficiaries(
     limit: int = Query(50, ge=1, le=2000, description="Max records to return"),
     offset: int = Query(0, ge=0, description="Number of records to skip"),
@@ -60,7 +62,11 @@ def list_beneficiaries(
     )
 
 @router.get("/beneficiaries/{id}", response_model=BeneficiaryDetailOut)
-def get_beneficiary(id: str, db: sqlite3.Connection = Depends(get_db)):
+def get_beneficiary(
+    id: str,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Retrieve detailed beneficiary profile by integer ID or pseudonymous ID (e.g. BEN-KA-0001)."""
     cursor = db.cursor()
     
@@ -86,6 +92,8 @@ def get_beneficiary(id: str, db: sqlite3.Connection = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Beneficiary with identifier '{id}' not found."
         )
+
+    verify_owner(current_user, row["pseudonymous_beneficiary_id"])
 
     # Fetch active declared intents
     cursor.execute("""

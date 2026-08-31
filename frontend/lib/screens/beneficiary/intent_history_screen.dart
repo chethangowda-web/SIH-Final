@@ -57,18 +57,33 @@ class _IntentHistoryScreenState extends State<IntentHistoryScreen> {
     return Scaffold(
       backgroundColor: AppConstants.bgLight,
       appBar: AppBar(
-        title: const Text(
-          'Declared Intent History',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
+        backgroundColor: AppConstants.primaryNavy,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        titleSpacing: 16,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Declared Intent Signal History',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              'PDS DemandSync • Forward-Looking Supply Planning Records',
+              style: TextStyle(fontSize: 10.5, color: Colors.white70),
+            ),
+          ],
         ),
         actions: [
           IconButton(
             tooltip: 'Refresh History',
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 20),
             onPressed: _loadHistory,
           ),
         ],

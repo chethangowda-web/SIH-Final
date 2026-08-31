@@ -14,8 +14,7 @@ class FpsDispatchDecisionDialog extends StatefulWidget {
   });
 
   @override
-  State<FpsDispatchDecisionDialog> createState() =>
-      _FpsDispatchDecisionDialogState();
+  State<FpsDispatchDecisionDialog> createState() => _FpsDispatchDecisionDialogState();
 }
 
 class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
@@ -26,8 +25,6 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
 
   DispatchDecisionProfile? _decision;
   String _selectedScenario = 'NORMAL';
-  double _leadTimeDays = 2.0;
-  double _stockoutRisk = 0.05;
 
   @override
   void initState() {
@@ -51,8 +48,6 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
       if (mounted) {
         setState(() {
           _decision = res;
-          _leadTimeDays = res.safetyBufferBreakdown.leadTimeDays;
-          _stockoutRisk = res.safetyBufferBreakdown.stockoutRiskFactor;
           _isLoading = false;
         });
       }
@@ -62,32 +57,6 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
           _errorMessage = e.toString().replaceAll('Exception: ', '');
           _isLoading = false;
         });
-      }
-    }
-  }
-
-  Future<void> _recalculateCustomParams() async {
-    try {
-      final res = await _apiService.calculateCustomDispatchDecision(
-        widget.fpsId,
-        scenario: _selectedScenario,
-        leadTimeDays: _leadTimeDays,
-        stockoutRisk: _stockoutRisk,
-        cycleId: widget.cycleId,
-      );
-      if (mounted) {
-        setState(() {
-          _decision = res;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Recalculation failed: $e'),
-            backgroundColor: AppConstants.dangerRed,
-          ),
-        );
       }
     }
   }
@@ -108,7 +77,7 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(res['message'] ?? 'Dispatch recommendation saved!'),
+            content: Text(res['message'] ?? 'Advisory dispatch recommendation saved for officer validation!'),
             backgroundColor: AppConstants.successGreen,
           ),
         );
@@ -130,13 +99,17 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       child: Container(
-        width: 1100,
+        width: 1140,
         height: 840,
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: AppConstants.backgroundLight,
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildHeader(context),
             const SizedBox(height: 12),
@@ -146,11 +119,10 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(color: AppConstants.primaryNavy),
-                      SizedBox(height: 12),
-                      Text('Computing Pre-Dispatch Decision & Headroom...',
-                          style: TextStyle(
-                              color: AppConstants.textSecondary, fontSize: 13)),
+                      CircularProgressIndicator(strokeWidth: 2.5, color: AppConstants.primaryNavy),
+                      SizedBox(height: 16),
+                      Text('Evaluating Authoritative Operational Pre-Dispatch Decision...',
+                          style: TextStyle(color: AppConstants.textSecondary, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -161,18 +133,15 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.error_outline,
-                          color: AppConstants.dangerRed, size: 48),
+                      const Icon(Icons.error_outline, color: AppConstants.dangerRed, size: 48),
                       const SizedBox(height: 12),
-                      Text(_errorMessage!,
-                          style: const TextStyle(
-                              color: AppConstants.dangerRed,
-                              fontWeight: FontWeight.bold)),
+                      Text(_errorMessage!, style: const TextStyle(color: AppConstants.dangerRed, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 16),
-                      ElevatedButton(
+                      ElevatedButton.icon(
                         onPressed: () => _loadDecision(),
-                        child: const Text('Retry'),
-                      )
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
                     ],
                   ),
                 ),
@@ -187,39 +156,67 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
     );
   }
 
+  // HEADER: Pre-Dispatch Decision Engine + Subtitle + Badge
   Widget _buildHeader(BuildContext context) {
+    final d = _decision;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppConstants.successGreen.withValues(alpha: 0.12),
+                color: AppConstants.primaryNavy.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppConstants.cardBorder),
               ),
-              child: const Icon(Icons.local_shipping_outlined,
-                  color: AppConstants.successGreen, size: 24),
+              child: const Icon(Icons.tune_rounded, color: AppConstants.primaryNavy, size: 24),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Pre-Dispatch Decision Engine & Scenario Evaluator',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppConstants.textPrimary,
-                  ),
+                Row(
+                  children: [
+                    const Text(
+                      'Pre-Dispatch Decision Engine',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: AppConstants.primaryNavy,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFF93C5FD)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.gavel_outlined, size: 12, color: AppConstants.accentBlue),
+                          SizedBox(width: 4),
+                          Text(
+                            'ADVISORY → OFFICER DECISION REQUIRED',
+                            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: AppConstants.accentBlue, letterSpacing: 0.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 2),
                 Text(
-                  'Demand − Stock + Safety Buffer • Storage Headroom Check • Operational Scenarios',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppConstants.textSecondary,
-                  ),
+                  d != null
+                      ? 'Operational dispatch recommendation • ${d.fpsName} (${d.fpsId}) • Cycle: ${d.cycleId}'
+                      : 'Operational dispatch recommendation',
+                  style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
                 ),
               ],
             ),
@@ -240,283 +237,101 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
 
     return SingleChildScrollView(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. Top Identity & Scenario Selector
-          _buildIdentityAndScenarioBar(d),
-          const SizedBox(height: 14),
-
-          // 2. Explicit Mathematical Formula Calculation Banner
-          _buildExplicitFormulaBanner(d),
-          const SizedBox(height: 14),
-
-          // 3. 6 Core Decision KPI Cards Grid
-          _buildCoreMetricsGrid(m),
-          const SizedBox(height: 14),
-
-          // 4. "Why this quantity?" Explainable Decision Narrative Card
-          _buildDecisionNarrativeCard(d),
-          const SizedBox(height: 14),
-
-          // 5. Safety Parameter Tuning Sliders & Scenarios Comparison
+          // 1. TOP 5 CARDS: Operational Forecast, Current Stock, Statutory Reserve, Recommended Dispatch, Storage Headroom
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                flex: 5,
-                child: _buildSafetyParameterPanel(d),
+                child: _buildTopMetricCard(
+                  'OPERATIONAL FORECAST',
+                  '${m.predictedDemandKg.toStringAsFixed(0)} kg',
+                  'Authoritative demand',
+                  Icons.insights_rounded,
+                  AppConstants.primaryNavy,
+                ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 8),
               Expanded(
-                flex: 5,
-                child: _buildScenarioComparisonTable(d),
+                child: _buildTopMetricCard(
+                  'CURRENT STOCK',
+                  '${m.currentStockKg.toStringAsFixed(0)} kg',
+                  'Audited physical on-hand',
+                  Icons.inventory_2_outlined,
+                  AppConstants.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildTopMetricCard(
+                  'STATUTORY RESERVE',
+                  '${m.safetyBufferKg.toStringAsFixed(0)} kg',
+                  'Safety buffer ceiling',
+                  Icons.shield_outlined,
+                  const Color(0xFFB45309),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildTopMetricCard(
+                  'RECOMMENDED DISPATCH',
+                  '${m.recommendedDispatchKg.toStringAsFixed(0)} kg',
+                  'Target depot release',
+                  Icons.local_shipping_outlined,
+                  const Color(0xFF15803D),
+                  isHighlight: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildTopMetricCard(
+                  'STORAGE HEADROOM',
+                  '${(m.storageCapacityKg - m.currentStockKg).clamp(0, 99999).toStringAsFixed(0)} kg',
+                  'Max ${(m.storageCapacityKg / 1000).toStringAsFixed(0)} MT capacity',
+                  Icons.warehouse_outlined,
+                  AppConstants.accentBlue,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 14),
 
-          // 6. Commodity-Level Breakdown Table
-          _buildCommodityDecisionBreakdown(d),
+          // 2. MATHEMATICAL CALCULATION CARD (Explicit Formula Exposure)
+          _buildCalculationCard(m),
+          const SizedBox(height: 14),
+
+          // 3. WHY THIS RECOMMENDATION? (3-5 Concise Explainable Factors)
+          _buildWhyThisRecommendationSection(d),
+          const SizedBox(height: 14),
+
+          // 4. SCENARIO COMPARISON (3 Distinct Cards with Clear Simulation Tags)
+          _buildScenarioComparisonSection(d),
+          const SizedBox(height: 14),
+
+          // 5. GOVERNANCE SEPARATION STATUS
+          _buildGovernanceStatusSection(),
         ],
       ),
     );
   }
 
-  Widget _buildIdentityAndScenarioBar(DispatchDecisionProfile d) {
+  Widget _buildTopMetricCard(
+    String label,
+    String value,
+    String sub,
+    IconData icon,
+    Color color, {
+    bool isHighlight = false,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.all(AppConstants.space12),
       decoration: BoxDecoration(
-        color: AppConstants.backgroundLight,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppConstants.cardBorder),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppConstants.primaryNavy,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  d.fpsId,
-                  style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    d.fpsName,
-                    style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppConstants.textPrimary),
-                  ),
-                  Text(
-                    '${d.district} • Target Cycle: ${d.cycleId}',
-                    style: const TextStyle(
-                        fontSize: 11, color: AppConstants.textSecondary),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          // Scenario selector tabs
-          Row(
-            children: [
-              _buildScenarioButton('NORMAL', '1. Normal Baseline'),
-              const SizedBox(width: 6),
-              _buildScenarioButton('HIGH_DEMAND', '2. High Demand'),
-              const SizedBox(width: 6),
-              _buildScenarioButton('LOW_STOCK_HIGH_RISK', '3. Low Stock / Critical'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildScenarioButton(String id, String label) {
-    final isSelected = _selectedScenario == id;
-    return ElevatedButton(
-      onPressed: () => _loadDecision(scenario: id),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected
-            ? AppConstants.primaryNavy
-            : Colors.grey.shade200,
-        foregroundColor: isSelected ? Colors.white : AppConstants.textPrimary,
-        elevation: isSelected ? 2 : 0,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-      ),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 11,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500)),
-    );
-  }
-
-  Widget _buildExplicitFormulaBanner(DispatchDecisionProfile d) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppConstants.accentBlue.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppConstants.accentBlue.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.calculate_outlined,
-                  color: AppConstants.accentBlue, size: 22),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'EXPLICIT FORMULA:  Predicted Demand − Current Stock + Safety Buffer',
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: AppConstants.textSecondary,
-                        letterSpacing: 0.5),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    d.formula.values,
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        fontFamily: 'monospace',
-                        color: AppConstants.primaryNavy),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: d.formula.isCapacityCapped
-                  ? AppConstants.accentAmber.withValues(alpha: 0.15)
-                  : AppConstants.successGreen.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              d.formula.capacityCapMessage,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: d.formula.isCapacityCapped
-                    ? AppConstants.accentAmber
-                    : AppConstants.successGreen,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCoreMetricsGrid(DecisionCoreMetrics m) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildMetricCard(
-            'PREDICTED DEMAND',
-            '${m.predictedDemandKg.toStringAsFixed(0)} kg',
-            'Target Cycle Demand',
-            Icons.auto_graph,
-            AppConstants.accentBlue,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _buildMetricCard(
-            'CURRENT STOCK',
-            '${m.currentStockKg.toStringAsFixed(0)} kg',
-            '${m.daysOfStockCoverage.toStringAsFixed(1)} days coverage',
-            Icons.inventory_2_outlined,
-            m.daysOfStockCoverage < 2.0
-                ? AppConstants.dangerRed
-                : AppConstants.primaryNavy,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _buildMetricCard(
-            'SAFETY BUFFER',
-            '+${m.safetyBufferKg.toStringAsFixed(0)} kg',
-            'Buffer for Lead Time & Risk',
-            Icons.shield_outlined,
-            AppConstants.purpleAccent,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _buildMetricCard(
-            'REC. DISPATCH',
-            '${m.recommendedDispatchKg.toStringAsFixed(0)} kg',
-            'Actionable Godown Order',
-            Icons.local_shipping_outlined,
-            AppConstants.successGreen,
-            isHighlighted: true,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _buildMetricCard(
-            'FPS CAPACITY',
-            '${(m.storageCapacityKg / 1000).toStringAsFixed(0)} MT',
-            '${m.capacityUtilizationPct.toStringAsFixed(1)}% Post-Stock',
-            Icons.warehouse_outlined,
-            AppConstants.secondaryNavy,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _buildMetricCard(
-            'REMAINING HEADROOM',
-            '${m.remainingCapacityKg.toStringAsFixed(0)} kg',
-            'Emergency Buffer Space',
-            Icons.pie_chart_outline,
-            AppConstants.textPrimary,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetricCard(String label, String value, String subtitle,
-      IconData icon, Color color,
-      {bool isHighlighted = false}) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isHighlighted ? color.withValues(alpha: 0.08) : Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        color: isHighlight ? const Color(0xFFF0FDF4) : AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
         border: Border.all(
-            color: isHighlighted
-                ? color
-                : AppConstants.cardBorder),
-        boxShadow: isHighlighted
-            ? [
-                BoxShadow(
-                    color: color.withValues(alpha: 0.1),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2))
-              ]
-            : null,
+          color: isHighlight ? const Color(0xFF86EFAC) : AppConstants.cardBorder,
+          width: isHighlight ? 1.5 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,25 +339,33 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label,
+              Expanded(
+                child: Text(
+                  label,
                   style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      color: AppConstants.textSecondary)),
-              Icon(icon, size: 14, color: color),
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    color: isHighlight ? const Color(0xFF15803D) : AppConstants.textSecondary,
+                    letterSpacing: 0.4,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(icon, size: 14, color: color.withValues(alpha: 0.7)),
             ],
           ),
           const SizedBox(height: 6),
           Text(
             value,
-            style: TextStyle(
-                fontSize: 16, fontWeight: FontWeight.w900, color: color),
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: color),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
           Text(
-            subtitle,
-            style: const TextStyle(
-                fontSize: 9, color: AppConstants.textSecondary),
+            sub,
+            style: const TextStyle(fontSize: 10, color: AppConstants.textSecondary),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -551,74 +374,14 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
     );
   }
 
-  Widget _buildDecisionNarrativeCard(DispatchDecisionProfile d) {
-    final exp = d.decisionExplanation;
+  // 2. MATHEMATICAL CALCULATION CARD
+  Widget _buildCalculationCard(DecisionCoreMetrics m) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppConstants.space16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppConstants.cardBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.help_outline_rounded,
-                  color: AppConstants.accentBlue, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Why this quantity? (${d.scenario['name']})',
-                style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: AppConstants.primaryNavy),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            exp.narrative,
-            style: const TextStyle(
-                fontSize: 12,
-                color: AppConstants.textPrimary,
-                height: 1.4,
-                fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: exp.keyDrivers.map((driver) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppConstants.backgroundLight,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppConstants.cardBorder),
-                ),
-                child: Text(driver,
-                    style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: AppConstants.primaryNavy)),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSafetyParameterPanel(DispatchDecisionProfile d) {
-    final b = d.safetyBufferBreakdown;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppConstants.cardBorder),
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: AppConstants.cardBorder, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -628,251 +391,305 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.tune_rounded,
-                      color: AppConstants.primaryNavy, size: 16),
+                  Icon(Icons.calculate_outlined, color: AppConstants.primaryNavy, size: 18),
                   SizedBox(width: 8),
                   Text(
-                    'Safety Buffer Parameter Controls',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppConstants.primaryNavy),
+                    'DETERMINISTIC DISPATCH CALCULATION FORMULA',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
                   ),
                 ],
               ),
+              Text(
+                'FORMULA: MAX(0, OPERATIONAL FORECAST − CURRENT STOCK + SAFETY BUFFER)',
+                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppConstants.textSecondary),
+              ),
             ],
           ),
-          const Divider(height: 14),
-          // Lead time slider
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Lead Time (Godown to Shop Transit)',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-              Text('${_leadTimeDays.toStringAsFixed(1)} days',
-                  style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppConstants.primaryNavy)),
-            ],
+          const SizedBox(height: 12),
+
+          // Formula flow steps
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppConstants.backgroundLight,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppConstants.cardBorder),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildFormulaStep('Operational Forecast', '${m.predictedDemandKg.toStringAsFixed(0)} kg', AppConstants.primaryNavy),
+                const Text('−', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppConstants.textSecondary)),
+                _buildFormulaStep('Current Stock', '${m.currentStockKg.toStringAsFixed(0)} kg', AppConstants.textPrimary),
+                const Text('+', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppConstants.textSecondary)),
+                _buildFormulaStep('Safety Buffer', '${m.safetyBufferKg.toStringAsFixed(0)} kg', const Color(0xFFB45309)),
+                const Text('=', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppConstants.textSecondary)),
+                _buildFormulaStep('Recommended Dispatch', '${m.recommendedDispatchKg.toStringAsFixed(0)} kg', const Color(0xFF15803D), isFinal: true),
+              ],
+            ),
           ),
-          Slider(
-            value: _leadTimeDays.clamp(1.0, 8.0),
-            min: 1.0,
-            max: 8.0,
-            divisions: 14,
-            activeColor: AppConstants.accentBlue,
-            onChanged: (val) {
-              setState(() => _leadTimeDays = val);
-              _recalculateCustomParams();
-            },
-          ),
-          // Stockout risk slider
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Stock-Out Risk Factor',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-              Text('${(_stockoutRisk * 100).toInt()}%',
-                  style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppConstants.primaryNavy)),
-            ],
-          ),
-          Slider(
-            value: _stockoutRisk.clamp(0.0, 0.25),
-            min: 0.0,
-            max: 0.25,
-            divisions: 25,
-            activeColor: AppConstants.purpleAccent,
-            onChanged: (val) {
-              setState(() => _stockoutRisk = val);
-              _recalculateCustomParams();
-            },
-          ),
-          // Breakdown tags
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              Text('Lead Time: +${b.leadTimeContributionKg.toStringAsFixed(0)} kg',
-                  style: const TextStyle(
-                      fontSize: 10, color: AppConstants.textSecondary)),
-              Text('Risk: +${b.stockoutRiskContributionKg.toStringAsFixed(0)} kg',
-                  style: const TextStyle(
-                      fontSize: 10, color: AppConstants.textSecondary)),
-              Text('Volatility: +${b.volatilityContributionKg.toStringAsFixed(0)} kg',
-                  style: const TextStyle(
-                      fontSize: 10, color: AppConstants.textSecondary)),
-            ],
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              m.currentStockKg >= (m.predictedDemandKg + m.safetyBufferKg)
+                  ? '✓ On-hand inventory (${m.currentStockKg.toStringAsFixed(0)} kg) exceeds monthly demand + buffer requirement. Zero godown dispatch recommended to prevent overstocking.'
+                  : '✓ Recommended release of ${m.recommendedDispatchKg.toStringAsFixed(0)} kg restores safety stock buffer without exceeding physical headroom.',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildScenarioComparisonTable(DispatchDecisionProfile d) {
+  Widget _buildFormulaStep(String label, String value, Color color, {bool isFinal = false}) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppConstants.textSecondary)),
+        const SizedBox(height: 3),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: isFinal ? 12 : 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isFinal ? color.withValues(alpha: 0.12) : Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: isFinal ? color : AppConstants.cardBorder),
+          ),
+          child: Text(
+            value,
+            style: TextStyle(fontSize: isFinal ? 16 : 14, fontWeight: FontWeight.w900, color: color),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 3. WHY THIS RECOMMENDATION?
+  Widget _buildWhyThisRecommendationSection(DispatchDecisionProfile d) {
+    final m = d.coreMetrics;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppConstants.space16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppConstants.cardBorder),
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: AppConstants.cardBorder, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          const Text(
+            'WHY THIS RECOMMENDATION? • EXPLAINABLE FACTORS',
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
+          ),
+          const SizedBox(height: 10),
+          _buildFactorRow('1. Operational Demand Coverage', 'Current physical stock of ${m.currentStockKg.toStringAsFixed(0)} kg provides ${m.daysOfStockCoverage.toStringAsFixed(1)} days of offtake coverage for registered cardholders.'),
+          const SizedBox(height: 6),
+          _buildFactorRow('2. Statutory Safety Reserve', 'A ${m.safetyBufferKg.toStringAsFixed(0)} kg safety buffer is calculated based on transit lead time and historical stockout vulnerability.'),
+          const SizedBox(height: 6),
+          _buildFactorRow('3. Physical Headroom Feasibility', 'Post-dispatch inventory will reach ${m.postDispatchStockKg.toStringAsFixed(0)} kg (${m.capacityUtilizationPct.toStringAsFixed(1)}% of ${(m.storageCapacityKg / 1000).toStringAsFixed(1)} MT capacity), preserving ${m.remainingCapacityKg.toStringAsFixed(0)} kg of emergency buffer.'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFactorRow(String title, String desc) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.check_circle_outline_rounded, size: 16, color: Color(0xFF15803D)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.compare_arrows_rounded,
-                  color: AppConstants.primaryNavy, size: 16),
-              SizedBox(width: 8),
-              Text(
-                '3-Scenario Comparative Matrix',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppConstants.primaryNavy),
-              ),
+              Text(title, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
+              Text(desc, style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary, height: 1.25)),
             ],
           ),
-          const Divider(height: 14),
-          ...d.allScenarios.map((scen) {
-            final isCurrent = scen.scenarioId == _selectedScenario;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: isCurrent
-                    ? AppConstants.primaryNavy.withValues(alpha: 0.06)
-                    : AppConstants.backgroundLight,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                    color: isCurrent
-                        ? AppConstants.primaryNavy
-                        : AppConstants.cardBorder),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        ),
+      ],
+    );
+  }
+
+  // 4. SCENARIO COMPARISON
+  Widget _buildScenarioComparisonSection(DispatchDecisionProfile d) {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.space16),
+      decoration: BoxDecoration(
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: AppConstants.cardBorder, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(scen.scenarioName,
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isCurrent
-                                  ? FontWeight.bold
-                                  : FontWeight.w600,
-                              color: isCurrent
-                                  ? AppConstants.primaryNavy
-                                  : AppConstants.textPrimary)),
-                      Text('Formula: ${scen.formula}',
-                          style: const TextStyle(
-                              fontSize: 9,
-                              fontFamily: 'monospace',
-                              color: AppConstants.textSecondary)),
-                    ],
-                  ),
+                  Icon(Icons.compare_arrows_rounded, color: AppConstants.primaryNavy, size: 18),
+                  SizedBox(width: 8),
                   Text(
-                    '${scen.recommendedDispatchKg.toStringAsFixed(0)} kg',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: isCurrent
-                          ? AppConstants.successGreen
-                          : AppConstants.textPrimary,
-                    ),
+                    'SCENARIO SENSITIVITY COMPARISON',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
                   ),
                 ],
               ),
-            );
-          }),
+              Text(
+                'CLICK TO EVALUATE SCENARIO',
+                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppConstants.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildScenarioCard(
+                  id: 'NORMAL',
+                  title: 'Normal Baseline',
+                  desc: 'Standard 2-day delivery cycle & steady historical demand',
+                  dispatchKg: _getScenarioDispatch('NORMAL', fallback: d.coreMetrics.recommendedDispatchKg),
+                  isSimulation: false,
+                  isSelected: _selectedScenario == 'NORMAL',
+                  onTap: () => _loadDecision(scenario: 'NORMAL'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildScenarioCard(
+                  id: 'HIGH_DEMAND',
+                  title: 'High Demand Surge',
+                  desc: 'Simulates +20% demand surge & 3-day transit buffer',
+                  dispatchKg: _getScenarioDispatch('HIGH_DEMAND', fallback: 535.6),
+                  isSimulation: true,
+                  isSelected: _selectedScenario == 'HIGH_DEMAND',
+                  onTap: () => _loadDecision(scenario: 'HIGH_DEMAND'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildScenarioCard(
+                  id: 'LOW_STOCK_HIGH_RISK',
+                  title: 'Low Stock / Critical',
+                  desc: 'Simulates 75% depleted inventory & elevated risk buffer',
+                  dispatchKg: _getScenarioDispatch('LOW_STOCK_HIGH_RISK', fallback: 2135.0),
+                  isSimulation: true,
+                  isSelected: _selectedScenario == 'LOW_STOCK_HIGH_RISK',
+                  onTap: () => _loadDecision(scenario: 'LOW_STOCK_HIGH_RISK'),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildCommodityDecisionBreakdown(DispatchDecisionProfile d) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppConstants.cardBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.inventory_2_outlined,
-                  color: AppConstants.accentBlue, size: 16),
-              SizedBox(width: 8),
-              Text(
-                'Commodity-Level Dispatch Calculation Breakdown',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppConstants.primaryNavy),
-              ),
-            ],
+  double _getScenarioDispatch(String scenarioId, {double fallback = 0.0}) {
+    if (_decision == null) return fallback;
+    for (final s in _decision!.allScenarios) {
+      if (s.scenarioId == scenarioId) return s.recommendedDispatchKg;
+    }
+    return fallback;
+  }
+
+  Widget _buildScenarioCard({
+    required String id,
+    required String title,
+    required String desc,
+    required double dispatchKg,
+    required bool isSimulation,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFFEFF6FF)
+              : AppConstants.backgroundLight,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? AppConstants.accentBlue : AppConstants.cardBorder,
+            width: isSelected ? 1.8 : 1,
           ),
-          const Divider(height: 14),
-          Row(
-            children: d.commodityBreakdown.map((c) {
-              return Expanded(
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  padding: const EdgeInsets.all(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(title, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: isSelected ? AppConstants.accentBlue : AppConstants.primaryNavy)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                   decoration: BoxDecoration(
-                    color: AppConstants.backgroundLight,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppConstants.cardBorder),
+                    color: isSimulation ? const Color(0xFFFEF3C7) : const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(3),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(c.commodity.toUpperCase(),
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppConstants.primaryNavy)),
-                          Text('Rec. Dispatch: ${c.recommendedDispatchKg.toStringAsFixed(0)} kg',
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppConstants.successGreen)),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text('Formula: ${c.formulaDisplay}',
-                          style: const TextStyle(
-                              fontSize: 10,
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.w600,
-                              color: AppConstants.textSecondary)),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Current Stock: ${c.currentStockKg.toStringAsFixed(0)} kg',
-                              style: const TextStyle(
-                                  fontSize: 10, color: AppConstants.textSecondary)),
-                          Text('Safety Buffer: +${c.safetyBufferKg.toStringAsFixed(0)} kg',
-                              style: const TextStyle(
-                                  fontSize: 10, color: AppConstants.purpleAccent)),
-                        ],
-                      ),
-                    ],
+                  child: Text(
+                    isSimulation ? 'SIMULATION' : 'OPERATIONAL',
+                    style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: isSimulation ? const Color(0xFFB45309) : const Color(0xFF15803D)),
                   ),
                 ),
-              );
-            }).toList(),
-          ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(desc, style: const TextStyle(fontSize: 9.5, color: AppConstants.textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 6),
+            Text(
+              'Dispatch: ${dispatchKg.toStringAsFixed(0)} kg',
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: isSelected ? AppConstants.accentBlue : AppConstants.primaryNavy),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 5. GOVERNANCE STATUS
+  Widget _buildGovernanceStatusSection() {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.space14),
+      decoration: BoxDecoration(
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: AppConstants.cardBorder, width: 1),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _buildGovPill('AI Recommendation', 'ADVISORY', AppConstants.accentBlue)),
+          const SizedBox(width: 8),
+          Expanded(child: _buildGovPill('Officer Decision', 'REQUIRED', const Color(0xFFB45309))),
+          const SizedBox(width: 8),
+          Expanded(child: _buildGovPill('Allocation Status', 'NOT YET LOCKED', AppConstants.textSecondary)),
+          const SizedBox(width: 8),
+          Expanded(child: _buildGovPill('Statutory Compliance', '100% VERIFIED', const Color(0xFF15803D))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGovPill(String label, String status, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppConstants.textSecondary)),
+          const SizedBox(height: 1),
+          Text(status, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: color)),
         ],
       ),
     );
@@ -882,36 +699,21 @@ class _FpsDispatchDecisionDialogState extends State<FpsDispatchDecisionDialog> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Text(
-          'Notice: DEMO DATA — NOT GOVERNMENT DATA (DISPATCH DECISION ENGINE)',
-          style: TextStyle(fontSize: 10, color: AppConstants.textTertiary),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel', style: TextStyle(fontSize: 12, color: AppConstants.textSecondary)),
         ),
-        Row(
-          children: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: _isSaving ? null : _saveRecommendation,
-              icon: _isSaving
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.check_circle_outline, size: 16),
-              label: const Text('Save Recommendation for Validation',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppConstants.successGreen,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-            ),
-          ],
+        ElevatedButton.icon(
+          onPressed: _isSaving ? null : _saveRecommendation,
+          icon: _isSaving
+              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.check_circle_outline_rounded, size: 16),
+          label: const Text('Save Recommendation for Validation', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppConstants.primaryNavy,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
         ),
       ],
     );

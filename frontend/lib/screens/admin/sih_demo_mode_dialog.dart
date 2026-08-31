@@ -163,9 +163,9 @@ class _SihDemoModeDialogState extends State<SihDemoModeDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Container(
-        width: 1280,
-        height: 900,
-        padding: const EdgeInsets.all(24),
+        width: 1180,
+        height: 840,
+        padding: const EdgeInsets.all(22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

@@ -2,81 +2,95 @@ import 'package:flutter/material.dart';
 
 class AppConstants {
   // App Branding
-  static const String appName = 'PDS Pre-Dispatch Intelligence & Alert System';
+  static const String appName = 'PDS DemandSync';
   static const String appSubtitle =
-      'Interoperable Pre-Dispatch Decision Intelligence: Forecast → Decide → Validate → Optimize → Lock → Notify → Feedback';
-  static const String appTagline = 'Smart India Hackathon 2026 • Demo V1';
+      'Bengaluru Urban PDS Pilot • District Supply Operations';
+  static const String appTagline = 'Smart India Hackathon • Pilot Prototype';
   static const String demoNotice =
-      'DEMO PROTOTYPE ONLY — 100% Synthetic Data & Simulated Telemetry';
+      'DEMO DATA — NOT GOVERNMENT DATA (100% Synthetic Pilot Dataset)';
 
   // API Endpoints
-  // In Flutter Web on localhost, 127.0.0.1:8000 is accessible
   static const String apiBaseUrl = 'http://127.0.0.1:8000/api';
   static const String healthEndpoint = '$apiBaseUrl/health';
 
-  // GovTech Color Palette
-  static const Color primaryNavy = Color(0xFF0A2540); // Deep Sovereign Navy
+  // Modern Government Digital Infrastructure Color Palette
+  static const Color primaryNavy = Color(0xFF0B2942); // Deep Government Navy
   static const Color secondaryNavy = Color(0xFF1E3A8A); // Royal PDS Blue
-  static const Color accentBlue = Color(0xFF2563EB); // Modern Link / Focus Blue
-  static const Color accentAmber = Color(0xFFD97706); // Warm Govt Saffron / Alert
-  static const Color backgroundLight = Color(0xFFF8FAFC); // Clean Canvas Neutral
-  static const Color bgLight = backgroundLight; // Alias for convenience
-  static const Color cardSurface = Colors.white; // Pure White Card Background
-  static const Color borderLight = Color(0xFFE2E8F0); // Subtle GovTech Border
-  static const Color cardBorder = borderLight; // Alias for convenience
-  static const Color textPrimary = Color(0xFF0F172A); // High Contrast Dark
-  static const Color textSecondary = Color(0xFF475569); // Muted Slate
-  static const Color textTertiary = Color(0xFF94A3B8); // Light Slate
-  static const Color successGreen = Color(0xFF16A34A); // Verified / Connected
-  static const Color dangerRed = Color(0xFFDC2626); // Error / Stockout
-  static const Color purpleAccent = Color(0xFF673AB7); // Gatepass Purple
-  static const Color tealAccent = Color(0xFF00897B); // WhatsApp Teal
+  static const Color accentBlue = Color(0xFF2563EB); // Modern Link / Focus Royal Blue
+  static const Color accentAmber = Color(0xFFD97706); // Warm Amber / Alert
+  static const Color backgroundLight = Color(0xFFF6F8FB); // Very light blue-gray neutral
+  static const Color bgLight = backgroundLight; // Alias
+  static const Color cardSurface = Color(0xFFFFFFFF); // Pure White Surface
+  static const Color borderLight = Color(0xFFD9E1EA); // 1px Subtle GovTech Border
+  static const Color cardBorder = borderLight; // Alias
+  static const Color textPrimary = Color(0xFF102A43); // High Contrast Dark Slate Navy
+  static const Color textSecondary = Color(0xFF52667A); // Muted Blue-Grey Body
+  static const Color textTertiary = Color(0xFF718096); // Muted Slate Caption
+  static const Color successGreen = Color(0xFF16A34A); // Verified / Connected Green
+  static const Color dangerRed = Color(0xFFDC2626); // Error / Risk Red
+  static const Color infoCyan = Color(0xFF0891B2); // Information Cyan
+  static const Color purpleAccent = Color(0xFF7C3AED); // AI / Simulation Accent
+  static const Color tealAccent = Color(0xFF0D9488); // Telemetry Teal
 
-  // 9-Stage Pre-Dispatch Decision Pipeline
+  // Standard Spacing System (8px Grid)
+  static const double space4 = 4.0;
+  static const double space8 = 8.0;
+  static const double space10 = 10.0;
+  static const double space12 = 12.0;
+  static const double space14 = 14.0;
+  static const double space16 = 16.0;
+  static const double space18 = 18.0;
+  static const double space20 = 20.0;
+  static const double space24 = 24.0;
+  static const double space32 = 32.0;
+  static const double space40 = 40.0;
+
+  // Standard Border Radius System
+  static const double radiusSmall = 6.0;
+  static const double radiusMedium = 10.0;
+  static const double radiusLarge = 14.0;
+  static const double radiusPill = 999.0;
+
+  // 8-Stage Pre-Dispatch Decision Pipeline (Standard Enterprise Flow)
   static const List<Map<String, String>> workflowSteps = [
     {
-      'num': '1',
-      'title': 'DATA SOURCES',
-      'desc': 'FPS inventory, historical offtake & beneficiary signals'
+      'num': '01',
+      'title': 'Forecast',
+      'desc': 'D̂ = (1-w*C)*H + (w*C)*I demand forecast'
     },
     {
-      'num': '2',
-      'title': 'DEMAND FORECAST',
-      'desc': 'D_hat = (1-w*C)*H + (w*C)*I explainable model'
+      'num': '02',
+      'title': 'Lock Forecast',
+      'desc': 'Choice window close & demand baseline lock'
     },
     {
-      'num': '3',
-      'title': 'DISPATCH DECISION',
-      'desc': 'Rec. Dispatch = D_hat - Stock + Safety Buffer'
+      'num': '03',
+      'title': 'Constraints',
+      'desc': 'Statutory floor, payload, depot & capacity validation'
     },
     {
-      'num': '4',
-      'title': 'CONSTRAINT VALIDATION',
-      'desc': '6 rules: Storage, Payload, Depot, Safety, Quota, Availability'
+      'num': '04',
+      'title': 'Optimization',
+      'desc': 'Multi-stop TSP routing, mileage & fuel cost modeling'
     },
     {
-      'num': '5',
-      'title': 'ROUTE OPTIMIZATION',
-      'desc': 'Corridor sequencing, distance km & fuel cost modeling'
+      'num': '05',
+      'title': 'Manifest',
+      'desc': 'Immutable locked manifest with SHA-256 digital seal'
     },
     {
-      'num': '6',
-      'title': 'MANIFEST LOCK',
-      'desc': 'Immutable locked manifest with SHA-256 digital audit stamp'
+      'num': '06',
+      'title': 'Gatepass',
+      'desc': '4-stage physical handshake: Auth -> Bay -> Loading -> Exit'
     },
     {
-      'num': '7',
-      'title': 'DIGITAL GATEPASS',
-      'desc': '5-stage physical handshake: Auth -> Bay -> Loading -> Exit'
+      'num': '07',
+      'title': 'Dispatch',
+      'desc': 'Godown physical truck dispatch & live tracking'
     },
     {
-      'num': '8',
-      'title': 'READINESS ALERTS',
-      'desc': 'Simulated WhatsApp/SMS to FPS Dealers & Beneficiaries'
-    },
-    {
-      'num': '9',
-      'title': 'FEEDBACK LOOP',
+      'num': '08',
+      'title': 'Evaluation',
       'desc': 'ePoS offtake comparison, error evaluation & ML calibration'
     },
   ];

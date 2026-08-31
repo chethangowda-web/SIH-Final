@@ -1,13 +1,13 @@
-"""FastAPI Main Application Entrypoint for PDS DemandSync Demo V1."""
-import os
+import time
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import init_db
+from app.core.logging_config import setup_logging, get_logger, CorrelationIdMiddleware
 from app.data.seed_data import seed_all_data, DEMO_NOTICE
 from app.api.health import router as health_router
 from app.api.beneficiaries import router as beneficiaries_router
@@ -17,16 +17,29 @@ from app.api.demand_inventory import router as demand_inventory_router
 from app.api.dashboard import router as dashboard_router
 from app.api.admin import router as admin_router
 from app.api.scarcity import router as scarcity_router
+from app.api.auth import router as auth_router
 
-WEB_BUILD_DIR = Path(__file__).resolve().parent.parent.parent / "frontend" / "build" / "web"
+# Initialize structured logging on application module load
+setup_logging(log_level=settings.LOG_LEVEL)
+logger = get_logger("main")
+
+WEB_BUILD_DIR = settings.STATIC_DIR
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    # Initialize SQLite Database and seed baseline synthetic dataset on startup if empty
+    app.state.start_time = time.time()
+    logger.info("Initializing PDS DemandSync backend service (version=%s, env=%s)...", settings.VERSION, settings.ENVIRONMENT)
+
+    # 1. Enforce strict configuration validation if in production mode
+    settings.validate_production_config()
+
+    # 2. Initialize SQLite Database and seed baseline synthetic dataset on startup if empty
     init_db()
     seed_all_data(recreate=False)
+    logger.info("PDS DemandSync startup initialization complete. Ready to receive requests.")
     yield
+    logger.info("PDS DemandSync service shutting down.")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -34,6 +47,19 @@ app = FastAPI(
     version=settings.VERSION,
     lifespan=lifespan
 )
+
+# Correlation and Request ID Middleware (placed first to trace all downstream middlewares)
+app.add_middleware(CorrelationIdMiddleware)
+
+# Standard Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 # Configure CORS Middleware
 app.add_middleware(
@@ -46,6 +72,7 @@ app.add_middleware(
 
 # Register Canonical API Routers under /api (documented in OpenAPI /docs)
 api_router = APIRouter(prefix=settings.API_V1_PREFIX)
+api_router.include_router(auth_router)
 api_router.include_router(health_router)
 api_router.include_router(beneficiaries_router)
 api_router.include_router(fps_router)
@@ -78,7 +105,7 @@ def root():
         "subtitle": settings.PROJECT_SUBTITLE,
         "version": settings.VERSION,
         "status": "operational",
-        "district": "Bengaluru Urban - Demo Nagar",
+        "district": "Bengaluru Urban PDS Pilot",
         "active_cycle": "2026-09",
         "web_app_url": "/app",
         "docs_url": "/docs",

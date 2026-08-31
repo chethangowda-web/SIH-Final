@@ -1,11 +1,22 @@
 """District Admin Analytics & Supply Chain Management API Router."""
 import sqlite3
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from app.core.database import get_db
+from app.core.database import get_db, run_database_integrity_check, backup_database
 from app.core.config import settings
-from app.models.schemas import DEMO_NOTICE
+from app.models.schemas import (
+    DEMO_NOTICE,
+    CitizenRequestOut,
+    CitizenRequestAuthorizeIn,
+    CitizenRequestQueueResponse,
+    DeliveryDisputeOut,
+    DeliveryDisputeResolveIn,
+    SupplyRoutesResponse,
+    DistrictForecastSummaryResponse,
+    DistrictDispatchSummaryResponse
+)
 from app.services.forecast_engine import forecast_engine, COMMODITIES
 from app.services.dispatch_engine import dispatch_engine
 from app.services.evaluation_engine import evaluation_engine
@@ -16,8 +27,15 @@ from app.services.notification_engine import notification_engine
 from app.services.dispatch_decision_engine import dispatch_decision_engine
 from app.services.manifest_engine import manifest_engine
 from app.services.demo_scenario_engine import demo_scenario_engine
+from app.services.causal_trace_engine import (
+    causal_trace_engine,
+    CausalTraceResponse,
+    CausalTraceRun
+)
+from app.services.workflow_manager import workflow_manager, WorkflowState
+from app.core.auth import check_admin_access
 
-router = APIRouter(tags=["District Admin Dashboard"])
+router = APIRouter(tags=["District Admin Dashboard"], dependencies=[Depends(check_admin_access)])
 
 # ----------------- Admin Schemas ----------------- #
 class AdminFpsRow(BaseModel):
@@ -111,7 +129,7 @@ def get_admin_dashboard(db: sqlite3.Connection = Depends(get_db)):
     """
     cursor = db.cursor()
     active_cycle = settings.CURRENT_CYCLE
-    district_name = "Bengaluru Urban - Demo Nagar"
+    district_name = "Bengaluru Urban PDS Pilot"
 
     # 1. Fetch persistent workflow status from SQLite
     workflow_status = forecast_engine.get_persisted_workflow_status(db, active_cycle)
@@ -494,16 +512,21 @@ def trigger_forecast_generation(
     """
     try:
         res = forecast_engine.generate_and_persist_forecasts(db, cycle_id=cycle_id, force=force)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.FORECASTED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "Demand forecasts generated across all 20 Fair Price Shops.", force=True
+        )
         return res
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Forecast generation failed: {str(e)}"
+            detail="Forecast generation failed due to an internal server error."
         )
 
 
@@ -518,16 +541,21 @@ def trigger_forecast_lock(
     """
     try:
         res = forecast_engine.lock_persisted_forecast(db, cycle_id=cycle_id)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.VALIDATED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "Demand forecast locked & validated against NFSA storage/fleet constraints.", force=True
+        )
         return res
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to lock forecast: {str(e)}"
+            detail="Failed to lock forecast due to an internal server error."
         )
 
 
@@ -542,13 +570,24 @@ def close_choice_window_api(
     Prevents further preference modifications for this cycle.
     """
     try:
-        # 1. If forecast draft does not exist yet, generate it from the latest aggregated preferences
+        # 1. Check current workflow status
         status_now = forecast_engine.get_persisted_workflow_status(db, cycle_id)
-        if status_now == "PLANNING_OPEN":
+        if status_now in ["FORECAST_LOCKED", "CHOICE_WINDOW_CLOSED"]:
+            res = {"locked_records_count": 40}
+        elif status_now == "PLANNING_OPEN":
             forecast_engine.generate_and_persist_forecasts(db, cycle_id=cycle_id, force=True)
+            res = forecast_engine.lock_persisted_forecast(db, cycle_id=cycle_id)
+        elif status_now == "DRAFT":
+            res = forecast_engine.lock_persisted_forecast(db, cycle_id=cycle_id)
+        else:
+            # Cycle has already progressed beyond DRAFT/OPEN
+            res = {"locked_records_count": 40}
 
-        # 2. Lock the forecast
-        res = forecast_engine.lock_persisted_forecast(db, cycle_id=cycle_id)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.VALIDATED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "Choice window closed & forecasts validated.", force=True
+        )
 
         # Fetch aggregated totals
         cursor = db.cursor()
@@ -570,8 +609,8 @@ def close_choice_window_api(
         }
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to close choice window: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to close choice window due to an internal server error.")
 
 
 @router.get("/admin/forecast/cycle/{cycle_id}")
@@ -605,16 +644,26 @@ def trigger_dispatch_generation(
     """
     try:
         manifest = dispatch_engine.generate_and_persist_dispatch(db, cycle_id=cycle_id, force=force)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.OPTIMIZED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "Pre-dispatch routing corridors optimized.", force=True
+        )
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.MANIFEST_DRAFT,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "Multi-echelon dispatch manifests generated as DRAFT.", force=True
+        )
         return manifest
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Dispatch generation failed: {str(e)}"
+            detail="Dispatch generation failed due to an internal server error."
         )
 
 
@@ -671,16 +720,21 @@ def trigger_distribution_simulation(
     """
     try:
         res = evaluation_engine.simulate_actual_distribution(db, cycle_id=cycle_id, force=force)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.DISPATCHED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "Actual distribution simulated/recorded across ePoS devices.", force=True
+        )
         return res
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Distribution simulation failed: {str(e)}"
+            detail="Distribution simulation failed due to an internal server error."
         )
 
 
@@ -704,16 +758,21 @@ def get_forecast_vs_actual_evaluation(
     """
     try:
         res = evaluation_engine.evaluate_forecast_vs_actual(db, cycle_id=cycle_id)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.VERIFIED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "Forecast vs actual evaluation metrics computed.", force=True
+        )
         return res
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Evaluation failed: {str(e)}"
+            detail="Evaluation failed due to an internal server error."
         )
 
 
@@ -727,16 +786,21 @@ def get_forecast_vs_actual_evaluation_by_cycle(
     """
     try:
         res = evaluation_engine.evaluate_forecast_vs_actual(db, cycle_id=cycle_id)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.VERIFIED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "Forecast vs actual evaluation metrics computed.", force=True
+        )
         return res
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Evaluation failed: {str(e)}"
+            detail="Evaluation failed due to an internal server error."
         )
 
 
@@ -751,16 +815,21 @@ def trigger_model_calibration(
     """
     try:
         res = evaluation_engine.calibrate_model_with_sklearn(db, cycle_id=cycle_id)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.EVALUATED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "Closed-loop ML calibration completed.", force=True
+        )
         return res
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Model calibration failed: {str(e)}"
+            detail="Model calibration failed due to an internal server error."
         )
 
 
@@ -783,11 +852,16 @@ def validate_district_constraints(
     """
     try:
         res = constraint_engine.run_full_district_constraint_audit(db, cycle_id=cycle_id, scenario=scenario)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.VALIDATED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "District constraints validated.", force=True
+        )
         return res
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Constraint validation failed: {str(e)}"
+            detail="Constraint validation failed due to an internal server error."
         )
 
 
@@ -807,8 +881,8 @@ def validate_single_fps_constraints(
         return res
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"FPS constraint check failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="FPS constraint check failed due to an internal server error.")
 
 
 @router.post("/admin/fps/{fps_id}/constraints/resolve")
@@ -835,8 +909,8 @@ def resolve_fps_constraint_action(
         return res
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Constraint resolution failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Constraint resolution failed due to an internal server error.")
 
 
 @router.post("/admin/constraints/revalidate")
@@ -851,8 +925,8 @@ def revalidate_all_constraints(
     try:
         res = constraint_engine.run_full_district_constraint_audit(db, cycle_id=cycle_id, scenario=scenario)
         return res
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Revalidation failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Revalidation failed due to an internal server error.")
 
 
 class WhatIfOptimizationRequest(BaseModel):
@@ -874,10 +948,10 @@ def run_district_dispatch_optimization(
     try:
         res = optimization_engine.run_district_wide_optimization(db, cycle_id=cycle_id)
         return res
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Optimization failed: {str(e)}"
+            detail="Optimization failed due to an internal server error."
         )
 
 
@@ -893,8 +967,8 @@ def get_corridor_optimization(
         return res
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Corridor optimization failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Corridor optimization failed due to an internal server error.")
 
 
 @router.post("/admin/optimization/what-if")
@@ -919,8 +993,8 @@ def simulate_what_if_optimization(
         return res
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"What-if optimization failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="What-if optimization failed due to an internal server error.")
 
 
 # ----------------- Phase 6: Auditable Manifest Generation & Lock Endpoints ----------------- #
@@ -960,8 +1034,8 @@ def list_all_manifests(
             "manifests": manifests,
             "demo_notice": DEMO_NOTICE
         }
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to list manifests: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list manifests due to an internal server error.")
 
 
 @router.get("/admin/manifests/{manifest_id}")
@@ -975,8 +1049,8 @@ def get_manifest_details(
         return res
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch manifest: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch manifest due to an internal server error.")
 
 
 @router.post("/admin/manifests/generate")
@@ -989,8 +1063,10 @@ def generate_corridor_manifest_endpoint(
     try:
         res = manifest_engine.generate_corridor_manifest(db, truck_id=truck_id, cycle_id=cycle_id)
         return res
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate manifest: {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate manifest due to an internal server error.")
 
 
 @router.post("/admin/manifests/{manifest_id}/update")
@@ -1014,9 +1090,12 @@ def update_draft_manifest_endpoint(
         )
         return res
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update manifest: {str(e)}")
+        err_msg = str(e)
+        if "not found" in err_msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update manifest due to an internal server error.")
 
 
 @router.post("/admin/manifests/{manifest_id}/lock")
@@ -1027,6 +1106,12 @@ def lock_manifest_endpoint(
 ):
     """Lock manifest, generate cryptographic digital seal, and freeze critical parameters."""
     try:
+        # Get cycle_id from manifest
+        cursor = db.cursor()
+        cursor.execute("SELECT cycle_id FROM manifests WHERE manifest_id = ?;", (manifest_id,))
+        row = cursor.fetchone()
+        cycle_id = row[0] if row else settings.CURRENT_CYCLE
+
         res = manifest_engine.lock_manifest(
             db,
             manifest_id=manifest_id,
@@ -1034,14 +1119,26 @@ def lock_manifest_endpoint(
             actor_role=payload.actor_role or "DISTRICT_SUPPLY_OFFICER",
             lock_reason=payload.lock_reason or "Official DSO Pre-Dispatch freeze for statutory execution"
         )
+
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.MANIFEST_LOCKED,
+            payload.actor_name or "District Supply Officer (Demo Admin)",
+            payload.actor_role or "DISTRICT_SUPPLY_OFFICER",
+            payload.lock_reason or "Official DSO Pre-Dispatch freeze for statutory execution", force=True
+        )
+
         return res
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to lock manifest: {str(e)}")
+        err_msg = str(e)
+        if "not found" in err_msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to lock manifest due to an internal server error.")
 
 
 @router.post("/admin/manifests/{manifest_id}/revise")
+@router.post("/admin/manifests/{manifest_id}/revision")
 def revise_manifest_endpoint(
     manifest_id: str,
     payload: ReviseManifestRequest,
@@ -1058,12 +1155,86 @@ def revise_manifest_endpoint(
         )
         return res
     except ValueError as e:
+        err_msg = str(e)
+        if "not found" in err_msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
+        if "concurrent" in err_msg.lower():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=err_msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to revise manifest due to an internal server error.")
+
+
+@router.get("/admin/manifests/{manifest_id}/verify-seal")
+def verify_manifest_seal_endpoint(
+    manifest_id: str,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Cryptographic verification of manifest digital seal against canonical database fields."""
+    try:
+        res = manifest_engine.verify_manifest_seal(db, manifest_id)
+        from app.services.governance_trail import governance_trail
+        governance_trail.record_event(
+            db=db,
+            event_type="MANIFEST_SEAL_VERIFIED",
+            action="VERIFY_CRYPTOGRAPHIC_SEAL",
+            entity_type="MANIFEST",
+            entity_id=manifest_id,
+            actor_name="Auditor / Inspection Officer",
+            actor_role="AUDITOR",
+            notes=f"Digital seal verification: {res.get('status', 'UNKNOWN')}. Match = {res.get('is_valid', False)}",
+            integrity_metadata={"is_valid": res.get("is_valid", False), "status": res.get("status")},
+            is_success=res.get("is_valid", False),
+            is_simulation=False
+        )
+        return res
+    except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to revise manifest: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Seal verification failed due to an internal server error.")
 
 
 # ----------------- Pre-Dispatch Decision Intelligence: Digital Gatepasses ----------------- #
+
+class VerifyGatepassRequest(BaseModel):
+    gatepass_id: str = Field(..., description="ID of gatepass to verify")
+    security_token: Optional[str] = Field(None, description="Security token from QR or print slip")
+    qr_payload: Optional[str] = Field(None, description="Raw QR code payload string")
+
+
+@router.post("/admin/gatepasses/verify")
+def verify_gatepass_endpoint(
+    payload: VerifyGatepassRequest,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Cryptographic and manifest-linkage verification of a digital gatepass."""
+    try:
+        res = gatepass_engine.verify_gatepass(
+            db,
+            gatepass_id=payload.gatepass_id,
+            security_token=payload.security_token,
+            qr_payload=payload.qr_payload
+        )
+        from app.services.governance_trail import governance_trail
+        governance_trail.record_event(
+            db=db,
+            event_type="GATEPASS_TOKEN_VERIFIED",
+            action="VERIFY_SECURITY_TOKEN",
+            entity_type="GATEPASS",
+            entity_id=payload.gatepass_id,
+            actor_name="Depot Gate Security Officer",
+            actor_role="DEPOT_SECURITY",
+            notes=f"Gatepass security verification: {res.get('status', 'UNKNOWN')}. Valid = {res.get('is_valid', False)}",
+            integrity_metadata={"is_valid": res.get("is_valid", False), "status": res.get("status")},
+            is_success=res.get("is_valid", False),
+            is_simulation=False
+        )
+        return res
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Gatepass verification failed due to an internal server error.")
+
 
 @router.get("/admin/gatepasses")
 def get_all_gatepasses(
@@ -1073,9 +1244,14 @@ def get_all_gatepasses(
     """Retrieve all Digital Pre-Dispatch Gatepasses for the active cycle."""
     try:
         res = gatepass_engine.generate_all_cycle_gatepasses(db, cycle_id=cycle_id)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.GATEPASS_READY,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            "Gatepasses generated for the cycle.", force=True
+        )
         return {"status": "success", "cycle_id": cycle_id, "gatepasses": res, "demo_notice": DEMO_NOTICE}
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Gatepass retrieval failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Gatepass retrieval failed due to an internal server error.")
 
 
 @router.get("/admin/gatepass/{truck_id}")
@@ -1087,11 +1263,16 @@ def get_or_create_truck_gatepass(
     """Retrieve or generate official Digital Pre-Dispatch Gatepass for a specific vehicle."""
     try:
         res = gatepass_engine.generate_or_get_gatepass_for_truck(db, truck_id, cycle_id)
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.GATEPASS_READY,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            f"Gatepass retrieved/created for truck {truck_id}.", force=True
+        )
         return res
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Gatepass generation failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Gatepass generation failed due to an internal server error.")
 
 
 @router.post("/admin/gatepass/{gatepass_id}/advance")
@@ -1102,12 +1283,35 @@ def advance_gatepass_stage(
 ):
     """Advance gatepass through the 5-stage pre-dispatch physical handshake pipeline."""
     try:
+        cursor = db.cursor()
+        cursor.execute("SELECT cycle_id FROM gatepasses WHERE gatepass_id = ?;", (gatepass_id,))
+        row = cursor.fetchone()
+        cycle_id = row[0] if row else settings.CURRENT_CYCLE
+
         res = gatepass_engine.advance_gatepass_status(db, gatepass_id, target_status)
+
+        if target_status == "DISPATCH_CONFIRMED":
+            workflow_manager.transition_state(
+                db, cycle_id, WorkflowState.DISPATCHED,
+                "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+                f"Gatepass {gatepass_id} advanced to DISPATCH_CONFIRMED. Truck dispatched.", force=True
+            )
+        else:
+            workflow_manager.transition_state(
+                db, cycle_id, WorkflowState.GATEPASS_READY,
+                "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+                f"Gatepass {gatepass_id} advanced to {target_status}.", force=True
+            )
         return res
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to advance gatepass: {str(e)}")
+        err_msg = str(e)
+        if "not found" in err_msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
+        if "rejected" in err_msg.lower() or "concurrent" in err_msg.lower():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=err_msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to advance gatepass due to an internal server error.")
 
 
 # ----------------- Pre-Dispatch Decision Intelligence: Multi-Channel Alerts ----------------- #
@@ -1123,8 +1327,8 @@ def trigger_alert_notifications(
     try:
         res = notification_engine.dispatch_pre_dispatch_alerts(db, cycle_id=cycle_id)
         return res
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Notification dispatch failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Notification dispatch failed due to an internal server error.")
 
 
 @router.get("/admin/notifications/logs")
@@ -1143,8 +1347,8 @@ def get_notification_logs(
             "logs": logs,
             "demo_notice": DEMO_NOTICE
         }
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch notification logs: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch notification logs due to an internal server error.")
 
 
 # ----------------- Phase 8: SIH Demo Mode & Closed-Loop Delivery Feedback ----------------- #
@@ -1172,8 +1376,8 @@ def get_sih_demo_scenarios():
             "scenarios": scenarios,
             "demo_notice": DEMO_NOTICE
         }
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to list demo scenarios: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list demo scenarios due to an internal server error.")
 
 
 @router.post("/admin/demo/scenario/run")
@@ -1192,9 +1396,16 @@ def run_sih_demo_scenario_endpoint(
             target_fps_id=payload.target_fps_id,
             cycle_id=payload.cycle_id or settings.CURRENT_CYCLE
         )
+        workflow_manager.transition_state(
+            db, payload.cycle_id or settings.CURRENT_CYCLE, WorkflowState.EVALUATED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            f"SIH Demo Scenario '{payload.scenario_id}' executed successfully. Workflow completed.", force=True
+        )
         return res
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"SIH Demo Scenario execution failed: {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="SIH Demo Scenario execution failed due to an internal server error.")
 
 
 @router.post("/admin/evaluation/offtake/record")
@@ -1214,9 +1425,16 @@ def record_actual_offtake_endpoint(
             actual_wheat_kg=payload.actual_wheat_kg,
             cycle_id=payload.cycle_id or settings.CURRENT_CYCLE
         )
+        workflow_manager.transition_state(
+            db, payload.cycle_id or settings.CURRENT_CYCLE, WorkflowState.VERIFIED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            f"Actual distribution offtake recorded for FPS {payload.fps_id}.", force=True
+        )
         return res
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to record actual offtake: {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to record actual offtake due to an internal server error.")
 
 
 @router.get("/admin/system-impact")
@@ -1230,8 +1448,83 @@ def get_system_impact_dashboard_endpoint(
     try:
         res = evaluation_engine.get_system_impact_metrics(db, cycle_id=cycle_id)
         return res
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch system impact metrics: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch system impact metrics due to an internal server error.")
+
+
+class WorkflowStatusResponse(BaseModel):
+    current_state: str
+    allowed_next_states: List[str]
+    blocking_conditions: List[str]
+    audit_history: List[Dict[str, Any]]
+    demo_notice: str = DEMO_NOTICE
+
+class WorkflowTransitionIn(BaseModel):
+    cycle_id: str
+    new_state: str
+    actor_name: str
+    actor_role: str
+    reason: Optional[str] = None
+    correlation_id: Optional[str] = None
+
+@router.get("/admin/workflow/status", response_model=WorkflowStatusResponse)
+def get_workflow_status(
+    cycle_id: str = Query(settings.CURRENT_CYCLE),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    current = workflow_manager.get_current_state(db, cycle_id)
+    allowed = workflow_manager.get_allowed_next_states(current)
+    
+    # Get blockers for the next logical state
+    try:
+        curr_idx = workflow_manager.STATE_ORDER.index(current)
+        next_state = workflow_manager.STATE_ORDER[curr_idx + 1] if curr_idx + 1 < len(workflow_manager.STATE_ORDER) else None
+    except ValueError:
+        next_state = None
+        
+    blockers = []
+    if next_state:
+        blockers = workflow_manager.get_blocking_conditions(db, cycle_id, current, next_state)
+        
+    audit = workflow_manager.get_audit_history(db, cycle_id)
+    return {
+        "current_state": current,
+        "allowed_next_states": allowed,
+        "blocking_conditions": blockers,
+        "audit_history": audit,
+        "demo_notice": DEMO_NOTICE
+    }
+
+@router.post("/admin/workflow/transition")
+def trigger_workflow_transition(
+    payload: WorkflowTransitionIn,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    try:
+        state = workflow_manager.transition_state(
+            db,
+            cycle_id=payload.cycle_id,
+            new_state=payload.new_state,
+            actor_name=payload.actor_name,
+            actor_role=payload.actor_role,
+            reason=payload.reason,
+            correlation_id=payload.correlation_id
+        )
+        return {
+            "status": "success",
+            "current_state": state,
+            "message": f"Workflow transitioned to state '{state}' successfully."
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Workflow transition failed due to an internal server error."
+        )
 
 
 @router.post("/admin/demo/reset")
@@ -1244,6 +1537,12 @@ def reset_demo_workflow(
     Clears generated forecasts, dispatches, actuals, evaluations, calibrations, gatepasses, and logs.
     Preserves all core benchmark FPS and beneficiary demographic datasets.
     """
+    if settings.is_production and not settings.ALLOW_DEMO_RESET:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System reset endpoint is disabled in production environment."
+        )
+
     cursor = db.cursor()
     cursor.execute("DELETE FROM model_calibration WHERE cycle_id = ?;", (cycle_id,))
     cursor.execute("DELETE FROM forecast_evaluation WHERE cycle_id = ?;", (cycle_id,))
@@ -1255,6 +1554,25 @@ def reset_demo_workflow(
     cursor.execute("DELETE FROM constraint_logs WHERE cycle_id = ?;", (cycle_id,))
     db.commit()
 
+    # Reset state machine
+    workflow_manager.reset_state(db, cycle_id)
+
+    # Record reset event
+    from app.services.governance_trail import governance_trail
+    governance_trail.record_event(
+        db=db,
+        event_type="ADMIN_RESET",
+        action="RESET_DEMO_WORKFLOW",
+        entity_type="SYSTEM",
+        entity_id=cycle_id,
+        actor_name="District Supply Officer (Demo Admin)",
+        actor_role="ADMIN",
+        cycle_id=cycle_id,
+        notes=f"Demo workflow reset back to PLANNING_OPEN for cycle {cycle_id}",
+        is_success=True,
+        is_simulation=False
+    )
+
     return {
         "status": "success",
         "workflow_status": "PLANNING_OPEN",
@@ -1262,6 +1580,73 @@ def reset_demo_workflow(
         "message": f"Demo workflow successfully reset to PLANNING_OPEN for cycle {cycle_id}.",
         "demo_notice": DEMO_NOTICE
     }
+
+
+# ----------------- Unified Governance Event Trail Endpoints ----------------- #
+
+@router.get("/admin/governance/trail")
+@router.get("/admin/governance-events")
+def get_governance_event_trail_endpoint(
+    cycle_id: Optional[str] = Query(None, description="Filter by cycle ID"),
+    entity_type: Optional[str] = Query(None, description="Filter by entity type (e.g. MANIFEST, WORKFLOW, SCARCITY_PLAN)"),
+    entity_id: Optional[str] = Query(None, description="Filter by entity ID"),
+    event_type: Optional[str] = Query(None, description="Filter by event type"),
+    is_simulation: Optional[bool] = Query(None, description="Filter simulations vs operational actions"),
+    limit: int = Query(100, ge=1, le=500, description="Max results per page"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Retrieve unified, immutable, append-only governance event trail.
+    Accessible to authorized DSO, ADMIN, and AUDITOR roles.
+    """
+    from app.services.governance_trail import governance_trail
+    return governance_trail.list_events(
+        db=db,
+        cycle_id=cycle_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        event_type=event_type,
+        is_simulation=is_simulation,
+        limit=limit,
+        offset=offset
+    )
+
+
+# ----------------- Database Integrity & Online Backup Endpoints ----------------- #
+
+@router.get("/admin/database/integrity")
+def get_database_integrity_endpoint(
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Execute deep PRAGMA integrity, quick_check, and foreign_key_check diagnostics.
+    Accessible to authorized DSO, ADMIN, and AUDITOR roles.
+    """
+    return run_database_integrity_check(conn=db)
+
+
+@router.post("/admin/database/backup")
+def trigger_database_backup_endpoint(
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Execute safe online non-blocking snapshot backup using SQLite backup API.
+    Accessible to authorized DSO and ADMIN roles.
+    """
+    try:
+        backup_path = backup_database(conn=db)
+        return {
+            "status": "SUCCESS",
+            "message": "Online non-blocking database backup completed successfully.",
+            "backup_file": backup_path,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC+05:30")
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database backup failed due to an internal server error."
+        )
 
 
 # ----------------- Phase 1: Command Center & Pre-Dispatch Intelligence Layer ----------------- #
@@ -1697,7 +2082,7 @@ def get_fps_pre_dispatch_analytics(
     }
 
 
-@router.get("/admin/routes")
+@router.get("/admin/routes", response_model=SupplyRoutesResponse)
 def get_supply_routes(db: sqlite3.Connection = Depends(get_db)):
     """Retrieve all synthetic delivery routes connecting central depots to Fair Price Shops."""
     cursor = db.cursor()
@@ -1807,8 +2192,8 @@ def get_fps_explainable_forecast(
         return res
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to calculate forecast: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to calculate forecast due to an internal server error.")
 
 
 @router.post("/admin/fps/{fps_id}/forecast/what-if")
@@ -1833,11 +2218,11 @@ def simulate_fps_what_if_forecast(
         return res
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"What-If simulation failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="What-If simulation failed due to an internal server error.")
 
 
-@router.get("/admin/forecast/district-summary")
+@router.get("/admin/forecast/district-summary", response_model=DistrictForecastSummaryResponse)
 def get_district_forecast_summary(
     cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle for district summary"),
     db: sqlite3.Connection = Depends(get_db)
@@ -1885,8 +2270,8 @@ def get_district_forecast_summary(
             "fps_forecasts": fps_forecasts,
             "demo_notice": DEMO_NOTICE
         }
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate district summary: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate district summary due to an internal server error.")
 
 
 # -----------------------------------------------------------------------------
@@ -1929,8 +2314,8 @@ def get_fps_dispatch_decision(
         return decision
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to calculate dispatch decision: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to calculate dispatch decision due to an internal server error.")
 
 
 @router.post("/admin/fps/{fps_id}/dispatch-decision/calculate")
@@ -1953,8 +2338,8 @@ def calculate_custom_dispatch_decision(
         return decision
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to recalculate dispatch decision: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to recalculate dispatch decision due to an internal server error.")
 
 
 @router.post("/admin/fps/{fps_id}/dispatch-decision/save")
@@ -1975,14 +2360,19 @@ def save_fps_dispatch_decision(
         res = dispatch_decision_engine.save_fps_dispatch_recommendation(
             db, fps_id, decision, cycle_id=cycle_id
         )
+        workflow_manager.transition_state(
+            db, cycle_id, WorkflowState.ALLOCATED,
+            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
+            f"Dispatch decision saved for FPS {fps_id}.", force=True
+        )
         return res
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to save dispatch decision: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save dispatch decision due to an internal server error.")
 
 
-@router.get("/admin/dispatch-decisions/district-summary")
+@router.get("/admin/dispatch-decisions/district-summary", response_model=DistrictDispatchSummaryResponse)
 def get_district_dispatch_decisions_summary(
     cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle ID"),
     db: sqlite3.Connection = Depends(get_db)
@@ -2034,8 +2424,8 @@ def get_district_dispatch_decisions_summary(
             "fps_decisions": fps_decisions,
             "demo_notice": DEMO_NOTICE
         }
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate district dispatch summary: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate district dispatch summary due to an internal server error.")
 
 
 @router.get("/admin/judge-view", tags=["SIH Defense"])
@@ -2176,6 +2566,479 @@ def get_sih_judge_defense_view(
             }
         ]
     }
+
+
+# ----------------- Citizen Request Review Queue & Authorization Endpoints ----------------- #
+
+@router.get("/admin/citizen-requests", response_model=CitizenRequestQueueResponse)
+def get_citizen_requests_queue(
+    cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle ID"),
+    status: Optional[str] = Query(None, description="Filter by status: PENDING_OFFICER_REVIEW, OFFICER_APPROVED, OFFICER_PARTIAL_APPROVED, OFFICER_REDIRECTED, OFFICER_DEFERRED"),
+    fps_id: Optional[str] = Query(None, description="Filter by target or home FPS ID"),
+    risk_level: Optional[str] = Query(None, description="Filter by AI risk level"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Retrieve paginated Officer Citizen Request Review Queue with real-time AI decision-support diagnostics.
+    """
+    cursor = db.cursor()
+    
+    # 1. Fetch Summary Counts
+    cursor.execute("SELECT COUNT(*) FROM citizen_requests WHERE cycle_id = ?;", (cycle_id,))
+    total_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM citizen_requests WHERE cycle_id = ? AND status = 'PENDING_OFFICER_REVIEW';", (cycle_id,))
+    pending_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM citizen_requests WHERE cycle_id = ? AND status = 'OFFICER_APPROVED';", (cycle_id,))
+    approved_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM citizen_requests WHERE cycle_id = ? AND status = 'OFFICER_PARTIAL_APPROVED';", (cycle_id,))
+    partial_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM citizen_requests WHERE cycle_id = ? AND status = 'OFFICER_REDIRECTED';", (cycle_id,))
+    redirected_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM citizen_requests WHERE cycle_id = ? AND status = 'OFFICER_DEFERRED';", (cycle_id,))
+    deferred_count = cursor.fetchone()[0]
+    
+    # 2. Build Query for Items
+    query = """
+    SELECT r.*, 
+           b.name_for_demo as beneficiary_name,
+           rf.name as registered_fps_name,
+           inf.name as intended_fps_name,
+           altf.name as ai_recommended_fps_name,
+           COALESCE(inv.available_quantity_kg, 0.0) as current_inventory_kg,
+           inf.capacity_kg as target_capacity_kg,
+           inf.beneficiaries_count as target_bens_count
+    FROM citizen_requests r
+    LEFT JOIN beneficiaries b ON r.beneficiary_id = b.pseudonymous_beneficiary_id
+    LEFT JOIN fps rf ON r.registered_fps_id = rf.fps_id
+    LEFT JOIN fps inf ON r.intended_fps_id = inf.fps_id
+    LEFT JOIN fps altf ON r.ai_recommended_fps_id = altf.fps_id
+    LEFT JOIN inventory inv ON r.intended_fps_id = inv.fps_id AND r.commodity = inv.commodity
+    WHERE r.cycle_id = ?
+    """
+    params = [cycle_id]
+    
+    if status and status.upper() != "ALL":
+        query += " AND r.status = ?"
+        params.append(status.upper())
+        
+    if fps_id:
+        query += " AND (r.intended_fps_id = ? OR r.registered_fps_id = ?)"
+        params.extend([fps_id.strip(), fps_id.strip()])
+        
+    if risk_level:
+        query += " AND r.ai_risk_level = ?"
+        params.append(risk_level.upper())
+        
+    query += " ORDER BY CASE WHEN r.status = 'PENDING_OFFICER_REVIEW' THEN 0 ELSE 1 END, r.created_at DESC LIMIT ? OFFSET ?;"
+    params.extend([limit, offset])
+    
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    
+    items = []
+    from app.services.scarcity_engine import scarcity_allocation_engine
+    from app.models.schemas import CitizenRequestOut
+    import json
+    
+    for r in rows:
+        factors = []
+        if r["ai_factors_json"]:
+            try:
+                factors = json.loads(r["ai_factors_json"])
+            except Exception:
+                factors = []
+                
+        # Calculate statutory floor for target FPS
+        floor_info = scarcity_allocation_engine.calculate_statutory_floor(cursor, r["intended_fps_id"], r["commodity"])
+        statutory_floor_kg = floor_info["statutory_floor_kg"]
+        
+        cap = float(r["target_capacity_kg"] or 20000.0)
+        inv_kg = float(r["current_inventory_kg"] or 0.0)
+        headroom_kg = max(0.0, cap - inv_kg)
+
+        # Query pending intent demand for target FPS
+        cursor.execute("""
+        SELECT COALESCE(SUM(declared_quantity_kg), 0.0)
+        FROM intent WHERE intended_fps_id = ? AND cycle_id = ? AND commodity = ?;
+        """, (r["intended_fps_id"], r["cycle_id"], r["commodity"]))
+        pending_demand_kg = float(cursor.fetchone()[0] or 0.0)
+        
+        replenishment_eta = "Morning Slot 08:30 AM (Scheduled Carrier)"
+        if r["intended_fps_id"] in ["FPS-KA-BLR-001", "FPS-KA-BLR-004", "FPS-KA-BLR-013"]:
+            replenishment_eta = "Tomorrow 08:30 AM (North-West Heavy Corridor • KA-04-E-1021)"
+        elif r["intended_fps_id"] in ["FPS-KA-BLR-005", "FPS-KA-BLR-006", "FPS-KA-BLR-007"]:
+            replenishment_eta = "Tomorrow 09:15 AM (East IT Corridor • KA-04-E-1022)"
+        elif r["intended_fps_id"] in ["FPS-KA-BLR-015", "FPS-KA-BLR-016", "FPS-KA-BLR-017"]:
+            replenishment_eta = "Tomorrow 10:00 AM (South Industrial Corridor • KA-51-M-3419)"
+            
+        items.append(CitizenRequestOut(
+            id=r["id"],
+            request_id=r["request_id"],
+            beneficiary_id=r["beneficiary_id"],
+            beneficiary_name=r["beneficiary_name"] or "Beneficiary Citizen",
+            card_type=r["card_type"],
+            family_members_count=int(r["family_members_count"]),
+            statutory_entitlement_rice_kg=float(r["statutory_entitlement_rice_kg"]),
+            statutory_entitlement_wheat_kg=float(r["statutory_entitlement_wheat_kg"]),
+            statutory_entitlement_commodity_kg=float(r["statutory_entitlement_rice_kg"] if r["commodity"] == "Rice" else r["statutory_entitlement_wheat_kg"]),
+            cycle_id=r["cycle_id"],
+            registered_fps_id=r["registered_fps_id"],
+            registered_fps_name=r["registered_fps_name"] or r["registered_fps_id"],
+            intended_fps_id=r["intended_fps_id"],
+            intended_fps_name=r["intended_fps_name"] or r["intended_fps_id"],
+            commodity=r["commodity"],
+            requested_quantity_kg=float(r["requested_quantity_kg"]),
+            authorized_quantity_kg=float(r["authorized_quantity_kg"]),
+            request_type=r["request_type"],
+            status=r["status"],
+            ai_recommendation=r["ai_recommendation"],
+            ai_recommended_qty_kg=float(r["ai_recommended_qty_kg"]),
+            ai_recommended_fps_id=r["ai_recommended_fps_id"],
+            ai_recommended_fps_name=r["ai_recommended_fps_name"],
+            ai_risk_level=r["ai_risk_level"],
+            ai_confidence=float(r["ai_confidence"]),
+            ai_factors=factors,
+            fps_capacity_kg=cap,
+            current_inventory_kg=inv_kg,
+            statutory_floor_kg=statutory_floor_kg,
+            pending_demand_kg=pending_demand_kg,
+            capacity_headroom_kg=headroom_kg,
+            replenishment_eta=replenishment_eta,
+            nearby_alternative_fps_name=r["ai_recommended_fps_name"],
+            nearby_alternative_distance_km=2.4 if r["ai_recommended_fps_name"] else None,
+            officer_name=r["officer_name"],
+            officer_role=r["officer_role"],
+            officer_justification=r["officer_justification"],
+            authorized_at=str(r["authorized_at"]) if r["authorized_at"] else None,
+            created_at=str(r["created_at"]),
+            demo_notice=DEMO_NOTICE
+        ))
+        
+    return CitizenRequestQueueResponse(
+        total_count=total_count,
+        pending_count=pending_count,
+        approved_count=approved_count,
+        partial_count=partial_count,
+        redirected_count=redirected_count,
+        deferred_count=deferred_count,
+        cycle_id=cycle_id,
+        items=items,
+        demo_notice=DEMO_NOTICE
+    )
+
+
+@router.post("/admin/citizen-requests/{request_id}/authorize")
+def authorize_citizen_request_api(
+    request_id: str,
+    req: CitizenRequestAuthorizeIn,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Authorizes, partially allocates, redirects, or defers a citizen preference request.
+    Mandates authorized officer authentication role (DISTRICT_SUPPLY_OFFICER, DEPOT_MANAGER, ADMIN).
+    Updates citizen_requests table, synchronizes intent table, and records immutable audit event.
+    """
+    cursor = db.cursor()
+    
+    # 1. Authorization Guard
+    authorized_roles = ["DISTRICT_SUPPLY_OFFICER", "DEPOT_MANAGER", "ADMIN", "SUPER_ADMIN"]
+    if req.officer_role.upper() not in authorized_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Unauthorized: Role '{req.officer_role}' is not authorized to approve citizen requests. Required: {authorized_roles}"
+        )
+        
+    # 2. Fetch Request
+    cursor.execute("SELECT * FROM citizen_requests WHERE request_id = ?;", (request_id,))
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Citizen request '{request_id}' not found."
+        )
+        
+    decision = req.decision.upper()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    if decision == "APPROVE":
+        target_status = "OFFICER_APPROVED"
+        auth_qty = float(row["requested_quantity_kg"])
+        target_fps = row["intended_fps_id"]
+    elif decision == "PARTIAL_ALLOCATION":
+        target_status = "OFFICER_PARTIAL_APPROVED"
+        auth_qty = float(req.allocated_quantity_kg if req.allocated_quantity_kg is not None else row["ai_recommended_qty_kg"])
+        target_fps = row["intended_fps_id"]
+    elif decision == "REDIRECT_ALTERNATIVE_FPS":
+        target_status = "OFFICER_REDIRECTED"
+        target_fps = req.allocated_fps_id or row["ai_recommended_fps_id"] or row["intended_fps_id"]
+        auth_qty = float(req.allocated_quantity_kg if req.allocated_quantity_kg is not None else row["requested_quantity_kg"])
+    elif decision == "DEFER_TO_CYCLE":
+        target_status = "OFFICER_DEFERRED"
+        auth_qty = 0.0
+        target_fps = row["intended_fps_id"]
+    elif decision == "REJECT":
+        target_status = "REJECTED"
+        auth_qty = 0.0
+        target_fps = row["intended_fps_id"]
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid decision '{req.decision}'. Supported: APPROVE, PARTIAL_ALLOCATION, REDIRECT_ALTERNATIVE_FPS, DEFER_TO_CYCLE, REJECT"
+        )
+        
+    # Update citizen_requests
+    cursor.execute("""
+    UPDATE citizen_requests SET
+        status = ?,
+        authorized_quantity_kg = ?,
+        intended_fps_id = ?,
+        officer_name = ?,
+        officer_role = ?,
+        officer_justification = ?,
+        authorized_at = ?,
+        updated_at = ?
+    WHERE request_id = ?;
+    """, (
+        target_status,
+        auth_qty,
+        target_fps,
+        req.officer_name,
+        req.officer_role.upper(),
+        req.officer_justification,
+        now_str,
+        now_str,
+        request_id
+    ))
+    
+    # Synchronize intent table so aggregated forecasting receives the officer-authorized allocation
+    if auth_qty > 0:
+        cursor.execute("""
+        UPDATE intent SET
+            declared_quantity_kg = ?,
+            intended_fps_id = ?,
+            status = ?
+        WHERE beneficiary_id = ? AND cycle_id = ? AND commodity = ?;
+        """, (
+            auth_qty,
+            target_fps,
+            target_status,
+            row["beneficiary_id"],
+            row["cycle_id"],
+            row["commodity"]
+        ))
+    else:
+        # If deferred or rejected, remove intent signal from current cycle so it does not flow downstream
+        cursor.execute("""
+        DELETE FROM intent
+        WHERE beneficiary_id = ? AND cycle_id = ? AND commodity = ?;
+        """, (
+            row["beneficiary_id"],
+            row["cycle_id"],
+            row["commodity"]
+        ))
+        
+    # Record in governance_audit_logs (Immutable Audit Trail)
+    from app.services.governance_trail import governance_trail
+    governance_trail.record_event(
+        db=db,
+        event_type="CITIZEN_REQUEST_AUTHORIZED",
+        action="CITIZEN_REQUEST_AUTHORIZED",
+        entity_type="CITIZEN_REQUEST",
+        entity_id=request_id,
+        actor_name=req.officer_name,
+        actor_role=req.officer_role.upper(),
+        cycle_id=row["cycle_id"],
+        notes=f"Decision: {target_status} ({auth_qty:.1f} kg to {target_fps}). Justification: {req.officer_justification}",
+        integrity_metadata={"request_id": request_id, "status": target_status, "authorized_quantity_kg": auth_qty},
+        is_success=True,
+        is_simulation=False
+    )
+    
+    db.commit()
+    
+    return {
+        "status": "success",
+        "request_id": request_id,
+        "beneficiary_id": row["beneficiary_id"],
+        "decision": decision,
+        "approval_status": target_status,
+        "authorized_quantity_kg": auth_qty,
+        "allocated_fps_id": target_fps,
+        "officer_name": req.officer_name,
+        "officer_role": req.officer_role.upper(),
+        "authorized_at": now_str,
+        "justification": req.officer_justification,
+        "demo_notice": DEMO_NOTICE
+    }
+
+
+# ----------------- Citizen Delivery Dispute Management Endpoints ----------------- #
+
+@router.get("/admin/delivery-disputes", response_model=List[DeliveryDisputeOut])
+def get_delivery_disputes(
+    cycle_id: str = Query("2026-09", description="Allocation cycle"),
+    status: Optional[str] = Query(None, description="Filter: PENDING_OFFICER_REVIEW | OFFICER_RESOLVED | REJECTED"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Retrieve citizen delivery discrepancy and dispute cases for officer investigation."""
+    cursor = db.cursor()
+    query = "SELECT * FROM delivery_disputes WHERE cycle_id = ?"
+    params = [cycle_id.strip()]
+
+    if status and status.upper() != "ALL":
+        query += " AND status = ?"
+        params.append(status.strip().upper())
+
+    query += " ORDER BY created_at DESC;"
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+
+    return [
+        DeliveryDisputeOut(
+            id=r["id"],
+            dispute_id=r["dispute_id"],
+            request_id=r["request_id"],
+            beneficiary_id=r["beneficiary_id"],
+            cycle_id=r["cycle_id"],
+            commodity=r["commodity"],
+            allocated_quantity_kg=float(r["allocated_quantity_kg"]),
+            received_quantity_kg=float(r["received_quantity_kg"]),
+            shortfall_kg=float(r["shortfall_kg"]),
+            dispute_notes=r["dispute_notes"],
+            status=r["status"],
+            resolution_notes=r["resolution_notes"],
+            resolved_by=r["resolved_by"],
+            resolved_at=str(r["resolved_at"]) if r["resolved_at"] else None,
+            created_at=str(r["created_at"]),
+            demo_notice=DEMO_NOTICE
+        )
+        for r in rows
+    ]
+
+
+@router.post("/admin/delivery-disputes/{dispute_id}/resolve")
+def resolve_delivery_dispute(
+    dispute_id: str,
+    req: DeliveryDisputeResolveIn,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Authoritative officer resolution of a citizen delivery dispute with audit log."""
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM delivery_disputes WHERE dispute_id = ?;", (dispute_id.strip(),))
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dispute case '{dispute_id}' not found."
+        )
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    officer_label = f"{req.officer_name} ({req.officer_role})"
+
+    cursor.execute("""
+    UPDATE delivery_disputes SET
+        status = ?,
+        resolution_notes = ?,
+        resolved_by = ?,
+        resolved_at = ?
+    WHERE dispute_id = ?;
+    """, (
+        req.decision.upper(),
+        req.resolution_notes,
+        officer_label,
+        now_str,
+        dispute_id.strip()
+    ))
+
+    # Log to unified forensic audit trail
+    from app.services.governance_trail import governance_trail
+    governance_trail.record_event(
+        db=db,
+        event_type="DELIVERY_DISPUTE_RESOLVED",
+        action="RESOLVE_DELIVERY_DISPUTE",
+        entity_type="DELIVERY_DISPUTE",
+        entity_id=dispute_id.strip(),
+        actor_name=req.officer_name,
+        actor_role=req.officer_role,
+        cycle_id=row["cycle_id"],
+        notes=f"Dispute resolved as {req.decision.upper()}. Resolution: {req.resolution_notes}",
+        integrity_metadata={"dispute_id": dispute_id.strip(), "decision": req.decision.upper()},
+        is_success=True,
+        is_simulation=False
+    )
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "dispute_id": dispute_id.strip(),
+        "decision": req.decision.upper(),
+        "resolution_notes": req.resolution_notes,
+        "resolved_by": officer_label,
+        "resolved_at": now_str,
+        "message": f"Dispute case {dispute_id} resolved and recorded in governance audit trail.",
+        "demo_notice": DEMO_NOTICE
+    }
+
+# ----------------- End-to-End Causal Pipeline Trace ----------------- #
+
+class CausalTraceShiftIn(BaseModel):
+    cycle_id: str = Field(default="2026-09")
+    fps_id: str = Field(default="FPS-KA-BLR-001")
+    shift_delta_kg: float = Field(default=150.0)
+    beneficiary_id: str = Field(default="BEN-KA-0001")
+
+@router.get("/admin/causal-trace", response_model=CausalTraceRun)
+def get_causal_trace(
+    cycle_id: str = Query(default="2026-09"),
+    fps_id: str = Query(default="FPS-KA-BLR-001"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Retrieve or generate the complete 7-stage causal pipeline trace for an operational planning run:
+    Citizen Intent -> Intent Aggregation -> Operational Forecast -> Constraint Validation
+    -> Dispatch Decision -> Route Optimization -> Manifest -> Digital Seal.
+    """
+    return causal_trace_engine.generate_causal_trace(db, cycle_id=cycle_id, fps_id=fps_id)
+
+@router.post("/admin/causal-trace/run", response_model=CausalTraceRun)
+def run_causal_trace_calculation(
+    cycle_id: str = Query(default="2026-09"),
+    fps_id: str = Query(default="FPS-KA-BLR-001"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Trigger a new calculation run and return the full 7-stage causal trace."""
+    return causal_trace_engine.generate_causal_trace(
+        db, cycle_id=cycle_id, fps_id=fps_id, actor_source="OFFICER_MANUAL_RECALCULATION"
+    )
+
+@router.post("/admin/causal-trace/simulate-shift", response_model=CausalTraceResponse)
+def simulate_intent_shift_causal_trace(
+    req: CausalTraceShiftIn,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Controlled demo action: Injects a synthetic citizen intent shift declaration,
+    reruns the entire operational pre-dispatch pipeline, and returns the exact
+    step-by-step downstream causal delta across all 7 stages.
+    """
+    return causal_trace_engine.simulate_controlled_intent_shift(
+        db,
+        cycle_id=req.cycle_id,
+        fps_id=req.fps_id,
+        shift_delta_kg=req.shift_delta_kg,
+        beneficiary_id=req.beneficiary_id
+    )
+
+
+
 
 
 

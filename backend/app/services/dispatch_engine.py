@@ -10,6 +10,9 @@ Implements the SIH 2026 Phase 5 Pre-Dispatch Supply Chain Simulation:
 import sqlite3
 from typing import List, Dict, Any, Optional, Tuple
 from app.core.config import settings
+from app.core.logging_config import get_logger
+
+logger = get_logger("dispatch")
 
 DEMO_NOTICE = "DEMO DATA — NOT GOVERNMENT DATA (SIMULATED GODOWN DISPATCH)"
 
@@ -176,6 +179,33 @@ class DispatchEngine:
                 total_wheat_kg += dispatch_qty
 
         db.commit()
+
+        logger.info(
+            "Dispatch generation executed: cycle='%s', records=%d, total_dispatch_kg=%.1f, rice_kg=%.1f, wheat_kg=%.1f",
+            cycle_id, dispatch_records_inserted, total_dispatch_kg, total_rice_kg, total_wheat_kg
+        )
+
+        # Record in Unified Governance Event Trail
+        from app.services.governance_trail import governance_trail
+        governance_trail.record_event(
+            db=db,
+            event_type="DISPATCH_ALLOCATION",
+            action="GENERATE_DISPATCH_PLAN",
+            entity_type="DISPATCH_PLAN",
+            entity_id=f"DISPATCH-{cycle_id}",
+            actor_name="District Supply Officer (Demo Admin)",
+            actor_role="DISTRICT_SUPPLY_OFFICER",
+            cycle_id=cycle_id,
+            after_state={
+                "total_dispatch_kg": total_dispatch_kg,
+                "total_rice_kg": total_rice_kg,
+                "total_wheat_kg": total_wheat_kg,
+                "records_count": dispatch_records_inserted
+            },
+            notes=f"Operational dispatch plan generated for cycle {cycle_id}",
+            is_success=True,
+            is_simulation=False
+        )
 
         # 4. Assemble Manifest Data
         manifest = self.get_dispatch_manifest(db, cycle_id)

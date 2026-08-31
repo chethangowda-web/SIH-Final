@@ -94,7 +94,7 @@ async def test_intent_creation_success():
             "cycle_id": "2026-09",
             "intended_fps_id": "FPS-KA-BLR-013",  # Peenya Migrant Hub
             "commodity": "Rice",
-            "declared_quantity_kg": 30.0,
+            "declared_quantity_kg": 20.0,
             "confidence": 0.92
         }
         response = await client.post("/intent", json=payload)
@@ -103,7 +103,7 @@ async def test_intent_creation_success():
         assert data["beneficiary_id"] == "BEN-KA-0001"
         assert data["intended_fps_id"] == "FPS-KA-BLR-013"
         assert data["commodity"] == "Rice"
-        assert data["declared_quantity_kg"] == 30.0
+        assert data["declared_quantity_kg"] == 20.0
         assert data["confidence"] == 0.92
         assert data["status"] == "SUBMITTED"
         assert data["is_portability_intent"] is True

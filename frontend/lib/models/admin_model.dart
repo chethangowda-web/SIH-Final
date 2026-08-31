@@ -147,7 +147,7 @@ class AdminDashboardData {
 
   factory AdminDashboardData.fromJson(Map<String, dynamic> json) {
     return AdminDashboardData(
-      district: json['district'] ?? 'Bengaluru Urban - Demo Nagar',
+      district: json['district'] ?? 'Bengaluru Urban PDS Pilot',
       activeCycle: json['active_cycle'] ?? '2026-09',
       totalFps: json['total_fps'] ?? 0,
       activeIntentsCount: json['active_intents_count'] ?? 0,
@@ -3291,6 +3291,191 @@ class SihJudgeDefenseData {
     );
   }
 }
+
+// ----------------- End-to-End Causal Pipeline Trace Models ----------------- //
+
+class CausalStageTraceModel {
+  final int stageNumber;
+  final String stageName;
+  final String title;
+  final String status;
+  final Map<String, dynamic> inputSummary;
+  final Map<String, dynamic> outputSummary;
+  final String governanceNotes;
+  final String timestamp;
+
+  CausalStageTraceModel({
+    required this.stageNumber,
+    required this.stageName,
+    required this.title,
+    required this.status,
+    required this.inputSummary,
+    required this.outputSummary,
+    required this.governanceNotes,
+    required this.timestamp,
+  });
+
+  factory CausalStageTraceModel.fromJson(Map<String, dynamic> json) {
+    return CausalStageTraceModel(
+      stageNumber: json['stage_number'] ?? 0,
+      stageName: json['stage_name'] ?? '',
+      title: json['title'] ?? '',
+      status: json['status'] ?? 'COMPLETED',
+      inputSummary: json['input_summary'] as Map<String, dynamic>? ?? {},
+      outputSummary: json['output_summary'] as Map<String, dynamic>? ?? {},
+      governanceNotes: json['governance_notes'] ?? '',
+      timestamp: json['timestamp'] ?? '',
+    );
+  }
+}
+
+class CausalDeltaSummary {
+  final double intentDeltaKg;
+  final double forecastDeltaKg;
+  final double dispatchDeltaKg;
+  final double routePayloadDeltaKg;
+  final String manifestVersionDelta;
+  final bool sealHashChanged;
+  final double statutoryEntitlementDeltaKg;
+  final String propagationSummary;
+
+  CausalDeltaSummary({
+    required this.intentDeltaKg,
+    required this.forecastDeltaKg,
+    required this.dispatchDeltaKg,
+    required this.routePayloadDeltaKg,
+    required this.manifestVersionDelta,
+    required this.sealHashChanged,
+    required this.statutoryEntitlementDeltaKg,
+    required this.propagationSummary,
+  });
+
+  factory CausalDeltaSummary.fromJson(Map<String, dynamic> json) {
+    return CausalDeltaSummary(
+      intentDeltaKg: (json['intent_delta_kg'] as num?)?.toDouble() ?? 0.0,
+      forecastDeltaKg: (json['forecast_delta_kg'] as num?)?.toDouble() ?? 0.0,
+      dispatchDeltaKg: (json['dispatch_delta_kg'] as num?)?.toDouble() ?? 0.0,
+      routePayloadDeltaKg: (json['route_payload_delta_kg'] as num?)?.toDouble() ?? 0.0,
+      manifestVersionDelta: json['manifest_version_delta'] ?? '',
+      sealHashChanged: json['seal_hash_changed'] ?? false,
+      statutoryEntitlementDeltaKg: (json['statutory_entitlement_delta_kg'] as num?)?.toDouble() ?? 0.0,
+      propagationSummary: json['propagation_summary'] ?? '',
+    );
+  }
+}
+
+class CausalTraceRun {
+  final String runId;
+  final String cycleId;
+  final String fpsId;
+  final String fpsName;
+  final String actorSource;
+  final String timestamp;
+  final CausalStageTraceModel stage1Intent;
+  final CausalStageTraceModel stage2Forecast;
+  final CausalStageTraceModel stage3Constraints;
+  final CausalStageTraceModel stage4Dispatch;
+  final CausalStageTraceModel stage5Route;
+  final CausalStageTraceModel stage6Manifest;
+  final CausalStageTraceModel stage7Seal;
+  final double historicalDemandKg;
+  final double aggregatedIntentKg;
+  final double operationalForecastKg;
+  final double recommendedDispatchKg;
+  final String assignedCorridor;
+  final String assignedTruckId;
+  final String manifestId;
+  final String manifestVersion;
+  final String digitalSealHash;
+  final double statutoryEntitlementGuaranteeKg;
+  final String demoNotice;
+
+  CausalTraceRun({
+    required this.runId,
+    required this.cycleId,
+    required this.fpsId,
+    required this.fpsName,
+    required this.actorSource,
+    required this.timestamp,
+    required this.stage1Intent,
+    required this.stage2Forecast,
+    required this.stage3Constraints,
+    required this.stage4Dispatch,
+    required this.stage5Route,
+    required this.stage6Manifest,
+    required this.stage7Seal,
+    required this.historicalDemandKg,
+    required this.aggregatedIntentKg,
+    required this.operationalForecastKg,
+    required this.recommendedDispatchKg,
+    required this.assignedCorridor,
+    required this.assignedTruckId,
+    required this.manifestId,
+    required this.manifestVersion,
+    required this.digitalSealHash,
+    required this.statutoryEntitlementGuaranteeKg,
+    required this.demoNotice,
+  });
+
+  factory CausalTraceRun.fromJson(Map<String, dynamic> json) {
+    return CausalTraceRun(
+      runId: json['run_id'] ?? '',
+      cycleId: json['cycle_id'] ?? '2026-09',
+      fpsId: json['fps_id'] ?? 'FPS-KA-BLR-001',
+      fpsName: json['fps_name'] ?? '',
+      actorSource: json['actor_source'] ?? 'SYSTEM',
+      timestamp: json['timestamp'] ?? '',
+      stage1Intent: CausalStageTraceModel.fromJson(json['stage_1_intent'] as Map<String, dynamic>? ?? {}),
+      stage2Forecast: CausalStageTraceModel.fromJson(json['stage_2_forecast'] as Map<String, dynamic>? ?? {}),
+      stage3Constraints: CausalStageTraceModel.fromJson(json['stage_3_constraints'] as Map<String, dynamic>? ?? {}),
+      stage4Dispatch: CausalStageTraceModel.fromJson(json['stage_4_dispatch'] as Map<String, dynamic>? ?? {}),
+      stage5Route: CausalStageTraceModel.fromJson(json['stage_5_route'] as Map<String, dynamic>? ?? {}),
+      stage6Manifest: CausalStageTraceModel.fromJson(json['stage_6_manifest'] as Map<String, dynamic>? ?? {}),
+      stage7Seal: CausalStageTraceModel.fromJson(json['stage_7_seal'] as Map<String, dynamic>? ?? {}),
+      historicalDemandKg: (json['historical_demand_kg'] as num?)?.toDouble() ?? 0.0,
+      aggregatedIntentKg: (json['aggregated_intent_kg'] as num?)?.toDouble() ?? 0.0,
+      operationalForecastKg: (json['operational_forecast_kg'] as num?)?.toDouble() ?? 0.0,
+      recommendedDispatchKg: (json['recommended_dispatch_kg'] as num?)?.toDouble() ?? 0.0,
+      assignedCorridor: json['assigned_corridor'] ?? '',
+      assignedTruckId: json['assigned_truck_id'] ?? '',
+      manifestId: json['manifest_id'] ?? '',
+      manifestVersion: json['manifest_version'] ?? 'v1.0',
+      digitalSealHash: json['digital_seal_hash'] ?? '',
+      statutoryEntitlementGuaranteeKg: (json['statutory_entitlement_guarantee_kg'] as num?)?.toDouble() ?? 25.0,
+      demoNotice: json['demo_notice'] ?? '',
+    );
+  }
+}
+
+class CausalTraceResponse {
+  final String status;
+  final CausalTraceRun currentRun;
+  final CausalTraceRun? previousRun;
+  final CausalDeltaSummary? causalDelta;
+  final String message;
+  final String demoNotice;
+
+  CausalTraceResponse({
+    required this.status,
+    required this.currentRun,
+    this.previousRun,
+    this.causalDelta,
+    required this.message,
+    required this.demoNotice,
+  });
+
+  factory CausalTraceResponse.fromJson(Map<String, dynamic> json) {
+    return CausalTraceResponse(
+      status: json['status'] ?? 'success',
+      currentRun: CausalTraceRun.fromJson(json['current_run'] as Map<String, dynamic>? ?? {}),
+      previousRun: json['previous_run'] != null ? CausalTraceRun.fromJson(json['previous_run'] as Map<String, dynamic>) : null,
+      causalDelta: json['causal_delta'] != null ? CausalDeltaSummary.fromJson(json['causal_delta'] as Map<String, dynamic>) : null,
+      message: json['message'] ?? '',
+      demoNotice: json['demo_notice'] ?? '',
+    );
+  }
+}
+
 
 
 

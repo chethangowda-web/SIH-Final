@@ -126,17 +126,44 @@ class DispatchDecisionEngine:
         """
         params = params or {}
 
-        # 1. Fetch explainable forecast
-        fc = forecast_engine.calculate_explainable_fps_forecast(cursor, fps_id, cycle_id=cycle_id)
-        fps_name = fc["fps_name"]
-        district = fc["district"]
-
-        cursor.execute("SELECT capacity_kg, stockout_frequency, portability_rate FROM fps WHERE fps_id = ?;", (fps_id,))
+        # 1. Fetch FPS Master Data
+        cursor.execute("SELECT fps_id, name, district, capacity_kg, stockout_frequency, portability_rate FROM fps WHERE fps_id = ?;", (fps_id,))
         fps_row = cursor.fetchone()
+        fps_name = fps_row["name"] if fps_row else fps_id
+        district = fps_row["district"] if fps_row else "Bengaluru Urban"
         storage_capacity_kg = float(fps_row["capacity_kg"]) if fps_row else 20000.0
         base_stockout_freq = float(fps_row["stockout_frequency"] or 0.05) if fps_row else 0.05
 
-        # 2. Extract Scenario Adjustments
+        # 2. Fetch Authoritative Operational Forecast (Used by FPS Matrix & Dispatch Pipeline)
+        cursor.execute("""
+        SELECT commodity, predicted_quantity_kg, recommended_dispatch_kg, risk_level, confidence
+        FROM forecast
+        WHERE fps_id = ? AND cycle_id = ?;
+        """, (fps_id, cycle_id))
+        persisted_rows = cursor.fetchall()
+
+        commodity_operational_demands: Dict[str, float] = {}
+        if persisted_rows:
+            operational_forecast_kg = round(sum(float(r["predicted_quantity_kg"]) for r in persisted_rows), 1)
+            commodity_operational_demands = {r["commodity"]: float(r["predicted_quantity_kg"]) for r in persisted_rows}
+        else:
+            rice_fc = forecast_engine.calculate_fps_commodity_forecast(cursor, fps_id, "Rice", cycle_id=cycle_id)
+            wheat_fc = forecast_engine.calculate_fps_commodity_forecast(cursor, fps_id, "Wheat", cycle_id=cycle_id)
+            operational_forecast_kg = round(rice_fc["forecast_demand_kg"] + wheat_fc["forecast_demand_kg"], 1)
+            commodity_operational_demands = {
+                "Rice": rice_fc["forecast_demand_kg"],
+                "Wheat": wheat_fc["forecast_demand_kg"]
+            }
+
+        if operational_forecast_kg <= 0:
+            cursor.execute("SELECT COALESCE(SUM(actual_quantity_kg) / 6.0, 0.0) FROM historical_demand WHERE fps_id = ?;", (fps_id,))
+            operational_forecast_kg = round(float(cursor.fetchone()[0] or 2500.0), 1)
+            commodity_operational_demands = {
+                "Rice": round(operational_forecast_kg * 0.72, 1),
+                "Wheat": round(operational_forecast_kg * 0.28, 1)
+            }
+
+        # 3. Extract Scenario Adjustments
         scenario_upper = scenario.upper()
         if scenario_upper == "HIGH_DEMAND":
             # Scenario 2: High Demand Surge
@@ -163,8 +190,8 @@ class DispatchDecisionEngine:
             scenario_name = "Normal Operating Baseline"
             scenario_desc = "Standard 2-day godown delivery cycle and steady historical demand baseline."
 
-        # 3. Calculate Aggregated & Commodity Level Dispatch Decisions
-        total_predicted_demand = round(fc["summary"]["predicted_demand_kg"] * demand_multiplier, 1)
+        # 4. Calculate Aggregated & Commodity Level Dispatch Decisions
+        total_predicted_demand = round(operational_forecast_kg * demand_multiplier, 1)
 
         # Total current inventory across Rice + Wheat
         cursor.execute("SELECT COALESCE(SUM(available_quantity_kg), 0.0) FROM inventory WHERE fps_id = ?;", (fps_id,))
@@ -183,7 +210,7 @@ class DispatchDecisionEngine:
         )
         safety_buffer_kg = buffer_metrics["safety_buffer_kg"]
 
-        # Core Formula: max(0, Predicted Demand - Current Stock + Safety Buffer)
+        # Core Formula: max(0, Operational Forecast - Current Stock + Safety Buffer)
         raw_recommended_dispatch = max(0.0, round(total_predicted_demand - total_current_stock + safety_buffer_kg, 1))
 
         # Storage capacity headroom constraint
@@ -197,11 +224,11 @@ class DispatchDecisionEngine:
         daily_burn_rate = (total_predicted_demand / 30.0) if total_predicted_demand > 0 else 100.0
         days_of_stock = round(total_current_stock / daily_burn_rate, 1)
 
-        # 4. Commodity Level Breakdown
+        # 5. Commodity Level Breakdown
         commodity_decisions = []
-        for c in fc["commodity_breakdown"]:
-            comm_name = c["commodity"]
-            comm_demand = round(c["predicted_demand_kg"] * demand_multiplier, 1)
+        for comm_name in ["Rice", "Wheat"]:
+            base_comm_demand = commodity_operational_demands.get(comm_name, total_predicted_demand * 0.5)
+            comm_demand = round(base_comm_demand * demand_multiplier, 1)
             cursor.execute("SELECT COALESCE(available_quantity_kg, 0.0) FROM inventory WHERE fps_id = ? AND commodity = ?;", (fps_id, comm_name))
             c_inv_row = cursor.fetchone()
             c_curr_stock = round(float(c_inv_row[0]) if c_inv_row else 0.0, 1)
@@ -225,8 +252,16 @@ class DispatchDecisionEngine:
                 "formula_display": f"{comm_demand:.0f} - {c_curr_stock:.0f} + {c_buffer_kg:.0f} = {c_final_dispatch:.0f} kg"
             })
 
-        # 5. Generate Human-Readable Narrative
-        avg_trend_pct = fc["commodity_breakdown"][0]["trend_pct"] if fc["commodity_breakdown"] else 0.0
+        # 6. Generate Human-Readable Narrative
+        cursor.execute("""
+        SELECT COALESCE(SUM(actual_quantity_kg), 0.0) as tot
+        FROM historical_demand WHERE fps_id = ? GROUP BY cycle_id ORDER BY cycle_id DESC LIMIT 2;
+        """, (fps_id,))
+        hist_two = cursor.fetchall()
+        avg_trend_pct = 1.2
+        if len(hist_two) == 2 and hist_two[1][0] > 0:
+            avg_trend_pct = round(((hist_two[0][0] - hist_two[1][0]) / hist_two[1][0]) * 100.0, 1)
+
         narrative = self.generate_decision_narrative(
             fps_name=fps_name,
             predicted_demand_kg=total_predicted_demand,

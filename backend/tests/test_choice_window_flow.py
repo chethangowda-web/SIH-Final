@@ -43,7 +43,7 @@ async def test_beneficiary_preference_submission_during_open_window():
             "cycle_id": "2026-09",
             "intended_fps_id": "FPS-KA-BLR-001",
             "commodity": "Rice",
-            "declared_quantity_kg": 25.0,
+            "declared_quantity_kg": 20.0,
             "confidence": 0.95
         }
         res = await client.post("/intent", json=payload)

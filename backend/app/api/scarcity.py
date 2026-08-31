@@ -21,11 +21,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from app.core.database import get_db
 from app.core.config import settings
+from app.core.logging_config import get_logger
 from app.models.schemas import DEMO_NOTICE
 from app.services.stockout_risk_engine import stockout_risk_engine
 from app.services.scarcity_engine import scarcity_allocation_engine
+from app.services.workflow_manager import workflow_manager, WorkflowState
+from app.core.auth import check_admin_access
 
-router = APIRouter(prefix="/admin/scarcity", tags=["Scarcity Allocation Engine"])
+logger = get_logger("scarcity")
+
+router = APIRouter(prefix="/admin/scarcity", tags=["Scarcity Allocation Engine"], dependencies=[Depends(check_admin_access)])
 
 VALID_COMMODITIES = ["Rice", "Wheat"]
 AUTHORIZED_ROLES = ["DISTRICT_SUPPLY_OFFICER", "DEPOT_MANAGER", "ADMIN", "SUPER_ADMIN"]
@@ -384,6 +389,29 @@ def simulate_fair_share_allocation_api(
         )
         plan_id = persist_res["plan_id"]
 
+    # Record in Unified Governance Event Trail (Marked explicitly as simulation)
+    from app.services.governance_trail import governance_trail
+    governance_trail.record_event(
+        db=db,
+        event_type="SCARCITY_SIMULATION",
+        action="SIMULATE_FAIR_SHARE_ALLOCATION",
+        entity_type="SCARCITY_PLAN",
+        entity_id=plan_id or f"SIM-{sim['depot_id']}-{sim['commodity']}",
+        actor_name=req.actor_name or "District Supply Officer (Demo Admin)",
+        actor_role="DISTRICT_SUPPLY_OFFICER",
+        cycle_id=sim["cycle_id"],
+        after_state={
+            "deficit_kg": sim["deficit_kg"],
+            "available_stock_kg": sim["available_depot_stock_kg"],
+            "total_reconciled_allocation_kg": sim["total_reconciled_allocation_kg"],
+            "is_statutory_floor_satisfied": sim["is_statutory_floor_satisfied"]
+        },
+        notes=req.notes or f"Fair-share scarcity simulation computed for depot {sim['depot_id']} ({sim['commodity']})",
+        integrity_metadata={"depot_id": sim["depot_id"], "commodity": sim["commodity"]},
+        is_success=True,
+        is_simulation=True
+    )
+
     return ScarcityPlanSummary(
         plan_id=plan_id,
         cycle_id=sim["cycle_id"],
@@ -483,26 +511,73 @@ def approve_scarcity_plan_api(
         """, (reconciled_kg, fid, comm, cycle_id))
 
     # 6. Update Plan Header Record to OFFICER_APPROVED
+    # CONCURRENCY GUARD: WHERE approval_status = 'PENDING_OFFICER_REVIEW' ensures this is
+    # an atomic compare-and-set.  If a concurrent request approved the plan between our
+    # status-check read (step 3) and this write, rowcount == 0 and we surface a 409.
     cursor.execute("""
     UPDATE scarcity_allocation_plans
     SET approval_status = 'OFFICER_APPROVED',
         approved_by = ?,
         approval_notes = ?,
         approved_at = CURRENT_TIMESTAMP
-    WHERE plan_id = ?;
+    WHERE plan_id = ? AND approval_status = 'PENDING_OFFICER_REVIEW';
     """, (
         f"{req.officer_name} ({req.officer_role.upper()})",
         req.approval_notes or "Officially approved for operational dispatch execution",
         req.plan_id
     ))
 
+    if cursor.rowcount == 0:
+        # A concurrent request beat us to the approval — surface a clear conflict
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Plan '{req.plan_id}' was already approved by a concurrent request. "
+                   "Re-fetch the plan to see the current approval state."
+        )
+
+    # Transition operational state machine to ALLOCATED
+    workflow_manager.transition_state(
+        db,
+        cycle_id=plan["cycle_id"],
+        new_state=WorkflowState.ALLOCATED,
+        actor_name=req.officer_name,
+        actor_role=req.officer_role,
+        reason=req.approval_notes or "Scarcity allocation plan approved.",
+        force=True
+    )
+
     db.commit()
+
+    logger.info(
+        "Scarcity plan approved: plan_id='%s', cycle='%s', depot='%s', commodity='%s', deficit_kg=%.1f, officer='%s', role='%s'",
+        req.plan_id, plan["cycle_id"], plan["depot_id"], plan["commodity"], plan["deficit_kg"], req.officer_name, req.officer_role
+    )
 
     # Fetch updated approved_at timestamp
     cursor.execute("SELECT approved_at, approved_by FROM scarcity_allocation_plans WHERE plan_id = ?;", (req.plan_id,))
     app_row = cursor.fetchone()
     approved_at_str = str(app_row[0]) if app_row else "JUST_NOW"
     approved_by_str = str(app_row[1]) if app_row else req.officer_name
+
+    # Record in Unified Governance Event Trail (Operational Commitment)
+    from app.services.governance_trail import governance_trail
+    governance_trail.record_event(
+        db=db,
+        event_type="SCARCITY_APPROVAL",
+        action="APPROVE_SCARCITY_PLAN",
+        entity_type="SCARCITY_PLAN",
+        entity_id=req.plan_id,
+        actor_name=approved_by_str,
+        actor_role=req.officer_role.upper(),
+        cycle_id=plan["cycle_id"],
+        before_state={"status": "PENDING_OFFICER_REVIEW"},
+        after_state={"status": "OFFICER_APPROVED", "total_reconciled_allocation_kg": round(total_reconciled, 1)},
+        notes=req.approval_notes or "Officially approved for operational dispatch execution",
+        integrity_metadata={"depot_id": plan["depot_id"], "commodity": plan["commodity"]},
+        is_success=True,
+        is_simulation=False
+    )
 
     return ApprovePlanResponse(
         status="success",

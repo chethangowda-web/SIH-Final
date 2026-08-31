@@ -129,9 +129,9 @@ class _DigitalGatepassDialogState extends State<DigitalGatepassDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Container(
-        width: 1150,
-        height: 860,
-        padding: const EdgeInsets.all(24),
+        width: 1160,
+        height: 840,
+        padding: const EdgeInsets.all(22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

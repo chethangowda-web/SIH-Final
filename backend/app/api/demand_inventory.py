@@ -7,7 +7,9 @@ from app.models.schemas import (
     FPSInventoryOut, InventoryItem, DEMO_NOTICE
 )
 
-router = APIRouter(tags=["Historical Demand & Inventory"])
+from app.core.auth import get_current_user
+
+router = APIRouter(tags=["Historical Demand & Inventory"], dependencies=[Depends(get_current_user)])
 
 @router.get("/historical-demand/{fps_id}", response_model=FPSHistoricalDemandOut)
 def get_historical_demand(fps_id: str, db: sqlite3.Connection = Depends(get_db)):

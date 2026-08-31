@@ -343,6 +343,28 @@ class ForecastEngine:
 
         db.commit()
 
+        # Record in Unified Governance Event Trail
+        from app.services.governance_trail import governance_trail
+        governance_trail.record_event(
+            db=db,
+            event_type="FORECAST_GENERATED",
+            action="GENERATE_OPERATIONAL_FORECAST",
+            entity_type="FORECAST",
+            entity_id=f"FORECAST-{cycle_id}",
+            actor_name="District Supply Officer (Demo Admin)",
+            actor_role="DISTRICT_SUPPLY_OFFICER",
+            cycle_id=cycle_id,
+            after_state={
+                "total_forecast_demand_kg": round(total_forecast, 1),
+                "total_recommended_dispatch_kg": round(total_dispatch, 1),
+                "fps_count": len(fps_list),
+                "generated_records_count": len(generated_items)
+            },
+            notes=f"Pre-dispatch demand forecast generated across {len(fps_list)} FPS nodes for cycle {cycle_id}",
+            is_success=True,
+            is_simulation=False
+        )
+
         avg_conf = round(total_conf_sum / max(1, len(generated_items)), 2)
 
         return {
@@ -358,25 +380,27 @@ class ForecastEngine:
             "average_confidence": avg_conf,
             "model_version": self.model_version,
             "intent_weight": self.intent_weight,
+            "safety_buffer_pct": self.safety_buffer_pct,
+            "items": generated_items,
             "message": f"Persisted {len(generated_items)} demand forecasts across all {len(fps_list)} FPS for cycle {cycle_id}.",
             "demo_notice": DEMO_NOTICE
         }
 
-    def lock_persisted_forecast(
+    def lock_operational_forecast(
         self,
         db: sqlite3.Connection,
         cycle_id: str = settings.CURRENT_CYCLE
     ) -> Dict[str, Any]:
         """
-        Lock demand forecasts for the given cycle in SQLite database.
-        Transitions forecast status from DRAFT -> FORECAST_LOCKED.
+        Officially lock the pre-dispatch demand forecast for the active planning cycle.
+        Freezes predicted_quantity_kg and recommended_dispatch_kg.
+        Transitions workflow to FORECAST_LOCKED.
         """
         cursor = db.cursor()
 
         # Check if forecasts exist
         cursor.execute("SELECT COUNT(*) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
         count = cursor.fetchone()[0]
-
         if count == 0:
             # Auto-generate draft first if not yet generated
             self.generate_and_persist_forecasts(db, cycle_id)
@@ -387,16 +411,36 @@ class ForecastEngine:
         if not can_lock:
             raise ValueError(f"Forecast Lock Blocked: {lock_err}")
 
-        # Update all records for this cycle to FORECAST_LOCKED
+        # CONCURRENCY GUARD: Conditional UPDATE prevents redundant re-locking.
+        # Adding WHERE status != 'FORECAST_LOCKED' makes this call fully idempotent:
+        # concurrent requests will simply update 0 rows on the second pass.
         cursor.execute("""
         UPDATE forecast
         SET status = 'FORECAST_LOCKED'
-        WHERE cycle_id = ?;
+        WHERE cycle_id = ? AND status != 'FORECAST_LOCKED';
         """, (cycle_id,))
         db.commit()
 
         cursor.execute("SELECT COUNT(*) FROM forecast WHERE cycle_id = ? AND status = 'FORECAST_LOCKED';", (cycle_id,))
         locked_count = cursor.fetchone()[0]
+
+        # Record in Unified Governance Event Trail
+        from app.services.governance_trail import governance_trail
+        governance_trail.record_event(
+            db=db,
+            event_type="FORECAST_LOCKED",
+            action="LOCK_OPERATIONAL_FORECAST",
+            entity_type="FORECAST",
+            entity_id=f"FORECAST-{cycle_id}",
+            actor_name="District Supply Officer (Demo Admin)",
+            actor_role="DISTRICT_SUPPLY_OFFICER",
+            cycle_id=cycle_id,
+            before_state={"status": "DRAFT"},
+            after_state={"status": "FORECAST_LOCKED", "locked_records_count": locked_count},
+            notes=f"Operational demand forecast locked and approved for cycle {cycle_id}",
+            is_success=True,
+            is_simulation=False
+        )
 
         return {
             "status": "success",
@@ -407,65 +451,41 @@ class ForecastEngine:
             "demo_notice": DEMO_NOTICE
         }
 
+    # Alias for backward compatibility
+    lock_persisted_forecast = lock_operational_forecast
+
     def get_persisted_workflow_status(
         self,
         db: sqlite3.Connection,
         cycle_id: str = settings.CURRENT_CYCLE
     ) -> str:
         """
-        Determine persistent workflow status from SQLite forecast, dispatch, distribution, and evaluation records.
-        Survives backend server restarts.
-        States:
-        PLANNING_OPEN -> DRAFT_GENERATED -> FORECAST_LOCKED -> DISPATCH_GENERATED ->
-        ACTUAL_DISTRIBUTION_SIMULATED -> FORECAST_EVALUATED -> MODEL_CALIBRATED
+        Determine persistent workflow status from explicit cycle_workflow_states state machine.
+        Maps the new 10 states to legacy states for backward compatibility of test suite.
         """
         cursor = db.cursor()
 
-        # Check calibration records first
-        try:
-            cursor.execute("SELECT COUNT(*) FROM model_calibration WHERE cycle_id = ?;", (cycle_id,))
-            if cursor.fetchone()[0] > 0:
-                return "MODEL_CALIBRATED"
-        except Exception:
-            pass
-
-        # Check forecast_evaluation records
-        try:
-            cursor.execute("SELECT COUNT(*) FROM forecast_evaluation WHERE cycle_id = ?;", (cycle_id,))
-            if cursor.fetchone()[0] > 0:
-                return "FORECAST_EVALUATED"
-        except Exception:
-            pass
-
-        # Check actual_distribution records
-        try:
-            cursor.execute("SELECT COUNT(*) FROM actual_distribution WHERE cycle_id = ?;", (cycle_id,))
-            if cursor.fetchone()[0] > 0:
-                return "ACTUAL_DISTRIBUTION_SIMULATED"
-        except Exception:
-            pass
-
-        # Check dispatch records
-        try:
-            cursor.execute("SELECT COUNT(*) FROM dispatch WHERE cycle_id = ?;", (cycle_id,))
-            dispatch_count = cursor.fetchone()[0]
-        except Exception:
-            dispatch_count = 0
-
-        cursor.execute("SELECT status, COUNT(*) FROM forecast WHERE cycle_id = ? GROUP BY status;", (cycle_id,))
-        rows = cursor.fetchall()
-
-        if not rows:
+        # Check if forecasts exist
+        cursor.execute("SELECT COUNT(*) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
+        if cursor.fetchone()[0] == 0:
             return "PLANNING_OPEN"
 
-        status_counts = {r[0]: r[1] for r in rows}
-        if "FORECAST_LOCKED" in status_counts:
-            if dispatch_count > 0:
-                return "DISPATCH_GENERATED"
-            return "FORECAST_LOCKED"
-        elif "DRAFT" in status_counts or "DRAFT_GENERATED" in status_counts:
-            return "DRAFT_GENERATED"
-        return "PLANNING_OPEN"
+        from app.services.workflow_manager import workflow_manager, WorkflowState
+        state = workflow_manager.get_current_state(db, cycle_id)
+
+        mapping = {
+            WorkflowState.FORECASTED: "DRAFT_GENERATED",
+            WorkflowState.VALIDATED: "FORECAST_LOCKED",
+            WorkflowState.ALLOCATED: "FORECAST_LOCKED",
+            WorkflowState.OPTIMIZED: "FORECAST_LOCKED",
+            WorkflowState.MANIFEST_DRAFT: "DISPATCH_GENERATED",
+            WorkflowState.MANIFEST_LOCKED: "DISPATCH_GENERATED",
+            WorkflowState.GATEPASS_READY: "DISPATCH_GENERATED",
+            WorkflowState.DISPATCHED: "ACTUAL_DISTRIBUTION_SIMULATED",
+            WorkflowState.VERIFIED: "FORECAST_EVALUATED",
+            WorkflowState.EVALUATED: "MODEL_CALIBRATED"
+        }
+        return mapping.get(state, "PLANNING_OPEN")
 
     def get_persisted_forecasts_for_cycle(
         self,

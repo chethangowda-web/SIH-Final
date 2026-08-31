@@ -566,7 +566,7 @@ class _ConnectivityScreenState extends State<ConnectivityScreen> {
                 AppConstants.secondaryNavy,
               ),
               _buildMetricTile(
-                'Demo District',
+                'Operational Pilot District',
                 data.district,
                 Icons.location_city_outlined,
                 AppConstants.accentBlue,

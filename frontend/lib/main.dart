@@ -1,9 +1,25 @@
 import 'package:flutter/material.dart';
 import 'core/constants.dart';
 import 'screens/beneficiary/demo_login_screen.dart';
+import 'services/auth_session.dart';
+
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Setup deterministic global 401 unauthorized redirect to login
+  AuthSession.instance.onUnauthorized = () {
+    rootNavigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const DemoLoginScreen(
+          sessionExpiredMessage: 'Session expired or unauthorized. Please log in again.',
+        ),
+      ),
+      (route) => false,
+    );
+  };
+
   runApp(const PdsDemandSyncApp());
 }
 
@@ -13,6 +29,7 @@ class PdsDemandSyncApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

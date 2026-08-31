@@ -3,8 +3,9 @@ import sqlite3
 from fastapi import APIRouter, Depends
 from app.core.database import get_db
 from app.models.schemas import DashboardSummaryOut, DEMO_NOTICE
+from app.core.auth import get_current_user, RoleChecker
 
-router = APIRouter(tags=["District Dashboard"])
+router = APIRouter(tags=["District Dashboard"], dependencies=[Depends(get_current_user), Depends(RoleChecker(["DSO", "ADMIN", "AUDITOR"]))])
 
 @router.get("/dashboard/summary", response_model=DashboardSummaryOut)
 def get_dashboard_summary(db: sqlite3.Connection = Depends(get_db)):
@@ -48,7 +49,7 @@ def get_dashboard_summary(db: sqlite3.Connection = Depends(get_db)):
     portability_pct = round((portability_count / intent_ben_count) * 100.0, 1) if intent_ben_count > 0 else 0.0
 
     return DashboardSummaryOut(
-        district="Bengaluru Urban - Demo District",
+        district="Bengaluru Urban PDS Pilot",
         total_fps=total_fps,
         total_beneficiaries=total_beneficiaries,
         active_cycle="2026-09",

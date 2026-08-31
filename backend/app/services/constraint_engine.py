@@ -61,6 +61,20 @@ class ConstraintValidationEngine:
         """
         Validate all 9 constraints for a single Fair Price Shop.
         """
+        override = self.simulation_overrides.get(fps_id, {})
+        if "overall_status" in override:
+            return {
+                "fps_id": fps_id,
+                "fps_name": override.get("fps_name", "Fair Price Shop Bangalore-001"),
+                "overall_status": override["overall_status"],
+                "blocking_reason": override.get("blocking_reason", "Simulated constraint failure"),
+                "critical_failure_count": 1,
+                "warning_count": 0,
+                "checks": [],
+                "summary_message": override.get("blocking_reason", "Simulated constraint failure"),
+                "demo_notice": DEMO_NOTICE
+            }
+
         # 1. Fetch FPS master data & inventory
         cursor.execute("""
         SELECT fps_id, name, district, capacity_kg, stockout_frequency, portability_rate,
@@ -554,6 +568,27 @@ class ConstraintValidationEngine:
 
         district_status = "FAIL" if fail_count > 0 else ("WARNING" if warning_count > 0 else "PASS")
         can_lock = district_status != "FAIL"
+
+        from app.services.governance_trail import governance_trail
+        governance_trail.record_event(
+            db=db,
+            event_type="CONSTRAINT_AUDIT_EVALUATED",
+            action="EVALUATE_DISTRICT_CONSTRAINTS",
+            entity_type="CONSTRAINT",
+            entity_id=f"CONSTRAINT-{cycle_id}",
+            actor_name="Automated Logistics Engine",
+            actor_role="SYSTEM_AUDITOR",
+            cycle_id=cycle_id,
+            after_state={
+                "district_validation_status": district_status,
+                "pass_count": pass_count,
+                "warning_count": warning_count,
+                "fail_count": fail_count
+            },
+            notes=f"Constraint validation: {pass_count} PASS, {warning_count} Warnings, {fail_count} Violations.",
+            is_success=(district_status != "FAIL"),
+            is_simulation=(scenario.upper() != "NORMAL")
+        )
 
         return {
             "status": "success",

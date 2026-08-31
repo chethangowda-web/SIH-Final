@@ -319,9 +319,9 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Container(
-        width: 1200,
-        height: 880,
-        padding: const EdgeInsets.all(24),
+        width: 1160,
+        height: 840,
+        padding: const EdgeInsets.all(22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

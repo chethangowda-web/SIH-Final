@@ -8,8 +8,9 @@ import '../connectivity_screen.dart';
 
 class DemoLoginScreen extends StatefulWidget {
   final ApiService? apiService;
+  final String? sessionExpiredMessage;
 
-  const DemoLoginScreen({super.key, this.apiService});
+  const DemoLoginScreen({super.key, this.apiService, this.sessionExpiredMessage});
 
   @override
   State<DemoLoginScreen> createState() => _DemoLoginScreenState();
@@ -17,10 +18,37 @@ class DemoLoginScreen extends StatefulWidget {
 
 class _DemoLoginScreenState extends State<DemoLoginScreen> {
   late final ApiService _apiService;
-  List<Beneficiary> _beneficiaries = [];
+  List<Beneficiary> _beneficiaries = [
+    Beneficiary(
+      id: 1,
+      pseudonymousBeneficiaryId: 'BEN-KA-0001',
+      nameForDemo: 'Swathi B. (Demo)',
+      registeredFpsId: 'FPS-KA-BLR-001',
+      registeredFpsName: 'Malleshwaram Seva Kendra',
+      language: 'kn',
+      status: 'ACTIVE',
+    ),
+    Beneficiary(
+      id: 2,
+      pseudonymousBeneficiaryId: 'BEN-KA-0005',
+      nameForDemo: 'Sunita Devi (Demo)',
+      registeredFpsId: 'FPS-KA-BLR-005',
+      registeredFpsName: 'Bellandur Outer Ring Road',
+      language: 'hi',
+      status: 'ACTIVE',
+    ),
+    Beneficiary(
+      id: 3,
+      pseudonymousBeneficiaryId: 'BEN-KA-0015',
+      nameForDemo: 'Ramesh K. (Demo)',
+      registeredFpsId: 'FPS-KA-BLR-013',
+      registeredFpsName: 'Peenya Industrial Area',
+      language: 'kn',
+      status: 'ACTIVE',
+    ),
+  ];
   Beneficiary? _selectedBeneficiary;
-  bool _isLoading = true;
-  String? _errorMessage;
+  bool _isAuthenticating = false;
 
   // Curated demo personas for quick 1-click hackathon evaluation
   final List<Map<String, String>> _curatedPersonas = [
@@ -51,56 +79,64 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
-    _loadBeneficiaries();
+    _selectedBeneficiary = _beneficiaries.first;
   }
 
-  Future<void> _loadBeneficiaries() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  Future<void> _proceedToBeneficiaryHome() async {
+    if (_selectedBeneficiary == null) return;
+    setState(() => _isAuthenticating = true);
+    final pseudoId = _selectedBeneficiary!.pseudonymousBeneficiaryId;
 
     try {
-      final list = await _apiService.fetchBeneficiaries(limit: 60);
-      setState(() {
-        _beneficiaries = list;
-        if (_beneficiaries.isNotEmpty) {
-          _selectedBeneficiary = _beneficiaries.first;
-        }
-        _isLoading = false;
-      });
+      await _apiService.login(pseudoId, 'citizen_pass');
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => BeneficiaryHomeScreen(
+            beneficiaryId: pseudoId,
+            apiService: _apiService,
+          ),
+        ),
+      );
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to load demo beneficiaries: $e';
-        _isLoading = false;
-      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Beneficiary login failed: $e'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isAuthenticating = false);
     }
   }
 
-  void _proceedToBeneficiaryHome() {
-    if (_selectedBeneficiary == null) return;
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => BeneficiaryHomeScreen(
-          beneficiaryId: _selectedBeneficiary!.pseudonymousBeneficiaryId,
-          apiService: _apiService,
+  Future<void> _proceedToAdminDashboard() async {
+    setState(() => _isAuthenticating = true);
+    try {
+      await _apiService.login('admin_user', 'admin_pass');
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => AdminDashboardScreen(
+            apiService: _apiService,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Admin authentication failed: $e'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isAuthenticating = false);
+    }
   }
 
-  void _proceedToAdminDashboard() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => AdminDashboardScreen(
-          apiService: _apiService,
-        ),
-      ),
-    );
-  }
-
-  void _selectCuratedPersona(String pseudoId) {
+  Future<void> _selectCuratedPersona(String pseudoId) async {
     final match = _beneficiaries.firstWhere(
       (b) => b.pseudonymousBeneficiaryId == pseudoId,
       orElse: () => Beneficiary(
@@ -117,7 +153,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       _selectedBeneficiary = match;
     });
 
-    _proceedToBeneficiaryHome();
+    await _proceedToBeneficiaryHome();
   }
 
   @override
@@ -134,6 +170,31 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Session Expired Banner if triggered by 401
+                  if (widget.sessionExpiredMessage != null) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.amber.shade400),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              widget.sessionExpiredMessage!,
+                              style: TextStyle(fontSize: 12.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   // GovTech Header Badge
                   Center(
                     child: Container(
@@ -272,12 +333,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                           ),
                           const SizedBox(height: 16),
                           ElevatedButton.icon(
-                            onPressed: _proceedToAdminDashboard,
-                            icon: const Icon(Icons.dashboard_customize_outlined,
-                                size: 18),
-                            label: const Text(
-                              'Login as District Admin (Demo Nagar)',
-                              style: TextStyle(
+                            onPressed: _isAuthenticating ? null : _proceedToAdminDashboard,
+                            icon: _isAuthenticating
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.dashboard_customize_outlined, size: 18),
+                            label: Text(
+                              _isAuthenticating ? 'Authenticating Admin Session...' : 'Login as District Admin (Demo Nagar)',
+                              style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -444,31 +506,10 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                           const SizedBox(height: 12),
 
                           // Dropdown for full list
-                          if (_isLoading)
-                            const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(12),
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            )
-                          else if (_errorMessage != null)
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                _errorMessage!,
-                                style: TextStyle(
-                                    color: Colors.red.shade800, fontSize: 12),
-                              ),
-                            )
-                          else
-                            DropdownButtonFormField<Beneficiary>(
-                              initialValue: _selectedBeneficiary,
-                              decoration: InputDecoration(
-                                labelText: 'Or Select from 2,000 Beneficiaries',
+                          DropdownButtonFormField<Beneficiary>(
+                            initialValue: _selectedBeneficiary,
+                            decoration: InputDecoration(
+                              labelText: 'Or Select from Demo Beneficiaries',
                                 prefixIcon: const Icon(Icons.people_outline,
                                     color: AppConstants.primaryNavy, size: 20),
                                 border: OutlineInputBorder(
@@ -497,13 +538,15 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
                           // Main CTA
                           ElevatedButton.icon(
-                            onPressed: _selectedBeneficiary != null
+                            onPressed: (_selectedBeneficiary != null && !_isAuthenticating)
                                 ? _proceedToBeneficiaryHome
                                 : null,
-                            icon: const Icon(Icons.login_rounded, size: 18),
-                            label: const Text(
-                              'Continue as Beneficiary',
-                              style: TextStyle(
+                            icon: _isAuthenticating
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.login_rounded, size: 18),
+                            label: Text(
+                              _isAuthenticating ? 'Authenticating Beneficiary...' : 'Continue as Beneficiary',
+                              style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                               ),

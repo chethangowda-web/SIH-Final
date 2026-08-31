@@ -256,6 +256,82 @@ def seed_all_data(recreate=False):
     VALUES (?, ?, ?, ?, ?, ?, ?);
     """, intent_records)
 
+    # 5.1 Insert Initial Citizen Requests (Citizen Request -> AI Advisory -> Officer Review Queue)
+    from app.services.ai_request_advisor import ai_request_advisor
+    import json
+
+    citizen_request_rows = []
+    # Seed top 35 intents into citizen_requests queue
+    for i, it in enumerate(intent_records[:35]):
+        ben_id, cyc, int_fps, com, decl_qty, conf, st = it
+        # Lookup home FPS
+        home_fps = "FPS-KA-BLR-001"
+        for b in beneficiaries:
+            if b[0] == ben_id:
+                home_fps = b[2]
+                break
+
+        ent = ai_request_advisor.get_beneficiary_entitlement(conn, ben_id, com)
+        ai_res = ai_request_advisor.evaluate_request(
+            conn, ben_id, int_fps, com, decl_qty, cyc
+        )
+        ai_data = ai_res["ai_assessment"]
+
+        req_id = f"REQ-{cyc}-{ben_id.split('-')[-1]}-{com[:1]}"
+        req_type = "PORTABILITY_PREFERENCE" if int_fps != home_fps else "MONTHLY_PREFERENCE_SIGNAL"
+
+        # Varied status for demonstration
+        if i % 7 == 0:
+            req_status = "OFFICER_APPROVED"
+            auth_qty = decl_qty
+            off_name = "K. Srinivas Murthy (DSO)"
+            off_role = "DISTRICT_SUPPLY_OFFICER"
+            off_notes = "Verified within card quota; authorized full allocation."
+            auth_time = "2026-08-26 14:30:00"
+        elif i % 11 == 0:
+            req_status = "OFFICER_PARTIAL_APPROVED"
+            auth_qty = ai_data["recommended_quantity_kg"]
+            off_name = "K. Srinivas Murthy (DSO)"
+            off_role = "DISTRICT_SUPPLY_OFFICER"
+            off_notes = "Capped to statutory floor/headroom balance."
+            auth_time = "2026-08-26 15:15:00"
+        elif i % 13 == 0:
+            req_status = "OFFICER_REDIRECTED"
+            auth_qty = decl_qty
+            off_name = "Basavaraj V. (Depot Manager)"
+            off_role = "DEPOT_MANAGER"
+            off_notes = "Redirected to nearby FPS due to local storage constraint."
+            auth_time = "2026-08-26 16:00:00"
+        else:
+            req_status = "PENDING_OFFICER_REVIEW"
+            auth_qty = 0.0
+            off_name = None
+            off_role = None
+            off_notes = None
+            auth_time = None
+
+        citizen_request_rows.append((
+            req_id, ben_id, ent["card_type"], ent["family_members_count"],
+            ent["statutory_entitlement_rice_kg"], ent["statutory_entitlement_wheat_kg"],
+            cyc, home_fps, int_fps, com, decl_qty, auth_qty, req_type,
+            req_status, ai_data["recommendation"], ai_data["recommended_quantity_kg"],
+            ai_data["recommended_fps_id"], ai_data["risk_level"], ai_data["confidence"],
+            json.dumps(ai_data["factors"]), off_name, off_role, off_notes, auth_time
+        ))
+
+    cursor.executemany("""
+    INSERT OR REPLACE INTO citizen_requests (
+        request_id, beneficiary_id, card_type, family_members_count,
+        statutory_entitlement_rice_kg, statutory_entitlement_wheat_kg,
+        cycle_id, registered_fps_id, intended_fps_id, commodity,
+        requested_quantity_kg, authorized_quantity_kg, request_type,
+        status, ai_recommendation, ai_recommended_qty_kg,
+        ai_recommended_fps_id, ai_risk_level, ai_confidence,
+        ai_factors_json, officer_name, officer_role, officer_justification,
+        authorized_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    """, citizen_request_rows)
+
     # 6. Insert Central Depots
     depots_data = [
         ("DEPOT-01", "Bengaluru Central FCI Godown (Hebbal)", DEMO_DISTRICT, "Hebbal Ring Road, Bengaluru", 600.0, 500.0, 150.0, 320.0, 180.0, "OPERATIONAL"),
@@ -326,6 +402,27 @@ def seed_all_data(recreate=False):
     VALUES (?, ?, ?, ?, ?, ?, ?);
     """, routes_data)
 
+    # 9. Seed User Accounts
+    from app.core.auth import hash_password
+    users_data = [
+        ("admin_user", hash_password("admin_pass"), "ADMIN", None),
+        ("dso_user", hash_password("dso_pass"), "DSO", None),
+        ("auditor_user", hash_password("auditor_pass"), "AUDITOR", None)
+    ]
+    
+    cursor.execute("SELECT pseudonymous_beneficiary_id FROM beneficiaries;")
+    ben_rows = cursor.fetchall()
+    for r in ben_rows:
+        ben_id = r["pseudonymous_beneficiary_id"]
+        users_data.append((ben_id, hash_password("citizen_pass"), "BENEFICIARY", ben_id))
+
+    cursor.executemany("""
+    INSERT OR REPLACE INTO users (
+        username, password_hash, role, beneficiary_id
+    )
+    VALUES (?, ?, ?, ?);
+    """, users_data)
+
     conn.commit()
 
     # Verification counts
@@ -341,6 +438,8 @@ def seed_all_data(recreate=False):
     intent_count = cursor.fetchone()[0]
     cursor.execute("SELECT COUNT(*) FROM routes;")
     routes_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM users;")
+    users_count = cursor.fetchone()[0]
 
     conn.close()
 
@@ -354,6 +453,7 @@ def seed_all_data(recreate=False):
         "inventory_records": inv_count,
         "intent_declarations_count": intent_count,
         "routes_count": routes_count,
+        "users_count": users_count,
         "historical_cycles": HISTORICAL_CYCLES,
         "active_cycle": CURRENT_CYCLE
     }

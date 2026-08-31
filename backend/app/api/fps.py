@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.database import get_db
 from app.models.schemas import FPSOut, FPSDetailOut, InventoryItem, DEMO_NOTICE
 
-router = APIRouter(tags=["Fair Price Shops"])
+from app.core.auth import get_current_user
+
+router = APIRouter(tags=["Fair Price Shops"], dependencies=[Depends(get_current_user)])
 
 @router.get("/fps", response_model=List[FPSOut])
 def list_fps(db: sqlite3.Connection = Depends(get_db)):
