@@ -213,7 +213,7 @@ class GatepassEngine:
             corridor, total_rice_kg, total_wheat_kg, total_payload_kg,
             loading_bay, driver_name, driver_phone, security_token,
             status, issued_at, approving_officer
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'GATEPASS_ISSUED', ?, 'District Supply Officer (Demo)')
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'GATEPASS_ISSUED', ?, 'District Supply Officer (Bengaluru Urban)')
         ON CONFLICT(cycle_id, truck_id) DO UPDATE SET
             gatepass_id = excluded.gatepass_id,
             manifest_id = excluded.manifest_id,
@@ -439,10 +439,10 @@ class GatepassEngine:
         stops = [dict(s) for s in cursor.fetchall()]
 
         if not stops:
-            # Fallback demo stops
+            # Fallback stops
             stops = [
-                {"fps_id": "FPS-KA-BLR-001", "fps_name": "Malleshwaram Seva Kendra (Demo)", "rice_kg": 2000.0, "wheat_kg": 1120.0, "total_kg": 3120.0},
-                {"fps_id": "FPS-KA-BLR-004", "fps_name": "Rajajinagar 1st Stage FPS (Demo)", "rice_kg": 1800.0, "wheat_kg": 950.0, "total_kg": 2750.0},
+                {"fps_id": "FPS-KA-BLR-001", "fps_name": "Malleshwaram Seva Kendra", "rice_kg": 2000.0, "wheat_kg": 1120.0, "total_kg": 3120.0},
+                {"fps_id": "FPS-KA-BLR-004", "fps_name": "Rajajinagar 1st Stage FPS", "rice_kg": 1800.0, "wheat_kg": 950.0, "total_kg": 2750.0},
             ]
 
         payload_kg = float(gp["total_payload_kg"]) if float(gp["total_payload_kg"]) > 0 else 3120.0

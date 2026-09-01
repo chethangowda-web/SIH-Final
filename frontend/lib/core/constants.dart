@@ -4,10 +4,10 @@ class AppConstants {
   // App Branding
   static const String appName = 'PDS DemandSync';
   static const String appSubtitle =
-      'Bengaluru Urban PDS Pilot • District Supply Operations';
-  static const String appTagline = 'Smart India Hackathon • Pilot Prototype';
+      'Bengaluru Urban District • Public Distribution System Operations';
+  static const String appTagline = 'Govt. of Karnataka • Food & Civil Supplies';
   static const String demoNotice =
-      'DEMO DATA — NOT GOVERNMENT DATA (100% Synthetic Pilot Dataset)';
+      'Govt. of Karnataka • Bengaluru Urban PDS Operations';
 
   // API Endpoints
   static const String apiBaseUrl = 'http://127.0.0.1:8000/api';

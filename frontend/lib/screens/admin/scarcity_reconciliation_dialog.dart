@@ -70,7 +70,7 @@ class _ScarcityReconciliationDialogState
 
   // Officer sign-off form state
   final TextEditingController _officerNameCtrl =
-      TextEditingController(text: 'District Supply Officer (Demo Admin)');
+      TextEditingController(text: 'District Supply Officer (Bengaluru Urban)');
   final TextEditingController _notesCtrl = TextEditingController(
       text: 'Approved for operational dispatch execution under depot grain deficit');
   String _selectedOfficerRole = 'DISTRICT_SUPPLY_OFFICER';

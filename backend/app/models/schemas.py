@@ -405,6 +405,7 @@ class CitizenRequestQueueResponse(BaseModel):
     total_count: int
     pending_count: int
     approved_count: int
+    delayed_count: int = 0
     partial_count: int
     redirected_count: int
     deferred_count: int

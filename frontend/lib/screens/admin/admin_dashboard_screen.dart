@@ -18,6 +18,8 @@ import 'judge_view_dialog.dart';
 import 'scarcity_reconciliation_dialog.dart';
 import 'citizen_request_queue_dialog.dart';
 import 'causal_trace_dialog.dart';
+import 'incident_detail_dialog.dart';
+import 'predispatch_analysis_dialog.dart';
 import '../beneficiary/demo_login_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -38,6 +40,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   String _searchQuery = '';
   bool _isActionExecuting = false;
   AdminFpsRow? _selectedDrawerFps;
+
+  // Pre-Dispatch Operational Incidents & Risk Anomaly State
+  final List<OperationalIncident> _dashboardIncidents =
+      OperationalIncident.getDefaultPreDispatchIncidents();
+
+  int get _activeDashboardIncidentsCount =>
+      _dashboardIncidents.where((i) => !i.isAcknowledged).length;
 
   @override
   void initState() {
@@ -78,15 +87,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _runDistrictPreDispatchAnalysis() async {
+    await PreDispatchAnalysisDialog.show(
+      context,
+      cycleId: _dashboardData?.activeCycle ?? '2026-09',
+      onDispatchCompleted: () => _loadDashboardData(),
+      onDispatchDelayed: () => _loadDashboardData(),
+    );
+    _loadDashboardData();
+  }
+
+  Future<void> _resumeStockDispatch() async {
     setState(() => _isActionExecuting = true);
     try {
-      final res = await _apiService.runPreDispatchAnalysis();
+      final res = await _apiService.resumeDispatch(cycleId: _dashboardData?.activeCycle ?? '2026-09');
       await _loadDashboardData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(res.message),
-          backgroundColor: AppConstants.accentBlue,
+          content: Text(res['message'] ?? 'Stock replenished! Dispatch resumed and moved to Out for Delivery.'),
+          backgroundColor: AppConstants.successGreen,
         ),
       );
     } catch (e) {
@@ -292,6 +311,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         apiService: _apiService,
         initialFpsId: fpsId,
         cycleId: _dashboardData?.activeCycle ?? '2026-09',
+      ),
+    );
+  }
+
+  void _showIncidentDetailDialog(OperationalIncident incident) {
+    showDialog(
+      context: context,
+      builder: (ctx) => IncidentDetailDialog(
+        incident: incident,
+        onAcknowledge: () => setState(() {}),
+        onApplyAction: () => setState(() {}),
       ),
     );
   }
@@ -1283,6 +1313,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     ),
                   ),
+                  if (_dashboardData?.workflowStatus == 'DELAYED' || _dashboardData?.workflowStatus == 'STOCK_DELAYED')
+                    ElevatedButton.icon(
+                      onPressed: _isActionExecuting ? null : _resumeStockDispatch,
+                      icon: _isActionExecuting
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.play_circle_filled_rounded, size: 16),
+                      label: const Text('Resume Dispatch', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppConstants.successGreen,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -1543,11 +1586,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // SECTION 3: OPERATIONAL HEALTH & LIVE ATTENTION ITEMS (2x2 Grid + Live Alert Strip)
+  // SECTION 3: OPERATIONAL HEALTH & LIVE ATTENTION ITEMS (Pre-Dispatch Incident Alerts + 2x2 Grid)
   Widget _buildOperationalHealthAndAlerts() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // PART B: Live Pre-Dispatch Operational Incidents (Festival Surge & FPS Capacity Constraints)
+        _buildPreDispatchIncidentsPanel(),
+        const SizedBox(height: 14),
+
         // WHAT NEEDS ATTENTION? Compact Alert Strip
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -1677,6 +1724,288 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               );
             }
           },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreDispatchIncidentsPanel() {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.space16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB), // Warm alert tint for pre-dispatch awareness
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD97706).withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PRE-DISPATCH OPERATIONAL INCIDENTS — PREPARE BEFORE TRUCK DEPARTS',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF92400E),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      '"Don\'t reroute the truck after it leaves. Prepare the demand before it leaves."',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFFB45309),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _activeDashboardIncidentsCount > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _activeDashboardIncidentsCount > 0 ? const Color(0xFFFECACA) : const Color(0xFFBBF7D0)),
+                ),
+                child: Text(
+                  _activeDashboardIncidentsCount > 0
+                      ? '$_activeDashboardIncidentsCount LIVE PRE-DISPATCH ALERTS'
+                      : 'ALL ALERTS RESOLVED ✓',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: _activeDashboardIncidentsCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF15803D),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // 3 Visibly Distinct Incident Cards (Festival Surge, FPS Capacity Constraint, Stockout Risk)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 850;
+              final cards = _dashboardIncidents.map((inc) {
+                Color badgeColor;
+                IconData icon;
+                if (inc.severity == 'HIGH_RISK') {
+                  if (inc.riskCategory.contains('DEMAND SURGE')) {
+                    badgeColor = AppConstants.dangerRed;
+                    icon = Icons.celebration_rounded;
+                  } else {
+                    badgeColor = const Color(0xFFEA580C);
+                    icon = Icons.emergency_rounded;
+                  }
+                } else {
+                  badgeColor = const Color(0xFF7C3AED);
+                  icon = Icons.warehouse_rounded;
+                }
+
+                return _buildIncidentCard(
+                  title: inc.title,
+                  scenarioBadge: inc.scenarioBadge,
+                  badgeColor: badgeColor,
+                  icon: icon,
+                  affectedFps: inc.affectedFps,
+                  projectedShortage: inc.projectedShortageOrConstraint,
+                  additionalDispatch: inc.supplyAdjustment,
+                  recommendation: inc.recommendation,
+                  actionLabel: 'Inspect Incident Details →',
+                  isActionApplied: inc.isActionApplied,
+                  isAcknowledged: inc.isAcknowledged,
+                  onAction: () => _showIncidentDetailDialog(inc),
+                );
+              }).toList();
+
+              if (isWide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: cards.map((c) => Expanded(child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: c,
+                  ))).toList(),
+                );
+              } else {
+                return Column(
+                  children: cards.map((c) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: c,
+                  )).toList(),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncidentCard({
+    required String title,
+    required String scenarioBadge,
+    required Color badgeColor,
+    required IconData icon,
+    required String affectedFps,
+    required String projectedShortage,
+    required String additionalDispatch,
+    required String recommendation,
+    required String actionLabel,
+    bool isActionApplied = false,
+    bool isAcknowledged = false,
+    required VoidCallback onAction,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isActionApplied
+              ? const Color(0xFF86EFAC)
+              : (isAcknowledged ? const Color(0xFFCBD5E1) : const Color(0xFFFDE68A)),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(icon, size: 18, color: badgeColor),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  scenarioBadge,
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: badgeColor),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _buildIncidentField('Affected FPS', affectedFps, Icons.storefront_outlined),
+          const SizedBox(height: 4),
+          _buildIncidentField('Projected Deficit / Constraint', projectedShortage, Icons.trending_up_rounded, isHighlight: true),
+          const SizedBox(height: 4),
+          _buildIncidentField('Required Supply Adjustment', additionalDispatch, Icons.local_shipping_outlined),
+          const SizedBox(height: 4),
+          _buildIncidentField('Recommended Action', recommendation, Icons.lightbulb_outline, isPositive: true),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (isActionApplied)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('✓ Action Applied', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                )
+              else if (isAcknowledged)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('✓ Acknowledged', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('🔴 Live Alert', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                ),
+              InkWell(
+                onTap: onAction,
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(
+                    actionLabel,
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppConstants.accentBlue),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncidentField(String label, String value, IconData icon, {bool isHighlight = false, bool isPositive = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: isHighlight ? AppConstants.dangerRed : (isPositive ? AppConstants.successGreen : AppConstants.textSecondary)),
+        const SizedBox(width: 6),
+        Text('$label: ', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppConstants.textSecondary)),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: isHighlight ? AppConstants.dangerRed : (isPositive ? const Color(0xFF15803D) : AppConstants.primaryNavy),
+            ),
+          ),
         ),
       ],
     );

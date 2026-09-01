@@ -289,6 +289,9 @@ class CitizenDeliveryRecord {
   final String? registeredFpsName;
   final String? intendedFpsId;
   final String? intendedFpsName;
+  final String? delayReason;
+  final String? expectedDeliveryWindow;
+  final String? delayNotifiedAt;
   final String createdAt;
 
   CitizenDeliveryRecord({
@@ -313,6 +316,9 @@ class CitizenDeliveryRecord {
     this.registeredFpsName,
     this.intendedFpsId,
     this.intendedFpsName,
+    this.delayReason,
+    this.expectedDeliveryWindow,
+    this.delayNotifiedAt,
     required this.createdAt,
   });
 
@@ -339,6 +345,9 @@ class CitizenDeliveryRecord {
       registeredFpsName: json['registered_fps_name'],
       intendedFpsId: json['intended_fps_id'],
       intendedFpsName: json['intended_fps_name'],
+      delayReason: json['delay_reason'],
+      expectedDeliveryWindow: json['expected_delivery_window'],
+      delayNotifiedAt: json['delay_notified_at'],
       createdAt: json['created_at'] ?? '',
     );
   }

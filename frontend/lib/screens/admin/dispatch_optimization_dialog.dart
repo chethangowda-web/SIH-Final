@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../../core/constants.dart';
 import '../../models/admin_model.dart';
 import '../../services/api_service.dart';
+import 'incident_detail_dialog.dart';
 
 class DispatchOptimizationDialog extends StatefulWidget {
   final String cycleId;
@@ -34,6 +35,14 @@ class _DispatchOptimizationDialogState
   OptimizedStop? _selectedMapStop;
   bool _isDepotSelected = false;
 
+  // Pre-Dispatch Operational Incidents & Risk Anomaly State
+  final List<OperationalIncident> _operationalIncidents =
+      OperationalIncident.getDefaultPreDispatchIncidents();
+  bool _isIncidentSimulationActive = false;
+
+  int get _activeIncidentsCount =>
+      _operationalIncidents.where((i) => !i.isAcknowledged).length;
+
   // Live Dispatch Simulation State
   bool _isSimulationRunning = false;
   bool _isSimulationPaused = false;
@@ -44,6 +53,7 @@ class _DispatchOptimizationDialogState
   LatLng? _simulatedTruckPosition;
   String _simulatedTruckStatus = 'AT_DEPOT';
   double _simulatedRemainingPayloadKg = 10000.0;
+
 
   // What-If Parameters
   double _vehicleCapacityKg = 10000.0;
@@ -213,10 +223,51 @@ class _DispatchOptimizationDialogState
       _isCorridorBreachSimulated = false;
       _simulatedTruckPosition = null;
       _simulatedTruckStatus = 'AT_DEPOT';
+      _isIncidentSimulationActive = false;
       if (_dossier != null) {
         _simulatedRemainingPayloadKg = _dossier!.totalCorridorDemandKg;
       }
     });
+  }
+
+  void _triggerMultiIncidentSimulation() {
+    setState(() {
+      _isIncidentSimulationActive = true;
+      for (final inc in _operationalIncidents) {
+        inc.isAcknowledged = false;
+        inc.isActionApplied = false;
+      }
+    });
+    _startSimulation();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '3 LIVE PRE-DISPATCH ALERTS: Demand Surge, FPS Storage Constraint, & Stockout Risk Detected!',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Color(0xFFDC2626),
+        duration: Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _showIncidentDetails(OperationalIncident incident) {
+    showDialog(
+      context: context,
+      builder: (ctx) => IncidentDetailDialog(
+        incident: incident,
+        onAcknowledge: () => setState(() {}),
+        onApplyAction: () => setState(() {}),
+      ),
+    );
   }
 
   Future<void> _loadOptimization({String? truckId}) async {
@@ -428,11 +479,15 @@ class _DispatchOptimizationDialogState
           _buildWhySelectedJustificationCard(d),
           const SizedBox(height: 14),
 
-          // 5. Interactive Delivery Corridor Map (OpenStreetMap)
+          // 5. Pre-Dispatch Operational Incidents & Risk Simulation Panel (3 Live Alerts)
+          _buildPreDispatchIncidentsSection(d),
+          const SizedBox(height: 14),
+
+          // 6. Interactive Delivery Corridor Map (OpenStreetMap)
           _buildInteractiveRouteMapSection(d),
           const SizedBox(height: 14),
 
-          // 6. Optimized Delivery Sequence Timeline (TSP Nearest-Neighbor Tour)
+          // 7. Optimized Delivery Sequence Timeline (TSP Nearest-Neighbor Tour)
           _buildDeliverySequenceSection(d),
         ],
       ),
@@ -947,6 +1002,317 @@ class _DispatchOptimizationDialogState
     );
   }
 
+  Widget _buildPreDispatchIncidentsSection(CorridorOptimizationDossier d) {
+    final activeCount = _activeIncidentsCount;
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.space16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD97706).withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PRE-DISPATCH OPERATIONAL INCIDENTS — PREPARE BEFORE TRUCK DEPARTS',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF92400E),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      '"Don\'t reroute the truck after it leaves. Prepare the demand before it leaves."',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFFB45309),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _triggerMultiIncidentSimulation,
+                icon: const Icon(Icons.play_circle_fill_rounded, size: 15),
+                label: const Text(
+                  'Run Incident Simulation',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFB45309),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: activeCount > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: activeCount > 0 ? const Color(0xFFFECACA) : const Color(0xFFBBF7D0),
+                  ),
+                ),
+                child: Text(
+                  activeCount > 0
+                      ? '$activeCount LIVE PRE-DISPATCH ALERTS'
+                      : 'ALL ALERTS RESOLVED ✓',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: activeCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF15803D),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_isIncidentSimulationActive) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.sensors_rounded, color: Color(0xFFDC2626), size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'SIMULATION RUNNING: Live operational telemetry streaming — 3 anomalies active.',
+                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF991B1B)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+
+          // 3 Visibly Distinct Incident Cards
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 850;
+              final cards = _operationalIncidents.map((inc) {
+                return _buildIncidentCardWidget(inc);
+              }).toList();
+
+              if (isWide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: cards.map((c) => Expanded(child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: c,
+                  ))).toList(),
+                );
+              } else {
+                return Column(
+                  children: cards.map((c) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: c,
+                  )).toList(),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncidentCardWidget(OperationalIncident inc) {
+    Color badgeColor;
+    IconData icon;
+    if (inc.severity == 'HIGH_RISK') {
+      if (inc.riskCategory.contains('DEMAND SURGE')) {
+        badgeColor = AppConstants.dangerRed;
+        icon = Icons.celebration_rounded;
+      } else {
+        badgeColor = const Color(0xFFEA580C);
+        icon = Icons.emergency_rounded;
+      }
+    } else {
+      badgeColor = const Color(0xFF7C3AED);
+      icon = Icons.warehouse_rounded;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: inc.isActionApplied
+              ? const Color(0xFF86EFAC)
+              : (inc.isAcknowledged ? const Color(0xFFCBD5E1) : const Color(0xFFFDE68A)),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(icon, size: 17, color: badgeColor),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        inc.title,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: AppConstants.primaryNavy,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  inc.scenarioBadge,
+                  style: TextStyle(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _buildIncidentFieldRow('Affected FPS', inc.affectedFps, Icons.storefront_outlined),
+          const SizedBox(height: 4),
+          _buildIncidentFieldRow('Deficit / Constraint', inc.projectedShortageOrConstraint, Icons.trending_up_rounded, isHighlight: true),
+          const SizedBox(height: 4),
+          _buildIncidentFieldRow('Supply Adjustment', inc.supplyAdjustment, Icons.local_shipping_outlined),
+          const SizedBox(height: 4),
+          _buildIncidentFieldRow('Recommended Action', inc.recommendation, Icons.lightbulb_outline, isPositive: true),
+          const SizedBox(height: 8),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (inc.isActionApplied)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('✓ Action Applied', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                )
+              else if (inc.isAcknowledged)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('✓ Acknowledged', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('🔴 Live Alert', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                ),
+              InkWell(
+                onTap: () => _showIncidentDetails(inc),
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  child: Text(
+                    'Inspect Details →',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: AppConstants.accentBlue,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncidentFieldRow(String label, String value, IconData icon, {bool isHighlight = false, bool isPositive = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 13, color: isHighlight ? AppConstants.dangerRed : (isPositive ? AppConstants.successGreen : AppConstants.textSecondary)),
+        const SizedBox(width: 5),
+        Text('$label: ', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppConstants.textSecondary)),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: isHighlight ? AppConstants.dangerRed : (isPositive ? const Color(0xFF15803D) : AppConstants.primaryNavy),
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
   LatLng _getDepotLatLng(CorridorOptimizationDossier d) {
     if (d.sourceDepot.toLowerCase().contains('banaswadi') ||
         d.sourceDepot.contains('DEPOT-02')) {
@@ -1111,10 +1477,24 @@ class _DispatchOptimizationDialogState
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
+                  onPressed: _triggerMultiIncidentSimulation,
+                  icon: const Icon(Icons.crisis_alert_rounded, size: 14),
+                  label: const Text(
+                    'Trigger 3-Incident Simulation',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
                   onPressed: _toggleCorridorDeviationAlert,
                   icon: const Icon(Icons.warning_amber_rounded, size: 14),
                   label: Text(
-                    _isCorridorBreachSimulated ? 'Clear Deviation Alert' : 'Simulate Route Deviation (Alert)',
+                    _isCorridorBreachSimulated ? 'Clear Deviation Alert' : 'Route Deviation',
                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -1415,7 +1795,7 @@ class _DispatchOptimizationDialogState
 
     final isBreach = _isCorridorBreachSimulated;
     final cleanTruckId = _selectedTruckId.replaceAll('DEMO-', '');
-    const driver = 'Ramesh Kumar (Designated Driver)';
+    const driver = 'Raghavendra Gowda (Senior Fleet Pilot)';
 
     return Container(
       padding: const EdgeInsets.all(12),

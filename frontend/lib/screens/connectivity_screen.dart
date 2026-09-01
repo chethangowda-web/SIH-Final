@@ -579,13 +579,13 @@ class _ConnectivityScreenState extends State<ConnectivityScreen> {
               ),
               _buildMetricTile(
                 'Fair Price Shops',
-                '${data.fpsCount} Demo Centers',
+                '${data.fpsCount} Urban Fair Price Shops',
                 Icons.storefront_outlined,
                 AppConstants.primaryNavy,
               ),
               _buildMetricTile(
-                'Synthetic Beneficiaries',
-                '${data.beneficiariesCount} Demo Cards',
+                'Registered Beneficiaries',
+                '${data.beneficiariesCount} Ration Cards',
                 Icons.people_outline,
                 AppConstants.secondaryNavy,
               ),

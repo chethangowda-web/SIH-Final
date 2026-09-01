@@ -12,6 +12,7 @@ import 'package:pds_demandsync/screens/admin/scarcity_reconciliation_dialog.dart
 import 'package:pds_demandsync/screens/admin/causal_trace_dialog.dart';
 import 'package:pds_demandsync/screens/admin/citizen_request_queue_dialog.dart';
 import 'package:pds_demandsync/services/api_service.dart';
+import 'package:pds_demandsync/core/localization.dart';
 
 class MockApiService extends ApiService {
   @override
@@ -39,7 +40,7 @@ class MockApiService extends ApiService {
       FpsShop(
         id: 1,
         fpsId: 'FPS-KA-BLR-001',
-        name: 'Malleshwaram Seva Kendra (Demo)',
+        name: 'Malleshwaram Seva Kendra',
         district: 'Bengaluru Urban',
         latitude: 12.9716,
         longitude: 77.5946,
@@ -72,9 +73,9 @@ class MockApiService extends ApiService {
       Beneficiary(
         id: 1,
         pseudonymousBeneficiaryId: 'BEN-KA-0001',
-        nameForDemo: 'Swathi B. (Demo)',
+        nameForDemo: 'Swathi Bhat',
         registeredFpsId: 'FPS-KA-BLR-001',
-        registeredFpsName: 'Malleshwaram Seva Kendra (Demo)',
+        registeredFpsName: 'Malleshwaram Seva Kendra',
         language: 'kn',
         status: 'ACTIVE',
       ),
@@ -86,9 +87,9 @@ class MockApiService extends ApiService {
     return Beneficiary(
       id: 1,
       pseudonymousBeneficiaryId: beneficiaryId,
-      nameForDemo: 'Swathi B. (Demo)',
+      nameForDemo: 'Swathi Bhat',
       registeredFpsId: 'FPS-KA-BLR-001',
-      registeredFpsName: 'Malleshwaram Seva Kendra (Demo)',
+      registeredFpsName: 'Malleshwaram Seva Kendra',
       language: 'kn',
       status: 'ACTIVE',
     );
@@ -99,13 +100,13 @@ class MockApiService extends ApiService {
       {String cycleId = '2026-09'}) async {
     return BeneficiaryEntitlementSummary(
       beneficiaryId: beneficiaryId,
-      name: 'Swathi B. (Demo)',
+      name: 'Swathi Bhat',
       cardType: 'PHH',
-      familyMembersCount: 4,
+      familyMembersCount: 5,
       cardLabel: 'Priority Household (PHH)',
       cycleId: cycleId,
       registeredFpsId: 'FPS-KA-BLR-001',
-      registeredFpsName: 'Malleshwaram Seva Kendra (Demo)',
+      registeredFpsName: 'Malleshwaram Seva Kendra',
       statutoryEntitlementRiceKg: 20.0,
       statutoryEntitlementWheatKg: 5.0,
       consumedRiceKg: 0.0,
@@ -156,7 +157,7 @@ class MockApiService extends ApiService {
         beneficiaryId: beneficiaryId,
         cycleId: cycleId,
         intendedFpsId: intendedFpsId,
-        intendedFpsName: 'Malleshwaram Seva Kendra (Demo)',
+        intendedFpsName: 'Malleshwaram Seva Kendra',
         commodity: 'Rice',
         declaredQuantityKg: riceQuantityKg ?? 20.0,
         confidence: confidence,
@@ -173,7 +174,7 @@ class MockApiService extends ApiService {
         beneficiaryId: beneficiaryId,
         cycleId: cycleId,
         intendedFpsId: intendedFpsId,
-        intendedFpsName: 'Malleshwaram Seva Kendra (Demo)',
+        intendedFpsName: 'Malleshwaram Seva Kendra',
         commodity: 'Wheat',
         declaredQuantityKg: wheatQuantityKg ?? 5.0,
         confidence: confidence,
@@ -279,7 +280,7 @@ class MockApiService extends ApiService {
       allocatedItems: [
         ScarcityAllocationItemModel(
           fpsId: 'FPS-KA-BLR-001',
-          fpsName: 'Malleshwaram Seva Kendra (Demo)',
+          fpsName: 'Malleshwaram Seva Kendra',
           baselineRecommendedKg: 5200.0,
           statutoryFloorKg: 350.0,
           reconciledAllocationKg: 5200.0,
@@ -547,7 +548,7 @@ class MockApiService extends ApiService {
           id: 1,
           requestId: 'REQ-2026-09-0001',
           beneficiaryId: 'BEN-KA-0001',
-          beneficiaryName: 'Swathi B. (Demo)',
+          beneficiaryName: 'Swathi Bhat',
           cardType: 'PHH',
           familyMembersCount: 4,
           statutoryEntitlementRiceKg: 20.0,
@@ -555,9 +556,9 @@ class MockApiService extends ApiService {
           statutoryEntitlementCommodityKg: 20.0,
           cycleId: cycleId,
           registeredFpsId: 'FPS-KA-BLR-001',
-          registeredFpsName: 'Malleshwaram Seva Kendra (Demo)',
+          registeredFpsName: 'Malleshwaram Seva Kendra',
           intendedFpsId: 'FPS-KA-BLR-001',
-          intendedFpsName: 'Malleshwaram Seva Kendra (Demo)',
+          intendedFpsName: 'Malleshwaram Seva Kendra',
           commodity: 'Rice',
           requestedQuantityKg: 20.0,
           authorizedQuantityKg: 20.0,
@@ -622,9 +623,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('PDS DemandSync'), findsWidgets);
-    expect(find.text('Login as District Admin (Demo Nagar)'), findsOneWidget);
+    expect(find.text('District Supply Officer — Bengaluru Urban'), findsOneWidget);
     expect(find.text('Continue as Beneficiary'), findsOneWidget);
-    expect(find.text('Swathi B. (Demo)'), findsWidgets);
+    expect(find.text('Swathi Bhat'), findsWidgets);
   });
 
   testWidgets('AdminDashboardScreen renders KPI cards, visualizations, and FPS overview table',
@@ -724,9 +725,9 @@ void main() {
     final demoBeneficiary = Beneficiary(
       id: 1,
       pseudonymousBeneficiaryId: 'BEN-KA-0001',
-      nameForDemo: 'Swathi B. (Demo)',
+      nameForDemo: 'Swathi Bhat',
       registeredFpsId: 'FPS-KA-BLR-001',
-      registeredFpsName: 'Malleshwaram Seva Kendra (Demo)',
+      registeredFpsName: 'Malleshwaram Seva Kendra',
       language: 'kn',
       status: 'ACTIVE',
     );
@@ -747,7 +748,7 @@ void main() {
     expect(find.text('Collect from Fair Price Shop'), findsOneWidget);
     expect(find.text('Assisted Home Delivery'), findsOneWidget);
     expect(find.text('CHOOSE YOUR INTENDED FAIR PRICE SHOP'), findsOneWidget);
-    expect(find.text('Malleshwaram Seva Kendra (Demo)'), findsOneWidget);
+    expect(find.text('Malleshwaram Seva Kendra'), findsOneWidget);
     expect(find.text('Home FPS'), findsOneWidget);
     expect(find.text('YOUR STATUTORY ENTITLEMENT SUMMARY'), findsOneWidget);
     expect(find.text('NON-EDITABLE'), findsOneWidget);
@@ -763,9 +764,9 @@ void main() {
     final demoBeneficiary = Beneficiary(
       id: 1,
       pseudonymousBeneficiaryId: 'BEN-KA-0001',
-      nameForDemo: 'Swathi B. (Demo)',
+      nameForDemo: 'Swathi Bhat',
       registeredFpsId: 'FPS-KA-BLR-001',
-      registeredFpsName: 'Malleshwaram Seva Kendra (Demo)',
+      registeredFpsName: 'Malleshwaram Seva Kendra',
       language: 'kn',
       status: 'ACTIVE',
     );
@@ -773,7 +774,7 @@ void main() {
     final demoFps = FpsShop(
       id: 1,
       fpsId: 'FPS-KA-BLR-001',
-      name: 'Malleshwaram Seva Kendra (Demo)',
+      name: 'Malleshwaram Seva Kendra',
       district: 'Bengaluru Urban',
       latitude: 12.9716,
       longitude: 77.5946,
@@ -896,7 +897,7 @@ void main() {
     expect(find.text('CYCLE 2026-09'), findsOneWidget);
 
     // Verify Request Card
-    expect(find.text('Swathi B. (Demo) (BEN-KA-0001)'), findsOneWidget);
+    expect(find.text('Swathi Bhat (BEN-KA-0001)'), findsOneWidget);
     expect(find.text('Statutory Quota'), findsOneWidget);
     expect(find.text('Requested Intent'), findsOneWidget);
     expect(find.text('Shop Stock / Statutory Floor'), findsOneWidget);
@@ -908,5 +909,66 @@ void main() {
     expect(find.text('Redirect FPS'), findsOneWidget);
     expect(find.text('Defer'), findsOneWidget);
     expect(find.text('Authorize'), findsOneWidget);
+  });
+
+  testWidgets('Beneficiary Portal switches reactively between English, Hindi, and Kannada',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    // Ensure English initially
+    LanguageController.instance.setLanguage(AppLanguage.english);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BeneficiaryHomeScreen(
+          beneficiaryId: 'BEN-KA-0001',
+          apiService: MockApiService(),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    // 1. Verify English Labels
+    expect(find.text('YOUR RATION ENTITLEMENT'), findsOneWidget);
+    expect(find.text('Collect at Fair Price Shop'), findsOneWidget);
+    expect(find.text('Assisted Home Delivery'), findsOneWidget);
+    expect(find.text('Select Shop'), findsOneWidget);
+    expect(find.text('Choose Delivery'), findsOneWidget);
+    // Verify quantities & numbers are intact
+    expect(find.text('25.0'), findsOneWidget);
+
+    // 2. Switch to Hindi (हिंदी)
+    LanguageController.instance.setLanguage(AppLanguage.hindi);
+    await tester.pumpAndSettle();
+
+    expect(find.text('आपकी राशन पात्रता'), findsOneWidget);
+    expect(find.text('उचित मूल्य दुकान से प्राप्त करें'), findsOneWidget);
+    expect(find.text('घर पर राशन डिलीवरी'), findsOneWidget);
+    expect(find.text('दुकान चुनें'), findsOneWidget);
+    expect(find.text('डिलीवरी चुनें'), findsOneWidget);
+    // Quantities unchanged
+    expect(find.text('25.0'), findsOneWidget);
+
+    // 3. Switch to Kannada (ಕನ್ನಡ)
+    LanguageController.instance.setLanguage(AppLanguage.kannada);
+    await tester.pumpAndSettle();
+
+    expect(find.text('ನಿಮ್ಮ ಪಡಿತರ ಪ್ರಮಾಣ'), findsOneWidget);
+    expect(find.text('ನ್ಯಾಯಬೆಲೆ ಅಂಗಡಿಯಿಂದ ಪಡೆಯಿರಿ'), findsOneWidget);
+    expect(find.text('ಮನೆಬಾಗಿಲಿಗೆ ಪಡಿತರ ವಿತರಣೆ'), findsOneWidget);
+    expect(find.text('ಅಂಗಡಿ ಆಯ್ಕೆಮಾಡಿ'), findsOneWidget);
+    expect(find.text('ವಿತರಣೆ ಆಯ್ಕೆಮಾಡಿ'), findsOneWidget);
+    // Quantities unchanged
+    expect(find.text('25.0'), findsOneWidget);
+
+    // 4. Switch back to English
+    LanguageController.instance.setLanguage(AppLanguage.english);
+    await tester.pumpAndSettle();
+
+    expect(find.text('YOUR RATION ENTITLEMENT'), findsOneWidget);
+    expect(find.text('Collect at Fair Price Shop'), findsOneWidget);
   });
 }

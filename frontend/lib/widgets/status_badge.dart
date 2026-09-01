@@ -36,6 +36,12 @@ class StatusBadge extends StatelessWidget {
       case 'STABLE':
       case 'OPTIMIZED':
       case 'NORMAL':
+      case 'PASS':
+      case 'PASSED':
+      case 'PRE_DISPATCH_VALIDATED':
+      case 'DIGITAL_SEAL_VERIFIED':
+      case 'READY_FOR_DISPATCH':
+      case 'SUCCESS':
         bg = const Color(0xFFDCFCE7); // Green 100
         text = const Color(0xFF15803D); // Green 700
         border = const Color(0xFFBBF7D0);
@@ -50,9 +56,18 @@ class StatusBadge extends StatelessWidget {
       case 'PENDING':
       case 'DRAFT_GENERATED':
       case 'PORTABILITY':
+      case 'AI_RECOMMENDATION':
+      case 'ADVISORY':
+      case 'DELAYED':
+      case 'STOCK_DELAYED':
+      case 'STOCK_CONSTRAINT_DETECTED':
+      case 'DISPATCH_DELAYED':
         bg = const Color(0xFFFEF3C7); // Amber 100
         text = const Color(0xFFB45309); // Amber 700
         border = const Color(0xFFFDE68A);
+        if (customLabel == null && (normalized == 'DELAYED' || normalized == 'STOCK_DELAYED')) {
+          display = 'DELAYED — STOCK REPLENISHMENT PENDING';
+        }
         break;
 
       case 'HIGH':
@@ -66,6 +81,9 @@ class StatusBadge extends StatelessWidget {
       case 'REJECTED':
       case 'DISCONNECTED':
       case 'TAMPERED':
+      case 'FAIL':
+      case 'FAILED':
+      case 'INVARIANT_VIOLATION':
         bg = const Color(0xFFFEE2E2); // Red 100
         text = const Color(0xFFB91C1C); // Red 700
         border = const Color(0xFFFECACA);
@@ -78,6 +96,9 @@ class StatusBadge extends StatelessWidget {
       case 'SUBMITTED':
       case 'OUT_FOR_DELIVERY':
       case 'OFFICER_REDIRECTED':
+      case 'BENEFICIARY_INTENT':
+      case 'FORECAST_DEMAND':
+      case 'STATUTORY_ENTITLEMENT':
         bg = const Color(0xFFEFF6FF); // Blue 100
         text = const Color(0xFF1D4ED8); // Blue 700
         border = const Color(0xFFBFDBFE);
@@ -86,6 +107,7 @@ class StatusBadge extends StatelessWidget {
       case 'FORECAST_LOCKED':
       case 'MANIFEST_LOCKED':
       case 'LOCKED':
+      case 'SEALED':
       case 'DISPATCH_GENERATED':
       case 'OFFICER_DEFERRED':
         bg = const Color(0xFFF3E8FF); // Purple 100

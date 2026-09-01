@@ -125,7 +125,7 @@ class CitizenRequestAdvisor:
             "beneficiary_id": row["pseudonymous_beneficiary_id"] if row else beneficiary_id,
             "name": row["name_for_demo"] if row else "Beneficiary (Citizen)",
             "registered_fps_id": row["registered_fps_id"] if row else "FPS-KA-BLR-001",
-            "registered_fps_name": row["registered_fps_name"] if row else "Malleshwaram Seva Kendra (Demo)",
+            "registered_fps_name": row["registered_fps_name"] if row else "Malleshwaram Seva Kendra",
             "card_type": card_type,
             "family_members_count": members,
             "statutory_entitlement_rice_kg": rice_quota,

@@ -199,6 +199,179 @@ class _ReadinessAlertsDialogState extends State<ReadinessAlertsDialog> {
     );
   }
 
+  void _showSendStockDelayDialog() {
+    String selectedBenId = 'BEN-KA-0001';
+    String delayDays = '1–2 days';
+    final msgController = TextEditingController(
+      text: 'Your ration delivery has been temporarily delayed because government stock is currently unavailable. The delivery is expected within 1–2 days. You do not need to submit the request again.',
+    );
+    bool isSending = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          child: Container(
+            width: 580,
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.hourglass_top_rounded, color: Color(0xFFB45309), size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Dispatch Official Stock Delay Notification',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy),
+                          ),
+                          Text(
+                            'Notify beneficiary of 1–2 day temporary delay due to government stock replenishment',
+                            style: TextStyle(fontSize: 11, color: AppConstants.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text('Select Beneficiary Recipient:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<String>(
+                  value: selectedBenId,
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'BEN-KA-0001', child: Text('Swathi Bhat (BEN-KA-0001) • Malleshwaram Seva Kendra')),
+                    DropdownMenuItem(value: 'BEN-KA-0005', child: Text('Sunita Devi (BEN-KA-0005) • Bellandur Outer Ring Road')),
+                    DropdownMenuItem(value: 'BEN-KA-0015', child: Text('Ramesh Kumar (BEN-KA-0015) • Peenya Industrial Area')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => selectedBenId = val);
+                  },
+                ),
+                const SizedBox(height: 14),
+                const Text('Expected Delivery Window:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                TextFormField(
+                  initialValue: delayDays,
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    suffixText: 'Statutory Window',
+                  ),
+                  onChanged: (val) => delayDays = val,
+                ),
+                const SizedBox(height: 14),
+                const Text('Official SMS / WhatsApp Notification Text:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: msgController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.all(12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: Color(0xFFB45309)),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Policy Rule: Request is temporarily delayed, NOT cancelled. Citizen allocation is 100% retained.',
+                          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: isSending
+                          ? null
+                          : () async {
+                              setDialogState(() => isSending = true);
+                              try {
+                                await _apiService.sendDelayAlert(
+                                  beneficiaryId: selectedBenId,
+                                  delayDays: delayDays,
+                                  customMessage: msgController.text.trim(),
+                                  cycleId: widget.cycleId,
+                                );
+                                if (ctx.mounted) Navigator.of(ctx).pop();
+                                await _loadLogs();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('⏳ Official Stock Shortage Delay Alert Dispatched to Beneficiary.'),
+                                      backgroundColor: Color(0xFFB45309),
+                                    ),
+                                  );
+                                }
+                              } catch (err) {
+                                setDialogState(() => isSending = false);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Failed: $err'), backgroundColor: Colors.red),
+                                  );
+                                }
+                              }
+                            },
+                      icon: isSending
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.send_rounded, size: 16),
+                      label: const Text('Send Delay Alert'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFB45309),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFilterBar() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -214,21 +387,35 @@ class _ReadinessAlertsDialogState extends State<ReadinessAlertsDialog> {
             _buildChannelTab('IVR', 'IVR Voice'),
           ],
         ),
-        ElevatedButton.icon(
-          onPressed: _isBroadcasting ? null : _triggerBroadcast,
-          icon: _isBroadcasting
-              ? const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.send_rounded, size: 16),
-          label: const Text('Re-trigger Multi-Channel Broadcast',
-              style: TextStyle(fontSize: 12)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppConstants.tealAccent,
-            foregroundColor: Colors.white,
-          ),
+        Row(
+          children: [
+            ElevatedButton.icon(
+              onPressed: _showSendStockDelayDialog,
+              icon: const Icon(Icons.hourglass_top_rounded, size: 15),
+              label: const Text('Send Stock Delay Alert', style: TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFB45309),
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: _isBroadcasting ? null : _triggerBroadcast,
+              icon: _isBroadcasting
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.send_rounded, size: 16),
+              label: const Text('Re-trigger Multi-Channel Broadcast',
+                  style: TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppConstants.tealAccent,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -516,7 +703,7 @@ class _ReadinessAlertsDialogState extends State<ReadinessAlertsDialog> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Text(
-          'Notice: DEMO DATA — NOT GOVERNMENT DATA (SIMULATED ALERTS)',
+          'Govt. of Karnataka • Bengaluru Urban PDS Operations',
           style: TextStyle(fontSize: 10, color: AppConstants.textTertiary),
         ),
         ElevatedButton(

@@ -1,12 +1,78 @@
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
+import '../../core/localization.dart';
 import '../../models/beneficiary_model.dart';
 import '../../services/api_service.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/delivery_timeline.dart';
+import 'biometric_verification_dialog.dart';
 import 'intent_selection_screen.dart';
 import 'intent_history_screen.dart';
 import 'demo_login_screen.dart';
+
+class CombinedCitizenDeliveryOrder {
+  final String baseRequestId;
+  final String cycleId;
+  final String beneficiaryId;
+  final String deliveryMode;
+  final String? deliveryAddress;
+  final double deliveryDistanceKm;
+  final double transportFeeInr;
+  final String deliveryStatus;
+  final String? citizenConfirmedAt;
+  final String? disputeReason;
+  final String? registeredFpsName;
+  final String? intendedFpsName;
+  final String? delayReason;
+  final String? expectedDeliveryWindow;
+  final String? delayNotifiedAt;
+  final List<CitizenDeliveryRecord> items;
+
+  CombinedCitizenDeliveryOrder({
+    required this.baseRequestId,
+    required this.cycleId,
+    required this.beneficiaryId,
+    required this.deliveryMode,
+    this.deliveryAddress,
+    required this.deliveryDistanceKm,
+    required this.transportFeeInr,
+    required this.deliveryStatus,
+    this.citizenConfirmedAt,
+    this.disputeReason,
+    this.registeredFpsName,
+    this.intendedFpsName,
+    this.delayReason,
+    this.expectedDeliveryWindow,
+    this.delayNotifiedAt,
+    required this.items,
+  });
+
+  CitizenDeliveryRecord? get riceItem =>
+      items.where((i) => i.commodity.toLowerCase() == 'rice').firstOrNull;
+  CitizenDeliveryRecord? get wheatItem =>
+      items.where((i) => i.commodity.toLowerCase() == 'wheat').firstOrNull;
+
+  double get authorizedRiceKg => riceItem != null
+      ? (riceItem!.authorizedQuantityKg > 0
+          ? riceItem!.authorizedQuantityKg
+          : riceItem!.requestedQuantityKg)
+      : 0.0;
+
+  double get authorizedWheatKg => wheatItem != null
+      ? (wheatItem!.authorizedQuantityKg > 0
+          ? wheatItem!.authorizedQuantityKg
+          : wheatItem!.requestedQuantityKg)
+      : 0.0;
+
+  double get totalQuantityKg => authorizedRiceKg + authorizedWheatKg;
+
+  bool get isDelayed =>
+      deliveryStatus.toUpperCase() == 'DELAYED' ||
+      deliveryStatus.toUpperCase() == 'STOCK_DELAYED' ||
+      items.any((i) =>
+          i.deliveryStatus.toUpperCase() == 'DELAYED' ||
+          i.deliveryStatus.toUpperCase() == 'STOCK_DELAYED');
+}
 
 class BeneficiaryHomeScreen extends StatefulWidget {
   final String beneficiaryId;
@@ -31,6 +97,12 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  // Household-based Entitlement State (5 kg / eligible person)
+  int _eligibleMembersCount = 5;
+  double _distributedQuantityKg = 0.0;
+  double _remainingBalanceKg = 25.0;
+  bool _isBiometricVerified = false;
+
   @override
   void initState() {
     super.initState();
@@ -45,41 +117,37 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
     });
 
     try {
-      final detail = await _apiService.fetchBeneficiaryDetail(widget.beneficiaryId);
+      final ben = await _apiService.fetchBeneficiaryDetail(widget.beneficiaryId);
+      final ent = await _apiService.fetchBeneficiaryEntitlementSummary(
+        widget.beneficiaryId,
+        cycleId: '2026-09',
+      );
       final intents = await _apiService.fetchBeneficiaryIntents(
         widget.beneficiaryId,
         cycleId: '2026-09',
       );
-
-      BeneficiaryEntitlementSummary? ent;
-      try {
-        ent = await _apiService.fetchBeneficiaryEntitlementSummary(
-          widget.beneficiaryId,
-          cycleId: '2026-09',
-        );
-      } catch (_) {}
-
-      List<CitizenDeliveryRecord> records = [];
-      try {
-        records = await _apiService.fetchBeneficiaryDeliveryRecords(
-          widget.beneficiaryId,
-          cycleId: '2026-09',
-        );
-      } catch (_) {}
+      final deliveries = await _apiService.fetchBeneficiaryDeliveryRecords(
+        widget.beneficiaryId,
+        cycleId: '2026-09',
+      );
 
       if (mounted) {
         setState(() {
-          _beneficiary = detail;
+          _beneficiary = ben;
           _entitlement = ent;
           _activeIntents = intents;
-          _deliveryRecords = records;
+          _deliveryRecords = deliveries;
+          if (ent.familyMembersCount > 0) {
+            _eligibleMembersCount = ent.familyMembersCount;
+          }
+          _remainingBalanceKg = (_eligibleMembersCount * 5.0 - _distributedQuantityKg).clamp(0.0, _eligibleMembersCount * 5.0);
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Failed to load beneficiary profile: $e';
+          _errorMessage = 'Failed to load official beneficiary data: $e';
           _isLoading = false;
         });
       }
@@ -95,12 +163,52 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           beneficiary: _beneficiary!,
           apiService: _apiService,
           initialDeliveryMode: initialMode,
+          initialEligibleMembersCount: _eligibleMembersCount,
         ),
       ),
     );
 
     if (result == true || result == null) {
       _loadBeneficiaryData();
+    }
+  }
+
+  void _openBiometricVerificationDialog(CombinedCitizenDeliveryOrder order) async {
+    if (_beneficiary == null) return;
+
+    final riceQty = order.authorizedRiceKg > 0 ? order.authorizedRiceKg : (_eligibleMembersCount * 4.0);
+    final wheatQty = order.authorizedWheatKg > 0 ? order.authorizedWheatKg : (_eligibleMembersCount * 1.0);
+
+    final res = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => BiometricVerificationDialog(
+        beneficiary: _beneficiary!,
+        entitlement: _entitlement,
+        deliveryMode: order.deliveryMode,
+        deliveryAddress: order.deliveryAddress,
+        fpsName: order.intendedFpsName ?? order.registeredFpsName,
+        riceQtyKg: riceQty,
+        wheatQtyKg: wheatQty,
+        eligibleMembersCount: _eligibleMembersCount,
+        onDistributionComplete: (distributedKg, remainingKg) {
+          setState(() {
+            _distributedQuantityKg = distributedKg;
+            _remainingBalanceKg = remainingKg;
+            _isBiometricVerified = true;
+          });
+        },
+      ),
+    );
+
+    if (res == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('biometric.distribute_success_toast')),
+          backgroundColor: const Color(0xFF15803D),
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 
@@ -117,34 +225,124 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
     );
   }
 
-  void _confirmFullReceipt(CitizenDeliveryRecord record) async {
-    try {
-      await _apiService.confirmCitizenDelivery(
-        beneficiaryId: widget.beneficiaryId,
-        requestId: record.requestId,
-        confirmationStatus: 'DELIVERY_CONFIRMED',
-        receivedRiceKg: record.commodity == 'Rice' ? record.authorizedQuantityKg : 0.0,
-        receivedWheatKg: record.commodity == 'Wheat' ? record.authorizedQuantityKg : 0.0,
+  List<CombinedCitizenDeliveryOrder> _getCombinedDeliveryOrders() {
+    if (_deliveryRecords.isEmpty) return [];
+
+    final Map<String, List<CitizenDeliveryRecord>> grouped = {};
+    for (final r in _deliveryRecords) {
+      String baseId = r.requestId;
+      if (baseId.endsWith('-R') || baseId.endsWith('-W')) {
+        baseId = baseId.substring(0, baseId.length - 2);
+      }
+      grouped.putIfAbsent(baseId, () => []).add(r);
+    }
+
+    final List<CombinedCitizenDeliveryOrder> result = [];
+    for (final entry in grouped.entries) {
+      final baseId = entry.key;
+      final items = entry.value;
+      final first = items.first;
+
+      // Status determination
+      String statusKey = first.deliveryStatus;
+      final anyConfirmed = items.any((i) => i.citizenConfirmedAt != null);
+      final anyDispute = items.any((i) => i.disputeReason != null);
+
+      if (anyConfirmed) {
+        statusKey = 'DELIVERY_CONFIRMED';
+      } else if (anyDispute) {
+        statusKey = 'DELIVERY_DISPUTE';
+      } else if (items.any((i) => i.deliveryStatus == 'DELAYED' || i.deliveryStatus == 'STOCK_DELAYED')) {
+        statusKey = 'DELAYED';
+      } else {
+        if (items.any((i) => i.deliveryStatus == 'DELIVERED')) {
+          statusKey = 'DELIVERED';
+        } else if (items.any((i) => i.deliveryStatus == 'OUT_FOR_DELIVERY')) {
+          statusKey = 'OUT_FOR_DELIVERY';
+        } else if (items.any((i) => i.deliveryStatus == 'ALLOCATED')) {
+          statusKey = 'ALLOCATED';
+        } else {
+          statusKey = first.deliveryStatus;
+        }
+      }
+
+      final disputeNotes = items
+          .map((i) => i.disputeReason)
+          .where((d) => d != null && d.isNotEmpty)
+          .toSet()
+          .join(' • ');
+
+      final delayReason = items.map((i) => i.delayReason).firstWhere((d) => d != null && d.isNotEmpty, orElse: () => null);
+      final expectedWindow = items.map((i) => i.expectedDeliveryWindow).firstWhere((w) => w != null && w.isNotEmpty, orElse: () => null);
+      final delayNotifiedAt = items.map((i) => i.delayNotifiedAt).firstWhere((n) => n != null && n.isNotEmpty, orElse: () => null);
+
+      result.add(
+        CombinedCitizenDeliveryOrder(
+          baseRequestId: baseId,
+          cycleId: first.cycleId,
+          beneficiaryId: first.beneficiaryId,
+          deliveryMode: first.deliveryMode,
+          deliveryAddress: first.deliveryAddress,
+          deliveryDistanceKm: first.deliveryDistanceKm,
+          transportFeeInr: first.transportFeeInr,
+          deliveryStatus: statusKey,
+          citizenConfirmedAt: first.citizenConfirmedAt,
+          disputeReason: disputeNotes.isNotEmpty ? disputeNotes : null,
+          registeredFpsName: first.registeredFpsName,
+          intendedFpsName: first.intendedFpsName,
+          delayReason: delayReason,
+          expectedDeliveryWindow: expectedWindow,
+          delayNotifiedAt: delayNotifiedAt,
+          items: items,
+        ),
       );
-      _loadBeneficiaryData();
+    }
+
+    return result;
+  }
+
+  void _confirmCombinedOrderReceipt(CombinedCitizenDeliveryOrder order) async {
+    setState(() => _isLoading = true);
+    try {
+      for (final item in order.items) {
+        final expectedQty = item.authorizedQuantityKg > 0
+            ? item.authorizedQuantityKg
+            : item.requestedQuantityKg;
+        await _apiService.confirmCitizenDelivery(
+          beneficiaryId: widget.beneficiaryId,
+          requestId: item.requestId,
+          confirmationStatus: 'DELIVERY_CONFIRMED',
+          receivedRiceKg: item.commodity.toLowerCase() == 'rice' ? expectedQty : 0.0,
+          receivedWheatKg: item.commodity.toLowerCase() == 'wheat' ? expectedQty : 0.0,
+        );
+      }
+      await _loadBeneficiaryData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Delivery confirmed! Digital receipt registered with district supply office.'),
+        SnackBar(
+          content: Text(tr('delivery.confirm_success')),
           backgroundColor: AppConstants.successGreen,
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Confirmation failed: $e'), backgroundColor: AppConstants.dangerRed),
-      );
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Confirmation failed: $e'), backgroundColor: AppConstants.dangerRed),
+        );
+      }
     }
   }
 
-  void _showDeliveryDisputeModal(CitizenDeliveryRecord record) {
-    final qtyCtrl = TextEditingController(
-      text: (record.authorizedQuantityKg > 0 ? record.authorizedQuantityKg : record.requestedQuantityKg).toStringAsFixed(1),
-    );
+  void _showCombinedDeliveryDisputeModal(CombinedCitizenDeliveryOrder order) {
+    final riceItem = order.riceItem;
+    final wheatItem = order.wheatItem;
+
+    final double expectedRice = order.authorizedRiceKg;
+    final double expectedWheat = order.authorizedWheatKg;
+
+    final riceQtyCtrl = TextEditingController(text: expectedRice.toStringAsFixed(1));
+    final wheatQtyCtrl = TextEditingController(text: expectedWheat.toStringAsFixed(1));
     final notesCtrl = TextEditingController();
     bool isProcessing = false;
     String? modalError;
@@ -158,9 +356,12 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
-          final expectedQty = record.authorizedQuantityKg > 0 ? record.authorizedQuantityKg : record.requestedQuantityKg;
-          final receivedVal = double.tryParse(qtyCtrl.text) ?? expectedQty;
-          final shortfall = (expectedQty - receivedVal).clamp(0.0, 999.0);
+          final actualRice = double.tryParse(riceQtyCtrl.text) ?? expectedRice;
+          final actualWheat = double.tryParse(wheatQtyCtrl.text) ?? expectedWheat;
+          final shortfallRice = (expectedRice - actualRice).clamp(0.0, 999.0);
+          final shortfallWheat = (expectedWheat - actualWheat).clamp(0.0, 999.0);
+
+          final quotaSummary = '${expectedRice > 0 ? "${expectedRice.toStringAsFixed(1)} ${tr('commodity.kg')} ${tr('commodity.rice')}" : ""}${expectedRice > 0 && expectedWheat > 0 ? " + " : ""}${expectedWheat > 0 ? "${expectedWheat.toStringAsFixed(1)} ${tr('commodity.kg')} ${tr('commodity.wheat')}" : ""}';
 
           return Padding(
             padding: EdgeInsets.only(
@@ -177,13 +378,13 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.report_problem_outlined, color: AppConstants.dangerRed, size: 22),
-                          SizedBox(width: 8),
+                          const Icon(Icons.report_problem_outlined, color: AppConstants.dangerRed, size: 22),
+                          const SizedBox(width: 8),
                           Text(
-                            'Report Delivery Discrepancy',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy),
+                            tr('dispute.modal_title'),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy),
                           ),
                         ],
                       ),
@@ -197,55 +398,84 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Order #${record.requestId} • Entitled Quota: ${expectedQty.toStringAsFixed(1)} kg ${record.commodity}',
+                    tr('dispute.order_ref', params: {'orderId': order.baseRequestId, 'quota': quotaSummary}),
                     style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary),
                   ),
                   const SizedBox(height: 14),
 
-                  // Shortfall summary pill
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFEF2F2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFFECACA)),
+                  if (shortfallRice > 0 || shortfallWheat > 0) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(tr('dispute.detected_shortfall'), style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppConstants.dangerRed)),
+                          const SizedBox(height: 4),
+                          if (shortfallRice > 0)
+                            Text(
+                              tr('dispute.rice_shortfall', params: {'qty': shortfallRice.toStringAsFixed(1)}),
+                              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppConstants.dangerRed),
+                            ),
+                          if (shortfallWheat > 0)
+                            Text(
+                              tr('dispute.wheat_shortfall', params: {'qty': shortfallWheat.toStringAsFixed(1)}),
+                              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppConstants.dangerRed),
+                            ),
+                        ],
+                      ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Detected Shortfall:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppConstants.dangerRed)),
-                        Text(
-                          '${shortfall.toStringAsFixed(1)} kg ${record.commodity}',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppConstants.dangerRed),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+                    const SizedBox(height: 14),
+                  ],
 
-                  TextField(
-                    controller: qtyCtrl,
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => setModalState(() {}),
-                    decoration: InputDecoration(
-                      labelText: 'Actual Quantity Received (kg)',
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      prefixIcon: const Icon(Icons.scale_outlined, size: 18),
+                  if (riceItem != null) ...[
+                    TextField(
+                      controller: riceQtyCtrl,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setModalState(() {}),
+                      decoration: InputDecoration(
+                        labelText: tr('dispute.actual_rice_label', params: {'expected': expectedRice.toStringAsFixed(1)}),
+                        isDense: true,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        prefixIcon: const Icon(Icons.scale_outlined, size: 18),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 10),
+                  ],
+
+                  if (wheatItem != null) ...[
+                    TextField(
+                      controller: wheatQtyCtrl,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setModalState(() {}),
+                      decoration: InputDecoration(
+                        labelText: tr('dispute.actual_wheat_label', params: {'expected': expectedWheat.toStringAsFixed(1)}),
+                        isDense: true,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        prefixIcon: const Icon(Icons.scale_outlined, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
 
                   TextField(
                     controller: notesCtrl,
                     maxLines: 2,
                     decoration: InputDecoration(
-                      labelText: 'Discrepancy Details / Remarks',
-                      hintText: 'e.g. Weighment deficit, damaged packaging, missing items',
+                      labelText: tr('dispute.remarks_label'),
+                      hintText: tr('dispute.remarks_hint'),
                       isDense: true,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
+                  if (modalError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(modalError!, style: const TextStyle(color: AppConstants.dangerRed, fontSize: 12)),
+                  ],
                   const SizedBox(height: 16),
 
                   ElevatedButton.icon(
@@ -262,45 +492,48 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                             });
 
                             try {
-                              final actualKg = double.tryParse(qtyCtrl.text) ?? 0.0;
-                              await _apiService.confirmCitizenDelivery(
-                                beneficiaryId: widget.beneficiaryId,
-                                requestId: record.requestId,
-                                confirmationStatus: 'DELIVERY_DISPUTE',
-                                receivedRiceKg: record.commodity == 'Rice' ? actualKg : 0.0,
-                                receivedWheatKg: record.commodity == 'Wheat' ? actualKg : 0.0,
-                                disputeNotes: notesCtrl.text.trim(),
-                              );
+                              for (final item in order.items) {
+                                final isR = item.commodity.toLowerCase() == 'rice';
+                                final actualVal = isR ? actualRice : actualWheat;
+                                await _apiService.confirmCitizenDelivery(
+                                  beneficiaryId: widget.beneficiaryId,
+                                  requestId: item.requestId,
+                                  confirmationStatus: 'DELIVERY_DISPUTE',
+                                  receivedRiceKg: isR ? actualVal : 0.0,
+                                  receivedWheatKg: !isR ? actualVal : 0.0,
+                                  disputeNotes: notesCtrl.text.trim(),
+                                );
+                              }
                               if (!ctx.mounted) return;
                               Navigator.pop(ctx);
                               _loadBeneficiaryData();
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Dispute recorded. Submitted to District Supply Officer (DSO) for inquiry.'),
+                                SnackBar(
+                                  content: Text(tr('dispute.success')),
                                   backgroundColor: AppConstants.accentAmber,
                                 ),
                               );
                             } catch (e) {
                               setModalState(() {
                                 isProcessing = false;
-                                modalError = e.toString();
+                                modalError = 'Submission failed: $e';
                               });
                             }
                           },
                     icon: isProcessing
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.send_rounded, size: 16),
-                    label: const Text('Submit Formal Dispute to DSO Queue'),
+                    label: Text(
+                      isProcessing ? tr('dispute.submitting') : tr('dispute.btn_submit'),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppConstants.dangerRed,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
-                  if (modalError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(modalError!, style: const TextStyle(color: Colors.red, fontSize: 12), textAlign: TextAlign.center),
-                  ],
                 ],
               ),
             ),
@@ -312,94 +545,149 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppConstants.backgroundLight,
-      appBar: _buildGovernmentAppBar(),
-      body: _isLoading
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(strokeWidth: 2.5, color: AppConstants.primaryNavy),
-                  SizedBox(height: 16),
-                  Text('Loading verified government entitlement record...', style: TextStyle(color: AppConstants.textSecondary, fontSize: 13)),
-                ],
-              ),
-            )
-          : _errorMessage != null
+    return AnimatedBuilder(
+      animation: LanguageController.instance,
+      builder: (context, _) {
+        return Scaffold(
+          backgroundColor: AppConstants.backgroundLight,
+          appBar: _buildGovernmentAppBar(),
+          body: _isLoading
               ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
-                        const SizedBox(height: 12),
-                        Text(_errorMessage!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _loadBeneficiaryData,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Try Again'),
-                        ),
-                      ],
-                    ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(strokeWidth: 2.5, color: AppConstants.primaryNavy),
+                      const SizedBox(height: 16),
+                      Text(tr('profile.loading'), style: const TextStyle(color: AppConstants.textSecondary, fontSize: 13)),
+                    ],
                   ),
                 )
-              : RefreshIndicator(
-                  onRefresh: _loadBeneficiaryData,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: AppConstants.space20, vertical: AppConstants.space20),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 820),
+              : _errorMessage != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // 1. Beneficiary Profile & Card Identity Card
-                            _buildBeneficiaryProfileCard(),
-                            const SizedBox(height: AppConstants.space16),
-
-                            // 2. HERO: Your Ration Entitlement (Progress visualization & remaining dominant)
-                            _buildHeroRationEntitlementCard(),
-                            const SizedBox(height: AppConstants.space20),
-
-                            // 3. Plan Your Upcoming Collection (Two Large Service Cards)
-                            _buildPlanCollectionSection(),
-                            const SizedBox(height: AppConstants.space20),
-
-                            // 4. Current Request / Delivery Status (5-Stage Timeline)
-                            if (_deliveryRecords.isNotEmpty) ...[
-                              _buildCurrentDeliveryStatusSection(),
-                              const SizedBox(height: AppConstants.space20),
-                            ],
-
-                            // 5. Recent Distribution History (Compact list rows)
-                            _buildRecentDistributionHistorySection(),
-                            const SizedBox(height: AppConstants.space20),
-
-                            // Statutory Footer Reassurance
-                            Center(
-                              child: Text(
-                                'DEPARTMENT OF FOOD & CIVIL SUPPLIES • GOVERNMENT OF KARNATAKA\nALL FOODGRAINS UNDER NFSA ARE 100% SUBSIDIZED (₹0.00/KG)',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.8,
-                                  color: Colors.grey.shade500,
-                                  height: 1.4,
-                                ),
-                              ),
+                            Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
+                            const SizedBox(height: 12),
+                            Text(_errorMessage!, textAlign: TextAlign.center),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _loadBeneficiaryData,
+                              icon: const Icon(Icons.refresh),
+                              label: Text(tr('profile.error_retry')),
                             ),
-                            const SizedBox(height: AppConstants.space16),
                           ],
                         ),
                       ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadBeneficiaryData,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: AppConstants.space20, vertical: AppConstants.space20),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 820),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // 0. Prominent Language Selector Bar
+                                _buildLanguageSelectorQuickBar(),
+                                const SizedBox(height: AppConstants.space16),
+
+                                // 1. Beneficiary Profile & Card Identity Card
+                                _buildBeneficiaryProfileCard(),
+                                const SizedBox(height: AppConstants.space16),
+
+                                // 1b. Eligible Household Members Selector (5 kg per person)
+                                _buildHouseholdMembersSelectorCard(),
+                                const SizedBox(height: AppConstants.space16),
+
+                                // 2. HERO: Your Ration Entitlement (Progress visualization & remaining dominant)
+                                _buildHeroRationEntitlementCard(),
+                                const SizedBox(height: AppConstants.space20),
+
+                                // 3. Plan Your Upcoming Collection (Two Large Service Cards)
+                                _buildPlanCollectionSection(),
+                                const SizedBox(height: AppConstants.space20),
+
+                                // 4. Current Request / Delivery Status (5-Stage Timeline)
+                                if (_deliveryRecords.isNotEmpty) ...[
+                                  _buildCurrentDeliveryStatusSection(),
+                                  const SizedBox(height: AppConstants.space20),
+                                ],
+
+                                // 5. Recent Distribution History (Compact list rows)
+                                _buildRecentDistributionHistorySection(),
+                                const SizedBox(height: AppConstants.space20),
+
+                                // Statutory Footer Reassurance
+                                Center(
+                                  child: Text(
+                                    '${tr('app.gov_badge')}\n${tr('commodity.entitled_free')}',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.8,
+                                      color: Colors.grey.shade500,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: AppConstants.space16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+        );
+      },
+    );
+  }
+
+  // LANGUAGE SELECTOR QUICK BAR
+  Widget _buildLanguageSelectorQuickBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+        border: Border.all(color: AppConstants.cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.language_rounded, size: 18, color: AppConstants.primaryNavy),
+              const SizedBox(width: 8),
+              Text(
+                tr('lang.selector_title'),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppConstants.primaryNavy,
                 ),
+              ),
+            ],
+          ),
+          const LanguageSelectorWidget(
+            isCompact: false,
+            backgroundColor: Color(0xFFF1F5F9),
+          ),
+        ],
+      ),
     );
   }
 
@@ -422,35 +710,45 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
             child: const Icon(Icons.shield_outlined, size: 16, color: Colors.white),
           ),
           const SizedBox(width: 10),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'PDS DemandSync • Citizen Beneficiary Portal',
-                style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, letterSpacing: 0.2),
-              ),
-              Text(
-                'National Food Security Act (NFSA) • Public Distribution Services',
-                style: TextStyle(fontSize: 10, color: Colors.white70),
-              ),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${tr('app.name')} • ${tr('app.dashboard')}',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.2),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  tr('app.nfsa_notice'),
+                  style: const TextStyle(fontSize: 10, color: Colors.white70),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ],
       ),
       actions: [
+        // Language Selector inside App Bar
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 10),
+          child: LanguageSelectorWidget(isCompact: true),
+        ),
+        const SizedBox(width: 4),
         IconButton(
-          tooltip: 'Refresh Entitlement',
+          tooltip: tr('nav.refresh'),
           icon: const Icon(Icons.refresh, size: 20),
           onPressed: _loadBeneficiaryData,
         ),
         IconButton(
-          tooltip: 'View Signal History',
+          tooltip: tr('history.title'),
           icon: const Icon(Icons.history_rounded, size: 20),
           onPressed: _navigateToIntentHistory,
         ),
         IconButton(
-          tooltip: 'Exit Portal',
+          tooltip: tr('nav.logout'),
           icon: const Icon(Icons.logout_rounded, size: 20),
           onPressed: () {
             _apiService.logout();
@@ -469,7 +767,6 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   Widget _buildBeneficiaryProfileCard() {
     final b = _beneficiary!;
     final cardLabel = _entitlement?.cardLabel ?? 'Priority Household (PHH)';
-    final familyCount = _entitlement?.familyMembersCount ?? 4;
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.space16),
@@ -514,9 +811,9 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: AppConstants.cardBorder),
                       ),
-                      child: const Text(
-                        'Cycle 7 · Sep 2026',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
+                      child: Text(
+                        tr('app.cycle_label'),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
                       ),
                     ),
                   ],
@@ -529,11 +826,11 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                   children: [
                     StatusBadge(status: b.status, fontSize: 10),
                     Text(
-                      'Ration Card: ${b.pseudonymousBeneficiaryId}',
+                      '${tr('profile.card_type', params: {'type': b.pseudonymousBeneficiaryId})}',
                       style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppConstants.textSecondary),
                     ),
                     Text(
-                      '• $cardLabel ($familyCount Members)',
+                      '• $cardLabel ($_eligibleMembersCount ${tr('profile.family_members')})',
                       style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
                     ),
                   ],
@@ -546,19 +843,165 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
     );
   }
 
+  // 1b. ELIGIBLE HOUSEHOLD MEMBERS SELECTOR CARD (5 kg statutory quota / person)
+  Widget _buildHouseholdMembersSelectorCard() {
+    final maxEntitlement = _eligibleMembersCount * 5.0;
+
+    return Container(
+      key: const ValueKey('card_household_members_selector'),
+      padding: const EdgeInsets.all(AppConstants.space16),
+      decoration: BoxDecoration(
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: AppConstants.accentBlue.withValues(alpha: 0.35), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: AppConstants.accentBlue.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.people_alt_outlined, color: AppConstants.accentBlue, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    tr('members.title'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: AppConstants.primaryNavy,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: Text(
+                  tr('members.badge'),
+                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: AppConstants.accentBlue),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            tr('members.subtitle'),
+            style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
+          ),
+          const SizedBox(height: 14),
+
+          // Stepper & Live Formula Row
+          Row(
+            children: [
+              // Interactive Stepper
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppConstants.cardBorder),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      key: const ValueKey('btn_decrement_members'),
+                      icon: const Icon(Icons.remove_rounded, size: 18),
+                      onPressed: _eligibleMembersCount > 1
+                          ? () {
+                              setState(() {
+                                _eligibleMembersCount--;
+                                _remainingBalanceKg = (_eligibleMembersCount * 5.0 - _distributedQuantityKg).clamp(0.0, _eligibleMembersCount * 5.0);
+                              });
+                            }
+                          : null,
+                      tooltip: 'Decrease eligible members',
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Text(
+                        '$_eligibleMembersCount',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy),
+                      ),
+                    ),
+                    IconButton(
+                      key: const ValueKey('btn_increment_members'),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      onPressed: _eligibleMembersCount < 8
+                          ? () {
+                              setState(() {
+                                _eligibleMembersCount++;
+                                _remainingBalanceKg = (_eligibleMembersCount * 5.0 - _distributedQuantityKg).clamp(0.0, _eligibleMembersCount * 5.0);
+                              });
+                            }
+                          : null,
+                      tooltip: 'Increase eligible members',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+
+              // Live Calculation Pill
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tr('members.formula', params: {
+                          'count': '$_eligibleMembersCount',
+                          'max': maxEntitlement.toStringAsFixed(1),
+                        }),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Combined Quota: ${(maxEntitlement * 0.8).toStringAsFixed(1)} kg Rice + ${(maxEntitlement * 0.2).toStringAsFixed(1)} kg Wheat',
+                        style: const TextStyle(fontSize: 10.5, color: Color(0xFF166534)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   // 2. HERO: YOUR RATION ENTITLEMENT CARD
   Widget _buildHeroRationEntitlementCard() {
-    final riceTotal = _entitlement?.statutoryEntitlementRiceKg ?? 20.0;
-    final wheatTotal = _entitlement?.statutoryEntitlementWheatKg ?? 5.0;
-    final totalEntitlementKg = riceTotal + wheatTotal;
+    final totalEntitlementKg = _eligibleMembersCount * 5.0;
+    final riceTotal = _eligibleMembersCount * 4.0;
+    final wheatTotal = _eligibleMembersCount * 1.0;
 
-    final riceConsumed = _entitlement?.consumedRiceKg ?? 0.0;
-    final wheatConsumed = _entitlement?.consumedWheatKg ?? 0.0;
-    final totalConsumedKg = riceConsumed + wheatConsumed;
+    final totalConsumedKg = _distributedQuantityKg;
+    final riceConsumed = (_distributedQuantityKg * 0.8).clamp(0.0, riceTotal);
+    final wheatConsumed = (_distributedQuantityKg * 0.2).clamp(0.0, wheatTotal);
 
-    final riceRemaining = _entitlement?.remainingEligibleRiceKg ?? 20.0;
-    final wheatRemaining = _entitlement?.remainingEligibleWheatKg ?? 5.0;
-    final remainingBalanceKg = _entitlement?.totalEligibleBalanceKg ?? 25.0;
+    final riceRemaining = (riceTotal - riceConsumed).clamp(0.0, riceTotal);
+    final wheatRemaining = (wheatTotal - wheatConsumed).clamp(0.0, wheatTotal);
+    final remainingBalanceKg = _remainingBalanceKg;
 
     final double progressFraction = totalEntitlementKg > 0
         ? (totalConsumedKg / totalEntitlementKg).clamp(0.0, 1.0)
@@ -585,13 +1028,13 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.assignment_turned_in_outlined, color: AppConstants.accentBlue, size: 18),
-                  SizedBox(width: 8),
+                  const Icon(Icons.assignment_turned_in_outlined, color: AppConstants.accentBlue, size: 18),
+                  const SizedBox(width: 8),
                   Text(
-                    'YOUR RATION ENTITLEMENT',
-                    style: TextStyle(
+                    tr('entitlement.title'),
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
                       color: AppConstants.primaryNavy,
@@ -607,9 +1050,9 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: const Color(0xFFBBF7D0)),
                 ),
-                child: const Text(
-                  '100% SUBSIDIZED @ ₹0.00/kg',
-                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
+                child: Text(
+                  tr('commodity.entitled_free'),
+                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
                 ),
               ),
             ],
@@ -626,36 +1069,39 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'AVAILABLE REMAINING BALANCE',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70, letterSpacing: 0.5),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          remainingBalanceKg.toStringAsFixed(1),
-                          style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'KG',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white70),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Rice: ${riceRemaining.toStringAsFixed(1)} kg  •  Wheat: ${wheatRemaining.toStringAsFixed(1)} kg',
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tr('entitlement.remaining_balance').toUpperCase(),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70, letterSpacing: 0.5),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            remainingBalanceKg.toStringAsFixed(1),
+                            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            tr('commodity.kg').toUpperCase(),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white70),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${tr('commodity.rice')}: ${riceRemaining.toStringAsFixed(1)} ${tr('commodity.kg')}  •  ${tr('commodity.wheat')}: ${wheatRemaining.toStringAsFixed(1)} ${tr('commodity.kg')}',
+                        style: const TextStyle(fontSize: 12, color: Colors.white),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
@@ -666,15 +1112,15 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      const Text('Total Monthly Quota', style: TextStyle(fontSize: 10.5, color: Colors.white70)),
+                      Text(tr('entitlement.monthly_quota'), style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
                       const SizedBox(height: 2),
                       Text(
-                        '${totalEntitlementKg.toStringAsFixed(1)} kg',
+                        '${totalEntitlementKg.toStringAsFixed(1)} ${tr('commodity.kg')}',
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Consumed: ${totalConsumedKg.toStringAsFixed(1)} kg',
+                        '${tr('entitlement.consumed')}: ${totalConsumedKg.toStringAsFixed(1)} ${tr('commodity.kg')}',
                         style: const TextStyle(fontSize: 10.5, color: Color(0xFFFDE68A)),
                       ),
                     ],
@@ -693,12 +1139,12 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Monthly Lifting Progress: ${(progressFraction * 100).toStringAsFixed(0)}% Lifted',
+                    '${(progressFraction * 100).toStringAsFixed(0)}% Lifted',
                     style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppConstants.textPrimary),
                   ),
                   Text(
-                    '${remainingBalanceKg.toStringAsFixed(1)} kg Remaining to Collect',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppConstants.successGreen),
+                    '${remainingBalanceKg.toStringAsFixed(1)} ${tr('commodity.kg')} remaining',
+                    style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
                   ),
                 ],
               ),
@@ -708,35 +1154,64 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                 child: LinearProgressIndicator(
                   value: progressFraction,
                   minHeight: 8,
-                  backgroundColor: const Color(0xFFE2E8F0),
-                  valueColor: const AlwaysStoppedAnimation<Color>(AppConstants.accentBlue),
+                  backgroundColor: AppConstants.primaryNavy.withValues(alpha: 0.08),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    progressFraction > 0.8
+                        ? AppConstants.successGreen
+                        : (progressFraction > 0.4 ? AppConstants.accentAmber : AppConstants.accentBlue),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Dynamic Lifecycle Status Summary
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Text(
+                        tr('biometric.summary_entitlement', params: {'max': totalEntitlementKg.toStringAsFixed(1)}),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
+                      ),
+                      Container(margin: const EdgeInsets.symmetric(horizontal: 8), width: 1, height: 12, color: Colors.grey.shade300),
+                      Text(
+                        tr('biometric.summary_distributed', params: {'dist': totalConsumedKg.toStringAsFixed(1)}),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
+                      ),
+                      Container(margin: const EdgeInsets.symmetric(horizontal: 8), width: 1, height: 12, color: Colors.grey.shade300),
+                      Text(
+                        tr('biometric.summary_remaining', params: {'rem': remainingBalanceKg.toStringAsFixed(1)}),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: AppConstants.space14),
+          const SizedBox(height: 12),
 
-          // Reassuring Statutory Policy Notice
-          Container(
-            padding: const EdgeInsets.all(AppConstants.space12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.lock_outline, size: 16, color: AppConstants.textSecondary),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Your ration entitlement is determined by government policy. You cannot increase or customize the quantity.',
-                    style: TextStyle(fontSize: 11.5, color: AppConstants.textSecondary, fontWeight: FontWeight.w600, height: 1.35),
-                  ),
+          // Policy rule statement
+          Row(
+            children: [
+              const Icon(Icons.info_outline_rounded, size: 14, color: AppConstants.textSecondary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  tr('entitlement.statutory_rule'),
+                  style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
@@ -745,15 +1220,14 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
 
   // 3. PLAN YOUR UPCOMING COLLECTION (Two Large Service Cards)
   Widget _buildPlanCollectionSection() {
-    final homeFpsName = _beneficiary?.registeredFpsName ?? 'Malleshwaram Seva Kendra (Demo)';
-    final homeFpsId = _beneficiary?.registeredFpsId ?? 'FPS-KA-BLR-001';
+    final homeFpsName = _beneficiary?.registeredFpsName ?? 'Malleshwaram Seva Kendra';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'PLAN YOUR UPCOMING COLLECTION',
-          style: TextStyle(
+        Text(
+          tr('service.plan_title'),
+          style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w800,
             color: AppConstants.primaryNavy,
@@ -761,9 +1235,9 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Declare your intended pickup channel in advance to guarantee zero-stockout allocation.',
-          style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+        Text(
+          tr('service.plan_subtitle'),
+          style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary),
         ),
         const SizedBox(height: AppConstants.space12),
 
@@ -773,32 +1247,32 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
             final isWide = constraints.maxWidth > 580;
 
             final card1 = _buildServiceChoiceCard(
-              title: 'Collect at Fair Price Shop',
+              title: tr('service.fps_choice_title'),
               icon: Icons.storefront_outlined,
               iconColor: AppConstants.primaryNavy,
               iconBg: const Color(0xFFEFF6FF),
-              badgeText: 'FREE PICKUP',
+              badgeText: tr('service.fps_choice_badge'),
               badgeColor: AppConstants.accentBlue,
-              description: 'Pick up your monthly grain quota at your designated Fair Price Shop or any ONORC portability center.',
-              contextDetail: 'Home Center: $homeFpsName ($homeFpsId)',
-              priceTag: 'Cost: ₹0.00 (Zero Delivery Fee)',
-              buttonLabel: 'Select Shop',
+              description: tr('service.fps_choice_desc'),
+              contextDetail: tr('service.fps_choice_detail', params: {'fpsName': homeFpsName}),
+              priceTag: tr('service.fps_choice_price'),
+              buttonLabel: tr('service.fps_choice_btn'),
               buttonIcon: Icons.store_rounded,
               isPrimary: true,
               onTap: () => _navigateToIntentSelection(initialMode: 'FPS_COLLECTION'),
             );
 
             final card2 = _buildServiceChoiceCard(
-              title: 'Assisted Home Delivery',
+              title: tr('service.home_choice_title'),
               icon: Icons.local_shipping_outlined,
               iconColor: const Color(0xFFD97706),
               iconBg: const Color(0xFFFEF3C7),
-              badgeText: 'DOORSTEP SERVICE',
+              badgeText: tr('service.home_choice_badge'),
               badgeColor: const Color(0xFFD97706),
-              description: 'Direct doorstep delivery to your home address. Designed for senior citizens, disabled, and busy workers.',
-              contextDetail: 'Foodgrain cost: ₹0 (100% Subsidized)',
-              priceTag: 'Transport fee only: From ₹20 base fee',
-              buttonLabel: 'Choose Delivery',
+              description: tr('service.home_choice_desc'),
+              contextDetail: tr('service.home_choice_detail'),
+              priceTag: tr('service.home_choice_price'),
+              buttonLabel: tr('service.home_choice_btn'),
               buttonIcon: Icons.electric_moped_outlined,
               isPrimary: false,
               onTap: () => _navigateToIntentSelection(initialMode: 'HOME_DELIVERY'),
@@ -823,30 +1297,6 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
               );
             }
           },
-        ),
-        const SizedBox(height: AppConstants.space12),
-
-        // Transparent Policy Clarification Banner
-        Container(
-          padding: const EdgeInsets.all(AppConstants.space12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFEF3C7).withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
-            border: Border.all(color: const Color(0xFFFDE68A)),
-          ),
-          child: const Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, size: 16, color: Color(0xFFB45309)),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Home delivery charges apply only to transportation/logistics. They do not purchase or increase your ration entitlement.',
-                  style: TextStyle(fontSize: 11.5, color: Color(0xFF92400E), fontWeight: FontWeight.w600, height: 1.35),
-                ),
-              ),
-            ],
-          ),
         ),
       ],
     );
@@ -957,14 +1407,17 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
     );
   }
 
-  // 4. CURRENT REQUEST / DELIVERY STATUS (5-Stage Timeline)
+  // 4. CURRENT REQUEST / DELIVERY STATUS (Combined Single Order Card)
   Widget _buildCurrentDeliveryStatusSection() {
+    final combinedOrders = _getCombinedDeliveryOrders();
+    if (combinedOrders.isEmpty) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'CURRENT REQUEST / DELIVERY STATUS',
-          style: TextStyle(
+        Text(
+          tr('delivery.section_title'),
+          style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w800,
             color: AppConstants.primaryNavy,
@@ -973,13 +1426,10 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         ),
         const SizedBox(height: AppConstants.space12),
 
-        ..._deliveryRecords.map((record) {
-          final statusKey = record.citizenConfirmedAt != null
-              ? 'DELIVERY_CONFIRMED'
-              : (record.disputeReason != null ? 'DELIVERY_DISPUTE' : record.deliveryStatus);
+        ...combinedOrders.map((order) {
+          final statusKey = order.deliveryStatus;
           final isConfirmed = statusKey == 'DELIVERY_CONFIRMED';
           final isDispute = statusKey == 'DELIVERY_DISPUTE';
-          final qty = record.authorizedQuantityKg > 0 ? record.authorizedQuantityKg : record.requestedQuantityKg;
 
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -1002,6 +1452,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Order Header & Consolidated Status Badge
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1010,8 +1461,8 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                         const Icon(Icons.local_shipping_outlined, color: AppConstants.primaryNavy, size: 18),
                         const SizedBox(width: 8),
                         Text(
-                          'Order #${record.requestId}',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppConstants.textPrimary),
+                          tr('delivery.order_num', params: {'orderId': order.baseRequestId}),
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppConstants.textPrimary),
                         ),
                       ],
                     ),
@@ -1020,35 +1471,201 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // 5-Stage Timeline
+                // Single 5-Stage Delivery Timeline
                 DeliveryTimeline(currentStatus: statusKey),
                 const SizedBox(height: 14),
 
-                // Details Row
+                // Prominent Delivery Delayed Alert Card (Government Stock Shortage)
+                if (order.isDelayed) ...[
+                  Container(
+                    key: const ValueKey('card_stock_delay_alert'),
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.hourglass_top_rounded, color: Color(0xFFB45309), size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              tr('delay.banner_title'),
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFFB45309),
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFFDE68A)),
+                              ),
+                              child: Text(
+                                order.expectedDeliveryWindow ?? tr('delay.expected_window'),
+                                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFFB45309)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          tr('delay.banner_desc'),
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF92400E), height: 1.4),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            const Icon(Icons.verified_user_outlined, size: 14, color: Color(0xFFB45309)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                tr('delay.no_resubmit_hint'),
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Combined Commodities & Delivery Details Container
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: AppConstants.backgroundLight,
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppConstants.cardBorder.withValues(alpha: 0.6)),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Authorized: ${qty.toStringAsFixed(1)} kg ${record.commodity} • ${record.deliveryMode.replaceAll('_', ' ')}',
-                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppConstants.textPrimary),
+                      // Mode Header Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            tr('delivery.authorized_commodities'),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: AppConstants.textSecondary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: order.deliveryMode == 'HOME_DELIVERY'
+                                  ? AppConstants.accentAmber.withValues(alpha: 0.15)
+                                  : AppConstants.accentBlue.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              order.deliveryMode == 'HOME_DELIVERY'
+                                  ? tr('delivery.mode_home')
+                                  : tr('delivery.mode_fps'),
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: order.deliveryMode == 'HOME_DELIVERY'
+                                    ? const Color(0xFFB45309)
+                                    : AppConstants.primaryNavy,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      if (record.transportFeeInr > 0)
-                        Text(
-                          'Logistics Fee: ₹${record.transportFeeInr.toStringAsFixed(2)}',
-                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy),
+                      const SizedBox(height: 8),
+
+                      // Itemized Commodity Lines
+                      ...order.items.map((item) {
+                        final qty = item.authorizedQuantityKg > 0 ? item.authorizedQuantityKg : item.requestedQuantityKg;
+                        final isRice = item.commodity.toLowerCase() == 'rice';
+                        final commName = isRice ? tr('commodity.rice') : tr('commodity.wheat');
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isRice ? Icons.grass_rounded : Icons.grain_rounded,
+                                size: 15,
+                                color: isRice ? AppConstants.primaryNavy : const Color(0xFFB45309),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '• ${qty.toStringAsFixed(1)} ${tr('commodity.kg')} $commName',
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppConstants.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                tr('commodity.free_tag'),
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF15803D)),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+
+                      // Delivery Destination & Logistics Fee Row
+                      if (order.transportFeeInr > 0 || order.deliveryAddress != null || order.intendedFpsName != null) ...[
+                        const Divider(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            if (order.deliveryAddress != null && order.deliveryAddress!.isNotEmpty)
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.location_on_outlined, size: 14, color: AppConstants.textSecondary),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        tr('delivery.delivery_address', params: {'address': order.deliveryAddress!}),
+                                        style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              Expanded(
+                                child: Text(
+                                  tr('delivery.pickup_location', params: {'fpsName': order.intendedFpsName ?? order.registeredFpsName ?? "Assigned FPS"}),
+                                  style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary),
+                                ),
+                              ),
+                            if (order.transportFeeInr > 0)
+                              Text(
+                                tr('delivery.logistics_fee', params: {'fee': order.transportFeeInr.toStringAsFixed(2)}),
+                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy),
+                              ),
+                          ],
                         ),
+                      ],
                     ],
                   ),
                 ),
 
                 // If Dispute
-                if (isDispute && record.disputeReason != null) ...[
+                if (isDispute && order.disputeReason != null) ...[
                   const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -1063,7 +1680,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Dispute Reason: ${record.disputeReason} (Under DSO Investigation)',
+                            tr('delivery.dispute_reason_banner', params: {'reason': order.disputeReason!}),
                             style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppConstants.dangerRed),
                           ),
                         ),
@@ -1072,21 +1689,24 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                   ),
                 ],
 
+                // Biometric Handover & Distribution Verification Card
+                _buildBiometricVerificationTriggerCard(order),
+
                 // Action Buttons if delivered but not confirmed/disputed
                 if (!isConfirmed && !isDispute) ...[
                   const Divider(height: 20),
-                  const Text(
-                    'Did you receive your ration?',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppConstants.textPrimary),
+                  Text(
+                    tr('delivery.did_you_receive'),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppConstants.textPrimary),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => _confirmFullReceipt(record),
+                          onPressed: () => _confirmCombinedOrderReceipt(order),
                           icon: const Icon(Icons.check_circle_outline, size: 15),
-                          label: const Text('Yes, I received full quantity', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                          label: Text(tr('delivery.btn_confirm_full'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppConstants.successGreen,
                             foregroundColor: Colors.white,
@@ -1097,9 +1717,9 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => _showDeliveryDisputeModal(record),
+                          onPressed: () => _showCombinedDeliveryDisputeModal(order),
                           icon: const Icon(Icons.report_problem_outlined, size: 15),
-                          label: const Text('Report quantity issue', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                          label: Text(tr('delivery.btn_report_issue'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppConstants.dangerRed,
                             side: const BorderSide(color: AppConstants.dangerRed),
@@ -1115,6 +1735,98 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           );
         }),
       ],
+    );
+  }
+
+  Widget _buildBiometricVerificationTriggerCard(CombinedCitizenDeliveryOrder order) {
+    final isHome = order.deliveryMode == 'HOME_DELIVERY';
+
+    return Container(
+      key: const ValueKey('card_biometric_verification_trigger'),
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _isBiometricVerified ? const Color(0xFFF0FDF4) : const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: _isBiometricVerified ? const Color(0xFF86EFAC) : AppConstants.accentBlue.withValues(alpha: 0.4),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    _isBiometricVerified ? Icons.verified_user_rounded : Icons.fingerprint_rounded,
+                    color: _isBiometricVerified ? const Color(0xFF15803D) : AppConstants.accentBlue,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _isBiometricVerified
+                        ? tr('biometric.distributed_badge')
+                        : (isHome ? 'DOORSTEP BIOMETRIC VERIFICATION' : 'FPS COUNTER BIOMETRIC VERIFICATION'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: _isBiometricVerified ? const Color(0xFF15803D) : AppConstants.primaryNavy,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _isBiometricVerified ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _isBiometricVerified ? 'HANDOVER COMPLETE' : 'VERIFICATION REQUIRED',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: _isBiometricVerified ? const Color(0xFF15803D) : const Color(0xFFB45309),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _isBiometricVerified
+                ? 'Identity verified via simulated biometric ePoS terminal. Foodgrain successfully handed over and quota deducted.'
+                : (isHome ? tr('biometric.doorstep_banner') : tr('biometric.fps_banner')),
+            style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary, height: 1.3),
+          ),
+          const SizedBox(height: 10),
+
+          if (!_isBiometricVerified)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                key: const ValueKey('btn_start_biometric_verification'),
+                onPressed: () => _openBiometricVerificationDialog(order),
+                icon: const Icon(Icons.fingerprint_rounded, size: 16),
+                label: Text(
+                  isHome ? tr('biometric.btn_verify_home') : tr('biometric.btn_verify_fps'),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppConstants.primaryNavy,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1140,9 +1852,9 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'RECENT DISTRIBUTION & PREFERENCE HISTORY',
-                style: TextStyle(
+              Text(
+                tr('history.title'),
+                style: const TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w800,
                   color: AppConstants.primaryNavy,
@@ -1152,7 +1864,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
               TextButton(
                 onPressed: _navigateToIntentHistory,
                 style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 24)),
-                child: const Text('View All Timeline →', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                child: Text(tr('history.view_timeline'), style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -1165,13 +1877,15 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                 color: AppConstants.backgroundLight,
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.info_outline, size: 16, color: AppConstants.textSecondary),
-                  SizedBox(width: 8),
-                  Text(
-                    'No active signals recorded yet for Cycle 7 · September 2026.',
-                    style: TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
+                  const Icon(Icons.info_outline, size: 16, color: AppConstants.textSecondary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      tr('history.empty'),
+                      style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
+                    ),
                   ),
                 ],
               ),

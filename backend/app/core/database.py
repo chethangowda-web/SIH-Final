@@ -630,6 +630,9 @@ def _migration_003_citizen_requests_and_disputes(cursor: sqlite3.Cursor) -> None
         ("received_wheat_kg", "REAL DEFAULT 0.0"),
         ("citizen_confirmed_at", "TIMESTAMP"),
         ("dispute_reason", "TEXT"),
+        ("delay_reason", "TEXT"),
+        ("expected_delivery_window", "TEXT"),
+        ("delay_notified_at", "TIMESTAMP"),
     ]:
         try:
             cursor.execute(f"ALTER TABLE citizen_requests ADD COLUMN {col_def[0]} {col_def[1]};")
