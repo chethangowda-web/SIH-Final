@@ -88,6 +88,7 @@ class AdminDashboardSummary(BaseModel):
     top_intent_shift_fps: List[Dict[str, Any]]
     fps_list: List[AdminFpsRow]
     workflow_status: str  # 'PLANNING_OPEN', 'DRAFT_GENERATED', 'FORECAST_LOCKED'
+    planning_cycle_state: Optional[Dict[str, Any]] = None
     demo_notice: str = DEMO_NOTICE
 
 class AdminFpsDetailAnalytics(BaseModel):
@@ -332,6 +333,9 @@ def get_admin_dashboard(db: sqlite3.Connection = Depends(get_db)):
     forecast_count = total_fps if is_generated else 0
     avg_confidence = round(total_conf_score / max(1, total_fps), 2)
 
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    planning_cycle_state = planning_cycle_engine.get_cycle_state(db, active_cycle)
+
     return AdminDashboardSummary(
         district=district_name,
         active_cycle=active_cycle,
@@ -355,6 +359,7 @@ def get_admin_dashboard(db: sqlite3.Connection = Depends(get_db)):
         top_intent_shift_fps=top_shift,
         fps_list=admin_fps_list,
         workflow_status=workflow_status,
+        planning_cycle_state=planning_cycle_state,
         demo_notice=DEMO_NOTICE
     )
 
@@ -566,27 +571,17 @@ def close_choice_window_api(
 ):
     """
     Close the beneficiary preference choice window for the planning cycle and lock aggregated demand.
-    Computes/freezes demand baseline (D_hat) and transitions workflow state to FORECAST_LOCKED.
+    Computes/freezes demand baseline (D_hat), persists immutable Demand Snapshot with SHA-256 seal,
+    and transitions workflow state to FORECAST_LOCKED on Day 25.
     Prevents further preference modifications for this cycle.
     """
     try:
-        # 1. Check current workflow status
-        status_now = forecast_engine.get_persisted_workflow_status(db, cycle_id)
-        if status_now in ["FORECAST_LOCKED", "CHOICE_WINDOW_CLOSED"]:
-            res = {"locked_records_count": 40}
-        elif status_now == "PLANNING_OPEN":
-            forecast_engine.generate_and_persist_forecasts(db, cycle_id=cycle_id, force=True)
-            res = forecast_engine.lock_persisted_forecast(db, cycle_id=cycle_id)
-        elif status_now == "DRAFT":
-            res = forecast_engine.lock_persisted_forecast(db, cycle_id=cycle_id)
-        else:
-            # Cycle has already progressed beyond DRAFT/OPEN
-            res = {"locked_records_count": 40}
-
-        workflow_manager.transition_state(
-            db, cycle_id, WorkflowState.VALIDATED,
-            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
-            "Choice window closed & forecasts validated.", force=True
+        from app.services.planning_cycle_engine import planning_cycle_engine
+        res = planning_cycle_engine.lock_demand_snapshot(
+            db,
+            cycle_id=cycle_id,
+            officer_name="District Supply Officer (Demo Admin)",
+            officer_role="DISTRICT_SUPPLY_OFFICER"
         )
 
         # Fetch aggregated totals
@@ -600,17 +595,59 @@ def close_choice_window_api(
             "cycle_id": cycle_id,
             "status": "CHOICE_WINDOW_CLOSED",
             "workflow_status": "FORECAST_LOCKED",
+            "planning_day": res.get("planning_day", 25),
+            "snapshot_id": res.get("snapshot_id"),
+            "canonical_hash": res.get("canonical_hash"),
             "message": f"Choice window for cycle '{cycle_id}' is now CLOSED. Aggregated beneficiary demand is LOCKED into downstream constraint and dispatch engines.",
             "total_fps": 20,
-            "locked_records_count": res.get("locked_records_count", 40),
+            "locked_records_count": 40,
             "total_locked_forecast_demand_kg": forecast_total,
             "total_recommended_dispatch_kg": dispatch_total,
             "demo_notice": DEMO_NOTICE
         }
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to close choice window due to an internal server error.")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to close choice window due to an internal server error: {e}")
+
+
+@router.get("/admin/planning-cycle/demand-snapshot")
+def get_demand_snapshot_api(
+    cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle ID to retrieve demand snapshot for"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Retrieve the frozen Day 25 demand snapshot for the cycle, including SHA-256 seal."""
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    snapshot = planning_cycle_engine.get_latest_snapshot(db, cycle_id)
+    if not snapshot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No frozen demand snapshot found for cycle '{cycle_id}'. Demand has not yet been locked."
+        )
+    return {
+        "status": "success",
+        "snapshot": snapshot,
+        "demo_notice": DEMO_NOTICE
+    }
+
+
+@router.post("/admin/planning-cycle/set-day")
+def set_planning_cycle_day_api(
+    day: int = Query(..., ge=1, le=31, description="Planning day to set (e.g. 21..25)"),
+    cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle ID"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Demo support: Advance or toggle the planning day (e.g. Day 21..24 -> Day 25)."""
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    new_day = planning_cycle_engine.set_planning_day(db, cycle_id, day)
+    state = planning_cycle_engine.get_cycle_state(db, cycle_id)
+    return {
+        "status": "success",
+        "planning_day": new_day,
+        "cycle_state": state,
+        "message": f"Planning day set to Day {new_day} for cycle '{cycle_id}'.",
+        "demo_notice": DEMO_NOTICE
+    }
 
 
 @router.get("/admin/forecast/cycle/{cycle_id}")

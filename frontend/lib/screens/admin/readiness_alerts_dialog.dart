@@ -255,7 +255,7 @@ class _ReadinessAlertsDialogState extends State<ReadinessAlertsDialog> {
                 const Text('Select Beneficiary Recipient:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: selectedBenId,
+                  initialValue: selectedBenId,
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),

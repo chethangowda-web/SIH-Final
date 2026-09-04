@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../core/localization.dart';
@@ -94,6 +95,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   BeneficiaryEntitlementSummary? _entitlement;
   List<IntentRecord> _activeIntents = [];
   List<CitizenDeliveryRecord> _deliveryRecords = [];
+  Map<String, dynamic>? _planningCycleState;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -103,11 +105,21 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   double _remainingBalanceKg = 25.0;
   bool _isBiometricVerified = false;
 
+  // Active Request ETA Countdown State
+  Timer? _etaCountdownTimer;
+  DateTime _currentTime = DateTime.now();
+
   @override
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
     _loadBeneficiaryData();
+  }
+
+  @override
+  void dispose() {
+    _etaCountdownTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadBeneficiaryData() async {
@@ -130,6 +142,12 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         widget.beneficiaryId,
         cycleId: '2026-09',
       );
+      Map<String, dynamic>? cycleState;
+      try {
+        cycleState = await _apiService.fetchChoiceWindowStatus(cycleId: '2026-09');
+      } catch (_) {
+        cycleState = null;
+      }
 
       if (mounted) {
         setState(() {
@@ -137,6 +155,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           _entitlement = ent;
           _activeIntents = intents;
           _deliveryRecords = deliveries;
+          _planningCycleState = cycleState;
           if (ent.familyMembersCount > 0) {
             _eligibleMembersCount = ent.familyMembersCount;
           }
@@ -156,6 +175,127 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
 
   void _navigateToIntentSelection({String initialMode = 'FPS_COLLECTION'}) async {
     if (_beneficiary == null) return;
+
+    // Enforce PDS Business Rule: Once ration is received and confirmed for current cycle, no new request allowed
+    if (_entitlement?.rationReceivedForCycle == true) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: AppConstants.successGreen, size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  tr('delivery.ration_received_badge'),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                tr('delivery.ration_received_desc'),
+                style: const TextStyle(fontSize: 13, color: AppConstants.textPrimary, height: 1.4),
+              ),
+              if (_entitlement?.receiptConfirmedAt != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF16A34A)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Confirmed on: ${_entitlement!.receiptConfirmedAt!}',
+                          style: const TextStyle(fontSize: 11.5, color: Color(0xFF166534), fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(tr('nav.close'), style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final isOpen = _planningCycleState?['is_open'] ?? true;
+    final planningDay = _planningCycleState?['planning_day'] ?? 22;
+    if (!isOpen || planningDay >= 25) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Row(
+            children: [
+              const Icon(Icons.lock_clock_rounded, color: Color(0xFFB91C1C), size: 24),
+              const SizedBox(width: 8),
+              Text(
+                tr('cycle.window_closed'),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                tr('cycle.locked_cannot_edit', params: {'cycle': _planningCycleState?['cycle_id'] ?? '2026-09'}),
+                style: const TextStyle(fontSize: 13, color: AppConstants.textPrimary, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, size: 16, color: Color(0xFFB91C1C)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Day $planningDay: Demand baseline snapshot is permanently sealed into district pre-dispatch logistics.',
+                        style: const TextStyle(fontSize: 11.5, color: Color(0xFF7F1D1D), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(tr('nav.close'), style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
@@ -597,6 +737,10 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                                 _buildLanguageSelectorQuickBar(),
                                 const SizedBox(height: AppConstants.space16),
 
+                                // 0b. Authoritative Planning Cycle & Choice Window Visualizer
+                                _buildPlanningCycleBanner(),
+                                const SizedBox(height: AppConstants.space16),
+
                                 // 1. Beneficiary Profile & Card Identity Card
                                 _buildBeneficiaryProfileCard(),
                                 const SizedBox(height: AppConstants.space16),
@@ -688,6 +832,171 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // 0b. AUTHORITATIVE PLANNING CYCLE & CHOICE WINDOW VISUALIZER
+  Widget _buildPlanningCycleBanner() {
+    final planningDay = _planningCycleState?['planning_day'] ?? 22;
+    final isOpen = _planningCycleState?['is_open'] ?? true;
+    final closingDeadline = _planningCycleState?['closing_deadline'] ?? 'Day 24 (23:59 IST)';
+
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.space16),
+      decoration: BoxDecoration(
+        color: isOpen ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(
+          color: isOpen ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    isOpen ? Icons.event_available_rounded : Icons.lock_clock_rounded,
+                    size: 18,
+                    color: isOpen ? const Color(0xFF15803D) : const Color(0xFFB91C1C),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    tr('cycle.timeline_title'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: isOpen ? const Color(0xFF15803D) : const Color(0xFF991B1B),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isOpen ? const Color(0xFF15803D) : const Color(0xFF991B1B),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  isOpen ? tr('cycle.window_open') : tr('cycle.locked_badge'),
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Planning Days Stepper Track: DAY 21 -> DAY 22 -> DAY 23 -> DAY 24 -> 🔒 DAY 25
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildDayStepNode(21, 'Day 21', planningDay, isOpen),
+                _buildStepSeparator(planningDay > 21),
+                _buildDayStepNode(22, 'Day 22', planningDay, isOpen),
+                _buildStepSeparator(planningDay > 22),
+                _buildDayStepNode(23, 'Day 23', planningDay, isOpen),
+                _buildStepSeparator(planningDay > 23),
+                _buildDayStepNode(24, 'Day 24', planningDay, isOpen),
+                _buildStepSeparator(planningDay >= 25),
+                _buildDayStepNode(25, '🔒 Day 25', planningDay, isOpen, isLockDay: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Explanatory Subtitle
+          Text(
+            isOpen
+                ? tr('cycle.window_desc_open')
+                : tr('cycle.locked_cannot_edit', params: {'cycle': _planningCycleState?['cycle_id'] ?? '2026-09'}),
+            style: TextStyle(
+              fontSize: 11.5,
+              color: isOpen ? const Color(0xFF166534) : const Color(0xFF7F1D1D),
+              height: 1.35,
+            ),
+          ),
+          if (isOpen) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Deadline: $closingDeadline • Statutory NFSA ration entitlement is 100% safeguarded by government policy.',
+              style: const TextStyle(fontSize: 10.5, color: Color(0xFF15803D), fontWeight: FontWeight.w600),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayStepNode(int dayNumber, String label, int currentDay, bool isWindowOpen, {bool isLockDay = false}) {
+    final isCurrent = (dayNumber == currentDay) || (isLockDay && currentDay >= 25);
+    final isPast = (dayNumber < currentDay);
+
+    Color bg;
+    Color border;
+    Color textColor;
+
+    if (isCurrent) {
+      bg = isLockDay ? const Color(0xFF991B1B) : AppConstants.primaryNavy;
+      border = isLockDay ? const Color(0xFF7F1D1D) : AppConstants.primaryNavy;
+      textColor = Colors.white;
+    } else if (isPast) {
+      bg = const Color(0xFFE2E8F0);
+      border = const Color(0xFFCBD5E1);
+      textColor = const Color(0xFF475569);
+    } else {
+      bg = const Color(0xFFF8FAFC);
+      border = const Color(0xFFE2E8F0);
+      textColor = const Color(0xFF94A3B8);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: border),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w600,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepSeparator(bool isCompleted) {
+    return Container(
+      width: 12,
+      height: 2,
+      color: isCompleted ? AppConstants.primaryNavy : const Color(0xFFCBD5E1),
     );
   }
 
@@ -1221,6 +1530,108 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   // 3. PLAN YOUR UPCOMING COLLECTION (Two Large Service Cards)
   Widget _buildPlanCollectionSection() {
     final homeFpsName = _beneficiary?.registeredFpsName ?? 'Malleshwaram Seva Kendra';
+    final isReceived = _entitlement?.rationReceivedForCycle == true;
+
+    if (isReceived) {
+      return Container(
+        key: const ValueKey('card_ration_received_cycle_lock'),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF86EFAC), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF16A34A).withValues(alpha: 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF166534)),
+                      const SizedBox(width: 6),
+                      Text(
+                        tr('delivery.ration_received_badge'),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF166534),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    _planningCycleState?['cycle_id'] ?? '2026-09',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              tr('delivery.ration_received_desc'),
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: AppConstants.textPrimary,
+                height: 1.45,
+              ),
+            ),
+            if (_entitlement?.receiptConfirmedAt != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Receipt Confirmed: ${_entitlement!.receiptConfirmedAt}',
+                style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
+              ),
+            ],
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_outline_rounded, size: 15, color: AppConstants.textSecondary),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Ration application controls are closed for this cycle. You can submit a new request when the next distribution cycle begins.',
+                      style: TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1473,6 +1884,10 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
 
                 // Single 5-Stage Delivery Timeline
                 DeliveryTimeline(currentStatus: statusKey),
+                const SizedBox(height: 14),
+
+                // Active Request Expected Delivery Timer / Countdown Card
+                _buildExpectedDeliveryTimerCard(order, statusKey),
                 const SizedBox(height: 14),
 
                 // Prominent Delivery Delayed Alert Card (Government Stock Shortage)
@@ -1825,6 +2240,268 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  // Expected Delivery Timer / Reactive Countdown Card
+  Widget _buildExpectedDeliveryTimerCard(CombinedCitizenDeliveryOrder order, String statusKey) {
+    final isDelayed = order.isDelayed;
+    final isOutForDelivery = statusKey == 'OUT_FOR_DELIVERY';
+    final isCompleted = statusKey == 'DELIVERED' || statusKey == 'DELIVERY_CONFIRMED';
+
+    // 1. Completed state: Delivered / Verified
+    if (isCompleted) {
+      return Container(
+        key: const ValueKey('card_expected_delivery_timer'),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF86EFAC), width: 1.2),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Color(0xFF15803D), size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('delivery.eta_label'),
+                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFF15803D), letterSpacing: 0.3),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    tr('delivery.eta_completed'),
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Color(0xFF166534)),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFDCFCE7),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                '100% COMPLETE',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 2. Delayed state: Government Stock Shortage
+    if (isDelayed) {
+      final windowText = order.expectedDeliveryWindow ?? tr('delay.expected_window');
+      return Container(
+        key: const ValueKey('card_expected_delivery_timer'),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.schedule_send_rounded, color: Color(0xFFB45309), size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('delivery.eta_delayed_label'),
+                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFFB45309), letterSpacing: 0.3),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    windowText,
+                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: Color(0xFF92400E)),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.lock_clock, size: 12, color: Color(0xFFB45309)),
+                  const SizedBox(width: 4),
+                  Text(
+                    tr('delay.badge'),
+                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFFB45309)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 3. Active Delivery Countdown (Deterministic baseline target per order)
+    final seed = order.baseRequestId.hashCode.abs();
+    // Out for delivery is imminent (approx 1h 45m), Allocated/Requested is ~28h
+    final totalDurationMinutes = isOutForDelivery ? (90 + (seed % 45)) : (1440 + (seed % 360));
+    final createdAtParsed = order.items.isNotEmpty && order.items.first.createdAt.isNotEmpty
+        ? DateTime.tryParse(order.items.first.createdAt) ?? _currentTime
+        : _currentTime;
+
+    final targetEta = createdAtParsed.add(Duration(minutes: totalDurationMinutes));
+    final remainingDiff = targetEta.difference(_currentTime);
+    final remainingSeconds = remainingDiff.inSeconds;
+
+    String countdownDisplay;
+    String statusNote;
+    Color primaryColor;
+    Color bgColor;
+    Color borderColor;
+
+    if (isOutForDelivery) {
+      primaryColor = const Color(0xFF0284C7); // Vibrant Sky Blue
+      bgColor = const Color(0xFFF0F9FF);
+      borderColor = const Color(0xFFBAE6FD);
+      statusNote = tr('delivery.eta_out_now');
+    } else {
+      primaryColor = AppConstants.primaryNavy;
+      bgColor = const Color(0xFFF8FAFC);
+      borderColor = const Color(0xFFCBD5E1);
+      statusNote = remainingSeconds > 86400
+          ? tr('delivery.eta_days_hours', params: {
+              'days': '${remainingDiff.inDays}',
+              'hours': '${remainingDiff.inHours % 24}',
+            })
+          : tr('delivery.eta_arriving_today');
+    }
+
+    if (remainingSeconds <= 0) {
+      countdownDisplay = tr('delivery.eta_arriving_today');
+    } else {
+      final hours = (remainingSeconds ~/ 3600).toString().padLeft(2, '0');
+      final minutes = ((remainingSeconds % 3600) ~/ 60).toString().padLeft(2, '0');
+      final seconds = (remainingSeconds % 60).toString().padLeft(2, '0');
+      countdownDisplay = '$hours:$minutes:$seconds';
+    }
+
+    return Container(
+      key: const ValueKey('card_expected_delivery_timer'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borderColor, width: isOutForDelivery ? 1.5 : 1.0),
+        boxShadow: isOutForDelivery
+            ? [
+                BoxShadow(
+                  color: primaryColor.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: primaryColor.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isOutForDelivery ? Icons.directions_bike_rounded : Icons.timer_outlined,
+              color: primaryColor,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      tr('delivery.eta_label').toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: primaryColor,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    if (isOutForDelivery) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE0F2FE),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'LIVE TRACKING',
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Color(0xFF0284C7)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  statusNote,
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppConstants.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 3,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (remainingSeconds > 0) ...[
+                  const Icon(Icons.access_time_filled_rounded, size: 13, color: AppConstants.primaryNavy),
+                  const SizedBox(width: 5),
+                ],
+                Text(
+                  countdownDisplay,
+                  key: const ValueKey('text_eta_countdown'),
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w900,
+                    color: isOutForDelivery ? const Color(0xFF0284C7) : AppConstants.primaryNavy,
+                    letterSpacing: 0.5,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

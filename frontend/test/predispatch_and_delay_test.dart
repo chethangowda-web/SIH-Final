@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pds_demandsync/core/localization.dart';
 import 'package:pds_demandsync/models/admin_model.dart';
 import 'package:pds_demandsync/models/beneficiary_model.dart';
 import 'package:pds_demandsync/screens/admin/predispatch_analysis_dialog.dart';

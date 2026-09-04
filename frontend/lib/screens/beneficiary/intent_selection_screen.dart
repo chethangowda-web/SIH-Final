@@ -90,6 +90,16 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
           // Default to home registered shop
           _selectedFps = _fpsList.where((fps) => fps.fpsId == widget.beneficiary.registeredFpsId).firstOrNull ??
               (_fpsList.isNotEmpty ? _fpsList.first : null);
+
+          // Sync member count authoritatively from government entitlement record.
+          // This ensures the displayed count matches the verified ration card registry,
+          // not a client-side default. Rice = 4kg/member, Wheat = 1kg/member.
+          if (ent != null) {
+            _eligibleMembersCount = ent.familyMembersCount;
+            _riceQtyKg = ent.statutoryEntitlementRiceKg;
+            _wheatQtyKg = ent.statutoryEntitlementWheatKg;
+          }
+
           _isLoading = false;
         });
       }
@@ -121,7 +131,7 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
   }
 
   void _continueToReview() async {
-    if (_selectedFps == null || _isOverEntitled) return;
+    if (_selectedFps == null || _isOverEntitled || _entitlement?.rationReceivedForCycle == true) return;
 
     final distance = _getCalculatedDistance(_selectedFps!);
     final fee = _calculateTransportFee(distance);
@@ -1004,9 +1014,9 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: const Color(0xFFBFDBFE)),
                 ),
-                child: const Text(
-                  '5.0 kg / MEMBER CEILING',
-                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: AppConstants.accentBlue),
+                child: Text(
+                  tr('members.badge'),
+                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: AppConstants.accentBlue),
                 ),
               ),
             ],
@@ -1018,71 +1028,79 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Member Selection Stepper and Formula
+          // READ-ONLY: Government-Controlled Verified Member Count
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Verified Member Count Display (locked, government-controlled)
               Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppConstants.cardBorder),
+                  color: AppConstants.primaryNavy.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppConstants.primaryNavy.withValues(alpha: 0.22), width: 1.4),
                 ),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
-                      key: const ValueKey('btn_intent_decrement_members'),
-                      icon: const Icon(Icons.remove_rounded, size: 18),
-                      onPressed: _eligibleMembersCount > 1
-                          ? () {
-                              setState(() {
-                                _eligibleMembersCount--;
-                                _riceQtyKg = _eligibleMembersCount * 4.0;
-                                _wheatQtyKg = _eligibleMembersCount * 1.0;
-                              });
-                            }
-                          : null,
-                      tooltip: 'Decrease eligible members',
+                    const Icon(Icons.verified_user_rounded, color: AppConstants.primaryNavy, size: 15),
+                    const SizedBox(height: 3),
+                    Text(
+                      '$_eligibleMembersCount',
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      child: Text(
-                        '$_eligibleMembersCount',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy),
-                      ),
-                    ),
-                    IconButton(
-                      key: const ValueKey('btn_intent_increment_members'),
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      onPressed: _eligibleMembersCount < 8
-                          ? () {
-                              setState(() {
-                                _eligibleMembersCount++;
-                                _riceQtyKg = _eligibleMembersCount * 4.0;
-                                _wheatQtyKg = _eligibleMembersCount * 1.0;
-                              });
-                            }
-                          : null,
-                      tooltip: 'Increase eligible members',
+                    const Text(
+                      'MEMBERS',
+                      style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 1.0),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFBBF7D0)),
-                  ),
-                  child: Text(
-                    tr('members.formula', params: {
-                      'count': '$_eligibleMembersCount',
-                      'max': maxEntitlement.toStringAsFixed(1),
-                    }),
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Govt-controlled badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFF86EFAC)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lock_outline_rounded, size: 11, color: Color(0xFF15803D)),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              tr('members.govt_controlled'),
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // Quota formula
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                      ),
+                      child: Text(
+                        tr('members.formula', params: {
+                          'count': '$_eligibleMembersCount',
+                          'max': maxEntitlement.toStringAsFixed(1),
+                        }),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.accentBlue),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1119,9 +1137,9 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Rice Allocation Row
+          // Rice Allocation Row (Fixed / Read-Only Statutory Entitlement)
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(8),
@@ -1140,44 +1158,40 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                         style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppConstants.textPrimary),
                       ),
                       const Text(
-                        '100% Subsidized (₹0.00/kg)',
+                        '100% Subsidized (₹0.00/kg) • Statutory Allocation',
                         style: TextStyle(fontSize: 10, color: Color(0xFF15803D), fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      key: const ValueKey('btn_decrement_rice'),
-                      icon: const Icon(Icons.remove_circle_outline, size: 20, color: AppConstants.primaryNavy),
-                      onPressed: _riceQtyKg > 0
-                          ? () => setState(() => _riceQtyKg = max(0.0, _riceQtyKg - 1.0))
-                          : null,
-                    ),
-                    Container(
-                      constraints: const BoxConstraints(minWidth: 46),
-                      child: Text(
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppConstants.primaryNavy.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppConstants.primaryNavy.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.lock_outline, size: 13, color: AppConstants.primaryNavy),
+                      const SizedBox(width: 5),
+                      Text(
                         '${_riceQtyKg.toStringAsFixed(1)} kg',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy),
+                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy),
                       ),
-                    ),
-                    IconButton(
-                      key: const ValueKey('btn_increment_rice'),
-                      icon: const Icon(Icons.add_circle_outline, size: 20, color: AppConstants.primaryNavy),
-                      onPressed: () => setState(() => _riceQtyKg += 1.0),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 8),
 
-          // Wheat Allocation Row
+          // Wheat Allocation Row (Fixed / Read-Only Statutory Entitlement)
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(8),
@@ -1196,68 +1210,35 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                         style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppConstants.textPrimary),
                       ),
                       const Text(
-                        '100% Subsidized (₹0.00/kg)',
+                        '100% Subsidized (₹0.00/kg) • Statutory Allocation',
                         style: TextStyle(fontSize: 10, color: Color(0xFF15803D), fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      key: const ValueKey('btn_decrement_wheat'),
-                      icon: const Icon(Icons.remove_circle_outline, size: 20, color: Color(0xFFB45309)),
-                      onPressed: _wheatQtyKg > 0
-                          ? () => setState(() => _wheatQtyKg = max(0.0, _wheatQtyKg - 1.0))
-                          : null,
-                    ),
-                    Container(
-                      constraints: const BoxConstraints(minWidth: 46),
-                      child: Text(
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFB45309).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFB45309).withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.lock_outline, size: 13, color: Color(0xFFB45309)),
+                      const SizedBox(width: 5),
+                      Text(
                         '${_wheatQtyKg.toStringAsFixed(1)} kg',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFFB45309)),
+                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: Color(0xFFB45309)),
                       ),
-                    ),
-                    IconButton(
-                      key: const ValueKey('btn_increment_wheat'),
-                      icon: const Icon(Icons.add_circle_outline, size: 20, color: Color(0xFFB45309)),
-                      onPressed: () => setState(() => _wheatQtyKg += 1.0),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-
-          // Over-entitlement Error Banner
-          if (isOver) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEF2F2),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0xFFFECACA)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppConstants.dangerRed, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      tr('members.over_error', params: {
-                        'qty': combined.toStringAsFixed(1),
-                        'max': maxEntitlement.toStringAsFixed(1),
-                        'count': '$_eligibleMembersCount',
-                      }),
-                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppConstants.dangerRed),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1265,12 +1246,36 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
 
   // CTA: SUBMIT BUTTON
   Widget _buildPrimarySubmitButton(double transportFee) {
-    final isReady = _selectedFps != null && !_isOverEntitled;
+    final isReceived = _entitlement?.rationReceivedForCycle == true;
+    final isReady = _selectedFps != null && !_isOverEntitled && !isReceived;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (isReceived) ...[
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFCA5A5)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_clock_rounded, size: 18, color: Color(0xFFB91C1C)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tr('delivery.ration_received_desc'),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF7F1D1D)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (_isOverEntitled) ...[
           Padding(
             padding: const EdgeInsets.only(bottom: 8),

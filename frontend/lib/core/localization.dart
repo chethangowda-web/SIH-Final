@@ -154,7 +154,16 @@ const Map<String, Map<String, String>> _translations = {
     'delivery.btn_confirm_full': 'Yes, I received full quantity',
     'delivery.btn_report_issue': 'Report quantity issue',
     'delivery.confirm_success': 'Delivery confirmed! Digital receipt registered with district supply office for complete ration quota.',
+    'delivery.ration_received_badge': 'Ration Received — Wait for Next Cycle',
+    'delivery.ration_received_desc': 'You have already received your ration for the current cycle. Please wait until the next distribution cycle.',
     'delivery.dispute_reason_banner': 'Dispute Reason: {reason} (Under DSO Investigation)',
+    'delivery.eta_label': 'Expected Delivery',
+    'delivery.eta_delayed_label': 'Revised Delivery Window',
+    'delivery.eta_arriving_today': 'Expected today • Delivery in progress',
+    'delivery.eta_out_now': 'Out for delivery • Reaching soon',
+    'delivery.eta_completed': 'Delivered • Verified',
+    'delivery.eta_countdown_prefix': 'Expected in',
+    'delivery.eta_days_hours': '{days}d {hours}h remaining',
 
     // Delivery Dispute Modal
     'dispute.modal_title': 'Report Delivery Discrepancy',
@@ -233,15 +242,16 @@ const Map<String, Map<String, String>> _translations = {
     'confirm.btn_view_history': 'View All Ingested Signals',
 
     // Household Members & Calculation
-    'members.title': 'ELIGIBLE HOUSEHOLD MEMBERS',
-    'members.badge': '5.0 kg / ELIGIBLE PERSON',
-    'members.subtitle': 'Number of household members eligible for foodgrain under statutory ration entitlement',
-    'members.formula': '{count} Members × 5.0 kg = {max} kg Maximum Household Quota',
-    'members.allocation_title': 'COMBINED FOODGRAIN ALLOCATION',
+    'members.title': 'VERIFIED HOUSEHOLD ENTITLEMENT',
+    'members.badge': '5.0 kg / REGISTERED MEMBER',
+    'members.subtitle': 'Member count is verified from government ration card registry. You cannot add or remove members to change your entitlement.',
+    'members.govt_controlled': 'Government-controlled • Based on verified ration card registry. Member count cannot be manually adjusted.',
+    'members.formula': '{count} Verified Members × 5.0 kg = {max} kg Statutory Household Quota',
+    'members.allocation_title': 'STATUTORY FOODGRAIN ALLOCATION',
     'members.rice_alloc': 'Fortified Rice Allocation',
     'members.wheat_alloc': 'Whole Wheat Allocation',
     'members.over_error': 'Combined requested quantity ({qty} kg) exceeds the maximum household entitlement ({max} kg) for {count} eligible members.',
-    'members.adjust_hint': 'Adjust quantities to stay within your statutory entitlement ceiling.',
+    'members.adjust_hint': 'Statutory quantities are fixed by government policy and cannot be increased.',
 
     // Biometric & Delivery Verification
     'biometric.title_fps': 'FPS COUNTER BIOMETRIC VERIFICATION',
@@ -309,6 +319,22 @@ const Map<String, Map<String, String>> _translations = {
     'delay.officer_msg_template': 'Your ration delivery has been temporarily delayed because government stock is currently unavailable. The delivery is expected within 1–2 days. You do not need to submit the request again.',
     'delay.btn_send_alert': 'Send Delay Alert (SMS / WhatsApp)',
     'delay.alert_sent_success': 'Official stock shortage delay alert dispatched to beneficiary via SMS.',
+
+    // Planning Cycle & Choice Window
+    'cycle.planning_day': 'PLANNING DAY {day}',
+    'cycle.timeline_title': 'PDS MONTHLY DEMAND & DISPATCH TIMELINE',
+    'cycle.window_open': 'CHOICE WINDOW OPEN',
+    'cycle.window_closed': 'CHOICE WINDOW CLOSED',
+    'cycle.window_desc_open': 'Beneficiary Choice Window is OPEN (Day 21–24). You can select or update your preferred Fair Price Shop and service channel.',
+    'cycle.window_desc_closed': 'Demand locked on Day 25. Beneficiary location signals are frozen into the pre-dispatch intelligence baseline.',
+    'cycle.day21_24': 'DAY 21–24: CHOICE WINDOW',
+    'cycle.day25_lock': 'DAY 25: DEMAND LOCK',
+    'cycle.day26_plus': 'DAY 26+: PLANNING & DISPATCH',
+    'cycle.locked_badge': 'DEMAND BASELINE LOCKED',
+    'cycle.locked_notice': 'The monthly demand baseline for this cycle is frozen (Day 25). The 7-stage pre-dispatch engine is operating on this locked snapshot.',
+    'cycle.locked_cannot_edit': 'Choice Window Closed: Demand baseline is locked for cycle {cycle}. Preferences cannot be modified.',
+    'cycle.admin_demand_locked_heading': '🔒 DEMAND BASELINE LOCKED',
+    'cycle.admin_demand_locked_sub': 'Frozen on Day 25. Multi-factor AI forecast and fleet dispatch pipelines are consuming this immutable snapshot.',
 
     // Navigation & Common
     'nav.logout': 'Logout',
@@ -399,8 +425,17 @@ const Map<String, Map<String, String>> _translations = {
     'delivery.logistics_fee': 'लॉजिस्टिक्स शुल्क: ₹{fee}',
     'delivery.did_you_receive': 'क्या आपको अपना पूरा राशन प्राप्त हुआ?',
     'delivery.btn_confirm_full': 'पूरा राशन प्राप्त हुआ (दೃढ़ीकरण)',
+    'delivery.ration_received_badge': 'राशन प्राप्त — अगले चक्र की प्रतीक्षा करें',
+    'delivery.ration_received_desc': 'आप वर्तमान चक्र के लिए अपना राशन पहले ही प्राप्त कर चुके हैं। कृपया अगले वितरण चक्र की प्रतीक्षा करें।',
     'delivery.btn_report_issue': 'समस्या / विवाद दर्ज करें',
     'delivery.dispute_reason_banner': 'दर्ज विवाद: {reason}',
+    'delivery.eta_label': 'अपेक्षित डिलीवरी समय',
+    'delivery.eta_delayed_label': 'संशोधित डिलीवरी समय सीमा',
+    'delivery.eta_arriving_today': 'आज अपेक्षित • डिलीवरी प्रगति पर है',
+    'delivery.eta_out_now': 'डिलीवरी हेतु रवाना • शीघ्र पहुंच रहा है',
+    'delivery.eta_completed': 'सफलतापूर्वक वितरित • सत्यापित',
+    'delivery.eta_countdown_prefix': 'अनुमानित समय:',
+    'delivery.eta_days_hours': '{days} दिन {hours} घंटे शेष',
 
     // Intent Selection Screen
     'intent.screen_title': 'वितरण प्राथमिकता का चयन करें',
@@ -454,15 +489,16 @@ const Map<String, Map<String, String>> _translations = {
     'confirm.btn_view_history': 'सभी दर्ज प्राथमिकताएं देखें',
 
     // Household Members & Calculation
-    'members.title': 'पात्र परिवार के सदस्य',
-    'members.badge': '5.0 किग्रा / पात्र व्यक्ति',
-    'members.subtitle': 'सांविधिक राशन पात्रता के अंतर्गत खाद्यान्न हेतु पात्र परिवार के सदस्यों की संख्या',
-    'members.formula': '{count} सदस्य × 5.0 किग्रा = {max} किग्रा अधिकतम पारिवारिक कोटा',
-    'members.allocation_title': 'संयुक्त खाद्यान्न आवंटन',
+    'members.title': 'सत्यापित घरेलू पात्रता',
+    'members.badge': '5.0 किग्रा / पंजीकृत सदस्य',
+    'members.subtitle': 'सदस्यों की संख्या सरकारी राशन कार्ड रजिस्ट्री से सत्यापित होती है। पात्रता बदलने हेतु सदस्य नहीं जोड़े या हटाए जा सकते।',
+    'members.govt_controlled': 'सरकार-नियंत्रित • सत्यापित राशन कार्ड रजिस्ट्री पर आधारित। सदस्य संख्या मैन्युअल रूप से नहीं बदली जा सकती।',
+    'members.formula': '{count} सत्यापित सदस्य × 5.0 किग्रा = {max} किग्रा सांविधिक पारिवारिक कोटा',
+    'members.allocation_title': 'सांविधिक खाद्यान्न आवंटन',
     'members.rice_alloc': 'फोर्टिफाइड चावल आवंटन',
     'members.wheat_alloc': 'गेहूं आवंटन',
     'members.over_error': 'कुल मांगी गई मात्रा ({qty} किग्रा) {count} पात्र सदस्यों हेतु अधिकतम पारिवारिक पात्रता ({max} किग्रा) से अधिक है।',
-    'members.adjust_hint': 'अपनी कानूनी सीमा के भीतर रहने हेतु मात्रा को समायोजित करें।',
+    'members.adjust_hint': 'सांविधिक मात्राएं सरकारी नीति द्वारा निर्धारित हैं और इन्हें बढ़ाया नहीं जा सकता।',
 
     // Biometric & Delivery Verification
     'biometric.title_fps': 'उचित मूल्य दुकान बायोमेट्रिक सत्यापन',
@@ -532,6 +568,22 @@ const Map<String, Map<String, String>> _translations = {
     'delay.officer_msg_template': 'सरकारी स्टॉक उपलब्ध न होने के कारण आपका राशन वितरण अस्थायी रूप से विलंबित हो गया है। वितरण 1-2 दिनों में होने की संभावना है। आपको पुनः अनुरोध प्रस्तुत करने की आवश्यकता नहीं है।',
     'delay.btn_send_alert': 'विलंब अलर्ट भेजें (SMS / WhatsApp)',
     'delay.alert_sent_success': 'अस्थायी विलंब की सूचना लाभार्थी को SMS द्वारा सफलतापूर्वक भेजी गई।',
+
+    // Planning Cycle & Choice Window
+    'cycle.planning_day': 'नियोजन दिवस {day}',
+    'cycle.timeline_title': 'पीडीएस मासिक मांग एवं प्रेषण समयरेखा',
+    'cycle.window_open': 'पसंद विंडो खुली है',
+    'cycle.window_closed': 'पसंद विंडो बंद है',
+    'cycle.window_desc_open': 'लाभार्थी पसंद विंडो खुली है (दिन 21–24)। आप अपनी पसंदीदा उचित मूल्य दुकान और वितरण मोड चुन सकते हैं।',
+    'cycle.window_desc_closed': 'दिन 25 पर मांग बंद कर दी गई है। लाभार्थी प्राथमिकताएं प्रेषण योजना में सुरक्षित हैं।',
+    'cycle.day21_24': 'दिन 21–24: पसंद विंडो',
+    'cycle.day25_lock': 'दिन 25: मांग लॉक',
+    'cycle.day26_plus': 'दिन 26+: प्रेषण योजना',
+    'cycle.locked_badge': 'मांग आधार रेखा लॉक',
+    'cycle.locked_notice': 'इस चक्र के लिए मासिक मांग आधार रेखा लॉक है (दिन 25)। 7-चरणीय प्रेषण इंजन इस सुरक्षित स्नैपशॉट पर काम कर रहा है।',
+    'cycle.locked_cannot_edit': 'पसंद विंडो बंद: चक्र {cycle} के लिए मांग लॉक है। प्राथमिकताएं बदली नहीं जा सकतीं।',
+    'cycle.admin_demand_locked_heading': '🔒 मांग आधार रेखा लॉक',
+    'cycle.admin_demand_locked_sub': 'दिन 25 पर सुरक्षित। मल्टी-फैक्टर AI पूर्वानुमान और बेड़े प्रेषण इस अपरिवर्तनीय स्नैपशॉट का उपयोग कर रहे हैं।',
 
     // Navigation & Common
     'nav.logout': 'लॉगआउट',
@@ -615,7 +667,16 @@ const Map<String, Map<String, String>> _translations = {
     'delivery.btn_confirm_full': 'ಹೌದು, ನನಗೆ ಪೂರ್ಣ ಪ್ರಮಾಣ ದೊರೆತಿದೆ',
     'delivery.btn_report_issue': 'ಪ್ರಮಾಣದ ಸಮಸ್ಯೆಯನ್ನು ವರದಿ ಮಾಡಿ',
     'delivery.confirm_success': 'ವಿತರಣೆ ದೃಢೀಕರಿಸಲಾಗಿದೆ! ಸಂಪೂರ್ಣ ಕೋಟಾ ರಸೀದಿಯನ್ನು ಜಿಲ್ಲಾ ಸರಬರಾಜು ಕಚೇರಿಯಲ್ಲಿ ನೋಂದಾಯಿಸಲಾಗಿದೆ.',
+    'delivery.ration_received_badge': 'ರೇಷನ್ ಸ್ವೀಕರಿಸಲಾಗಿದೆ — ಮುಂದಿನ ಸೈಕಲ್‌ಗಾಗಿ ಕಾಯಿರಿ',
+    'delivery.ration_received_desc': 'ಪ್ರಸ್ತುತ ಸೈಕಲ್‌ಗೆ ನೀವು ಈಗಾಗಲೇ ನಿಮ್ಮ ರೇಷನ್ ಅನ್ನು ಸ್ವೀಕರಿಸಿದ್ದೀರಿ. ದಯವಿಟ್ಟು ಮುಂದಿನ ವಿತರಣಾ ಸೈಕಲ್‌ವರೆಗೆ ಕಾಯಿರಿ.',
     'delivery.dispute_reason_banner': 'ದೂರಿನ ಕಾರಣ: {reason} (ಅಧಿಕಾರಿಗಳ ತನಿಖೆಯಲ್ಲಿದೆ)',
+    'delivery.eta_label': 'ನಿರೀಕ್ಷಿತ ವಿತರಣಾ ಸಮಯ',
+    'delivery.eta_delayed_label': 'ಪರಿಷ್ಕೃತ ವಿತರಣಾ ಸಮಯ',
+    'delivery.eta_arriving_today': 'ಇಂದೇ ನಿರೀಕ್ಷಿಸಲಾಗಿದೆ • ವಿತರಣೆ ಪ್ರಗತಿಯಲ್ಲಿದೆ',
+    'delivery.eta_out_now': 'ವಿತರಣೆಗೆ ಹೊರಟಿದೆ • ಶೀಘ್ರದಲ್ಲೇ ತಲುಪಲಿದೆ',
+    'delivery.eta_completed': 'ಯಶಸ್ವಿಯಾಗಿ ವಿತರಿಸಲಾಗಿದೆ • ಪರಿಶೀಲಿಸಲಾಗಿದೆ',
+    'delivery.eta_countdown_prefix': 'ನಿರೀಕ್ಷಿತ ಸಮಯ:',
+    'delivery.eta_days_hours': '{days} ದಿನ {hours} ಗಂಟೆ ಬಾಕಿ',
 
     // Delivery Dispute Modal
     'dispute.modal_title': 'ಪಡಿತರ ವಿತರಣಾ ವ್ಯತ್ಯಾಸವನ್ನು ವರದಿ ಮಾಡಿ',
@@ -694,15 +755,16 @@ const Map<String, Map<String, String>> _translations = {
     'confirm.btn_view_history': 'ಎಲ್ಲಾ ದಾಖಲಾದ ಸಂಕೇತಗಳನ್ನು ವೀಕ್ಷಿಸಿ',
 
     // Household Members & Calculation
-    'members.title': 'ಅರ್ಹ ಕುಟುಂಬ ಸದಸ್ಯರು',
-    'members.badge': '5.0 ಕೆ.ಜಿ. / ಅರ್ಹ ವ್ಯಕ್ತಿಗೆ',
-    'members.subtitle': 'ಕಾನೂನುಬದ್ಧ ಪಡಿತರ ಅರ್ಹತೆಯ ಅಡಿಯಲ್ಲಿ ಆಹಾರ ಧಾನ್ಯಗಳಿಗೆ ಅರ್ಹರಾಗಿರುವ ಕುಟುಂಬ ಸದಸ್ಯರ ಸಂಖ್ಯೆ',
-    'members.formula': '{count} ಸದಸ್ಯರು × 5.0 ಕೆ.ಜಿ. = {max} ಕೆ.ಜಿ. ಗರಿಷ್ಠ ಕುಟುಂಬ ಕೋಟಾ',
-    'members.allocation_title': 'ಸಂಯೋಜಿತ ಆಹಾರ ಧಾನ್ಯ ಹಂಚಿಕೆ',
+    'members.title': 'ಸರ್ಕಾರ-ದೃಢೀಕೃತ ಗೃಹ ಅರ್ಹತೆ',
+    'members.badge': '5.0 ಕೆ.ಜಿ. / ನೋಂದಾಯಿತ ಸದಸ್ಯ',
+    'members.subtitle': 'ಸದಸ್ಯರ ಸಂಖ್ಯೆ ಸರ್ಕಾರಿ ಪಡಿತರ ಚೀಟಿ ನೋಂದಾವಣಿಯಿಂದ ಪರಿಶೀಲಿಸಲಾಗಿದೆ. ಅರ್ಹತೆ ಬದಲಾಯಿಸಲು ಸದಸ್ಯರನ್ನು ಸೇರಿಸಲು ಅಥವಾ ತೆಗೆಯಲು ಅನುಮತಿ ಇಲ್ಲ.',
+    'members.govt_controlled': 'ಸರ್ಕಾರ-ನಿಯಂತ್ರಿತ • ದೃಢೀಕೃತ ಪಡಿತರ ಚೀಟಿ ನೋಂದಾವಣಿ ಆಧಾರಿತ. ಸದಸ್ಯ ಸಂಖ್ಯೆ ಕೈಯಾರೆ ಬದಲಾಯಿಸಲು ಅಸಾಧ್ಯ.',
+    'members.formula': '{count} ದೃಢೀಕೃತ ಸದಸ್ಯರು × 5.0 ಕೆ.ಜಿ. = {max} ಕೆ.ಜಿ. ಶಾಸನಬದ್ಧ ಕುಟುಂಬ ಕೋಟಾ',
+    'members.allocation_title': 'ಶಾಸನಬದ್ಧ ಆಹಾರ ಧಾನ್ಯ ಹಂಚಿಕೆ',
     'members.rice_alloc': 'ಅಕ್ಕಿ ಹಂಚಿಕೆ',
     'members.wheat_alloc': 'ಗೋಧಿ ಹಂಚಿಕೆ',
     'members.over_error': 'ಒಟ್ಟು ವಿನಂತಿಸಿದ ಪ್ರಮಾಣ ({qty} ಕೆ.ಜಿ.) {count} ಅರ್ಹ ಸದಸ್ಯರಿಗೆ ಗರಿಷ್ಠ ಕುಟುಂಬ ಅರ್ಹತೆಗಿಂತ ({max} ಕೆ.ಜಿ.) ಹೆಚ್ಚಾಗಿದೆ.',
-    'members.adjust_hint': 'ನಿಮ್ಮ ಕಾನೂನುಬದ್ಧ ಕೋಟಾದ ಮಿತಿಯಲ್ಲಿರಲು ಪ್ರಮಾಣವನ್ನು ಸರಿಹೊಂದಿಸಿ.',
+    'members.adjust_hint': 'ಶಾಸನಬದ್ಧ ಪ್ರಮಾಣಗಳನ್ನು ಸರ್ಕಾರಿ ನೀತಿ ನಿರ್ಧರಿಸುತ್ತದೆ ಮತ್ತು ಹೆಚ್ಚಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.',
 
     // Biometric & Delivery Verification
     'biometric.title_fps': 'ನ್ಯಾಯಬೆಲೆ ಅಂಗಡಿ ಬಯೋಮೆಟ್ರಿಕ್ ಪರಿಶೀಲನೆ',
@@ -772,6 +834,22 @@ const Map<String, Map<String, String>> _translations = {
     'delay.officer_msg_template': 'ಸರ್ಕಾರಿ ದಾಸ್ತಾನು ತಾತ್ಕಾಲಿಕವಾಗಿ ಲಭ್ಯವಿಲ್ಲದ ಕಾರಣ ನಿಮ್ಮ ಪಡಿತರ ವಿತರಣೆ ವಿಳಂಬವಾಗಿದೆ. 1-2 ದಿನಗಳಲ್ಲಿ ವಿತರಣೆ ಪೂರ್ಣಗೊಳ್ಳಲಿದೆ. ನೀವು ಮತ್ತೆ ಅರ್ಜಿ ಸಲ್ಲಿಸುವ ಅಗತ್ಯವಿಲ್ಲ.',
     'delay.btn_send_alert': 'ವಿಳಂಬ ಸಂದೇಶ ಕಳುಹಿಸಿ (SMS / WhatsApp)',
     'delay.alert_sent_success': 'ತಾತ್ಕಾಲಿಕ ವಿಳಂಬದ ಅಧಿಕೃತ ಸಂದೇಶವನ್ನು ಫಲಾನುಭವಿಗೆ SMS ಮೂಲಕ ಯಶಸ್ವಿಯಾಗಿ ಕಳುಹಿಸಲಾಗಿದೆ.',
+
+    // Planning Cycle & Choice Window
+    'cycle.planning_day': 'ಯೋಜನಾ ದಿನ {day}',
+    'cycle.timeline_title': 'ಪಿಡಿಎಸ್ ಮಾಸಿಕ ಬೇಡಿಕೆ ಮತ್ತು ರವಾನೆ ಕಾಲರೇಖೆ',
+    'cycle.window_open': 'ಆಯ್ಕೆ ವಿಂಡೋ ತೆರೆದಿದೆ',
+    'cycle.window_closed': 'ಆಯ್ಕೆ ವಿಂಡೋ ಮುಚ್ಚಿದೆ',
+    'cycle.window_desc_open': 'ಫಲಾನುಭವಿ ಆಯ್ಕೆ ವಿಂಡೋ ತೆರೆದಿದೆ (ದಿನ 21–24). ನಿಮ್ಮ ಆದ್ಯತೆಯ ನ್ಯಾಯಬೆಲೆ ಅಂಗಡಿ ಮತ್ತು ವಿತರಣಾ ವಿಧಾನವನ್ನು ನೀವು ಆಯ್ಕೆ ಮಾಡಬಹುದು ಅಥವಾ ಬದಲಾಯಿಸಬಹುದು.',
+    'cycle.window_desc_closed': 'ದಿನ 25 ರಂದು ಬೇಡಿಕೆಯನ್ನು ಲಾಕ್ ಮಾಡಲಾಗಿದೆ. ಫಲಾನುಭವಿ ಆದ್ಯತೆಗಳನ್ನು ರವಾನೆ ಪೂರ್ವ ಮುನ್ಸೂಚನೆಗಾಗಿ ಸುರಕ್ಷಿತಗೊಳಿಸಲಾಗಿದೆ.',
+    'cycle.day21_24': 'ದಿನ 21–24: ಆಯ್ಕೆ ವಿಂಡೋ',
+    'cycle.day25_lock': 'ದಿನ 25: ಬೇಡಿಕೆ ಲಾಕ್',
+    'cycle.day26_plus': 'ದಿನ 26+: ಯೋಜನೆ ಮತ್ತು ರವಾನೆ',
+    'cycle.locked_badge': 'ಬೇಡಿಕೆ ಬೇಸ್‌ಲೈನ್ ಲಾಕ್ ಆಗಿದೆ',
+    'cycle.locked_notice': 'ಈ ಸುತ್ತಿನ ಮಾಸಿಕ ಬೇಡಿಕೆ ಬೇಸ್‌ಲೈನ್ ಅನ್ನು ಲಾಕ್ ಮಾಡಲಾಗಿದೆ (ದಿನ 25). 7-ಹಂತದ ರವಾನೆ ಇಂಜಿನ್ ಈ ಸುರಕ್ಷಿತ ಸ್ನ್ಯಾಪ್‌ಶಾಟ್‌ನಲ್ಲಿ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತಿದೆ.',
+    'cycle.locked_cannot_edit': 'ಆಯ್ಕೆ ವಿಂಡೋ ಮುಚ್ಚಿದೆ: {cycle} ಸುತ್ತಿಗೆ ಬೇಡಿಕೆಯನ್ನು ಲಾಕ್ ಮಾಡಲಾಗಿದೆ. ಆದ್ಯತೆಗಳನ್ನು ಬದಲಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.',
+    'cycle.admin_demand_locked_heading': '🔒 ಬೇಡಿಕೆ ಬೇಸ್‌ಲೈನ್ ಲಾಕ್ ಆಗಿದೆ',
+    'cycle.admin_demand_locked_sub': 'ದಿನ 25 ರಂದು ಸುರಕ್ಷಿತಗೊಳಿಸಲಾಗಿದೆ. AI ಮುನ್ಸೂಚನೆ ಮತ್ತು ಸರಬರಾಜು ವಾಹನ ಯೋಜನೆಗಳು ಈ ಬದಲಾಗದ ಸ್ನ್ಯಾಪ್‌ಶಾಟ್ ಬಳಸುತ್ತಿವೆ.',
 
     // Navigation & Common
     'nav.logout': 'ಲಾಗ್‌ಔಟ್',

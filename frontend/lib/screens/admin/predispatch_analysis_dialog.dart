@@ -84,107 +84,20 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
   ];
 
   // Execution State
-  bool _isRunning = false;
-  bool _isCompleted = false;
   bool _simulateStockShortage = false;
-  int _currentStageIndex = -1; // -1: Not started, 0..3: active stage, 4: all completed
   // ignore: unused_field
   String? _errorMessage;
-  int _activeStageSeconds = 0;
-  final Map<int, int> _stageDurations = {}; // stores completed seconds per stage
-  Timer? _timer;
   bool _isActionExecuting = false;
 
   @override
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
-    // Auto-start pipeline execution on open
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startAnalysisPipeline();
-    });
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
     super.dispose();
-  }
-
-  void _startAnalysisPipeline() {
-    _timer?.cancel();
-    setState(() {
-      _isRunning = true;
-      _isCompleted = false;
-      _currentStageIndex = 0;
-      _activeStageSeconds = 0;
-      _stageDurations.clear();
-      _errorMessage = null;
-    });
-
-    _startTimerForCurrentStage();
-  }
-
-  void _startTimerForCurrentStage() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      setState(() {
-        _activeStageSeconds++;
-      });
-
-      // Advance stage after realistic simulated processing duration
-      final targetDuration = _simulateStockShortage
-          ? (_currentStageIndex == 0 ? 3 : (_currentStageIndex == 1 ? 2 : 2))
-          : (_currentStageIndex == 0 ? 3 : (_currentStageIndex == 1 ? 2 : (_currentStageIndex == 2 ? 3 : 2)));
-
-      if (_activeStageSeconds >= targetDuration) {
-        _advanceToNextStage();
-      }
-    });
-  }
-
-  void _advanceToNextStage() {
-    _stageDurations[_currentStageIndex] = _activeStageSeconds;
-
-    // If stock shortage scenario, stop at stage 1 (Validate) with stock constraint warning
-    if (_simulateStockShortage && _currentStageIndex == 1) {
-      _timer?.cancel();
-      // Record staged times for remaining
-      _stageDurations[2] = 0;
-      _stageDurations[3] = 0;
-      setState(() {
-        _isRunning = false;
-        _isCompleted = true;
-        _currentStageIndex = 4;
-      });
-      return;
-    }
-
-    if (_currentStageIndex < _stages.length - 1) {
-      setState(() {
-        _currentStageIndex++;
-        _activeStageSeconds = 0;
-      });
-    } else {
-      // Completed all stages
-      _timer?.cancel();
-      setState(() {
-        _isRunning = false;
-        _isCompleted = true;
-        _currentStageIndex = 4;
-      });
-    }
-  }
-
-  String _formatTimer(int seconds) {
-    final m = (seconds ~/ 60).toString().padLeft(2, '0');
-    final s = (seconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
   }
 
   Future<void> _handleDelayDispatch() async {
@@ -285,7 +198,7 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
                   const SizedBox(height: 18),
                   _buildStagePipeline(),
                   const SizedBox(height: 18),
-                  if (_isCompleted) _buildOutcomeSection(),
+                  _buildOutcomeSection(),
                   const SizedBox(height: 20),
                   _buildFooterActions(),
                 ],
@@ -387,7 +300,6 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
             onTap: () {
               if (_simulateStockShortage) {
                 setState(() => _simulateStockShortage = false);
-                _startAnalysisPipeline();
               }
             },
             activeColor: AppConstants.successGreen,
@@ -398,7 +310,6 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
             onTap: () {
               if (!_simulateStockShortage) {
                 setState(() => _simulateStockShortage = true);
-                _startAnalysisPipeline();
               }
             },
             activeColor: const Color(0xFFB45309),
@@ -470,45 +381,44 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
             children: [
               Row(
                 children: [
-                  if (_isRunning)
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppConstants.primaryNavy),
-                    )
-                  else
-                    Icon(
-                      _simulateStockShortage ? Icons.warning_amber_rounded : Icons.check_circle_outline,
-                      size: 16,
-                      color: _simulateStockShortage ? const Color(0xFFB45309) : AppConstants.successGreen,
-                    ),
+                  Icon(
+                    _simulateStockShortage ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+                    size: 16,
+                    color: _simulateStockShortage ? const Color(0xFFB45309) : AppConstants.successGreen,
+                  ),
                   const SizedBox(width: 8),
                   Text(
-                    _isRunning
-                        ? tr('predispatch.running')
-                        : (_simulateStockShortage
-                            ? tr('predispatch.stock_warning_title')
-                            : tr('predispatch.completed_all')),
+                    _simulateStockShortage
+                        ? tr('predispatch.stock_warning_title')
+                        : tr('predispatch.completed_all'),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
-                      color: _simulateStockShortage && _isCompleted
+                      color: _simulateStockShortage
                           ? const Color(0xFFB45309)
                           : AppConstants.primaryNavy,
                     ),
                   ),
                 ],
               ),
-              if (_isRunning)
-                Text(
-                  'ACTIVE STAGE TIMER: ${_formatTimer(_activeStageSeconds)}',
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: AppConstants.accentBlue,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _simulateStockShortage ? const Color(0xFFFEF3C7) : const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(
+                    color: _simulateStockShortage ? const Color(0xFFFDE68A) : const Color(0xFF86EFAC),
                   ),
                 ),
+                child: Text(
+                  _simulateStockShortage ? 'STOCK CONSTRAINT' : 'PRE-DISPATCH AUDIT VERIFIED',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: _simulateStockShortage ? const Color(0xFFB45309) : const Color(0xFF15803D),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -531,39 +441,21 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
     final translatedDesc = tr(descKey);
     final desc = translatedDesc == descKey ? (stage['descDefault'] ?? descKey) : translatedDesc;
 
-    final isCompleted = _currentStageIndex > index || (_isCompleted && (!_simulateStockShortage || index <= 1));
-    final isActive = _currentStageIndex == index && _isRunning;
-    final isStockShortageStage = _simulateStockShortage && index == 1 && (_isCompleted || isActive);
-    final isPendingAfterShortage = _simulateStockShortage && index > 1 && _isCompleted;
-
-    // Timer display string
-    String timerText;
-    if (isCompleted) {
-      final sec = _stageDurations[index] ?? 0;
-      timerText = _formatTimer(sec);
-    } else if (isActive) {
-      timerText = _formatTimer(_activeStageSeconds);
-    } else {
-      timerText = '--:--';
-    }
+    final isStockShortageStage = _simulateStockShortage && index == 1;
+    final isPendingAfterShortage = _simulateStockShortage && index > 1;
+    final isCompleted = !isPendingAfterShortage;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: isActive
-            ? AppConstants.accentBlue.withValues(alpha: 0.06)
-            : (isStockShortageStage
-                ? const Color(0xFFFFFBEB)
-                : Colors.white),
+        color: isStockShortageStage ? const Color(0xFFFFFBEB) : Colors.white,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isActive
-              ? AppConstants.accentBlue
-              : (isStockShortageStage
-                  ? const Color(0xFFFDE68A)
-                  : (isCompleted ? AppConstants.successGreen.withValues(alpha: 0.4) : AppConstants.cardBorder)),
-          width: isActive || isStockShortageStage ? 1.5 : 1,
+          color: isStockShortageStage
+              ? const Color(0xFFFDE68A)
+              : (isCompleted ? AppConstants.successGreen.withValues(alpha: 0.4) : AppConstants.cardBorder),
+          width: isStockShortageStage ? 1.5 : 1,
         ),
       ),
       child: Row(
@@ -574,29 +466,12 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
             height: 28,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: isCompleted
-                  ? (isStockShortageStage ? const Color(0xFFFEF3C7) : const Color(0xFFDCFCE7))
-                  : (isActive ? AppConstants.primaryNavy : const Color(0xFFF1F5F9)),
+              color: isStockShortageStage ? const Color(0xFFFEF3C7) : const Color(0xFFDCFCE7),
             ),
             child: Center(
-              child: isCompleted
-                  ? (isStockShortageStage
-                      ? const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFB45309))
-                      : const Icon(Icons.check, size: 16, color: Color(0xFF15803D)))
-                  : (isActive
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text(
-                          '○',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey.shade400,
-                          ),
-                        )),
+              child: isStockShortageStage
+                  ? const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFB45309))
+                  : const Icon(Icons.check, size: 16, color: Color(0xFF15803D)),
             ),
           ),
           const SizedBox(width: 14),
@@ -615,28 +490,32 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
                         fontWeight: FontWeight.w800,
                         color: isStockShortageStage
                             ? const Color(0xFFB45309)
-                            : (isActive ? AppConstants.primaryNavy : AppConstants.textPrimary),
+                            : AppConstants.textPrimary,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    if (isCompleted)
-                      Text(
-                        isStockShortageStage ? '⚠ CONSTRAINT DETECTED' : '✓ COMPLETED',
+                    if (isStockShortageStage)
+                      const Text(
+                        '⚠ CONSTRAINT DETECTED',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: isStockShortageStage ? const Color(0xFFB45309) : const Color(0xFF15803D),
+                          color: Color(0xFFB45309),
                         ),
-                      )
-                    else if (isActive)
-                      const Text(
-                        '⟳ PROCESSING...',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppConstants.accentBlue),
                       )
                     else if (isPendingAfterShortage)
                       const Text(
                         '⏳ STAGED FOR REPLENISHMENT',
                         style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFFB45309)),
+                      )
+                    else
+                      const Text(
+                        '✓ AUDITED & VERIFIED',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF15803D),
+                        ),
                       ),
                   ],
                 ),
@@ -648,48 +527,6 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
                   style: TextStyle(
                     fontSize: 11,
                     color: isStockShortageStage ? const Color(0xFF92400E) : AppConstants.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Visible Elapsed Time Timer (e.g. 00:04, 00:02)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: isActive
-                  ? AppConstants.primaryNavy
-                  : (isCompleted
-                      ? (isStockShortageStage ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9))
-                      : const Color(0xFFF8FAFC)),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: isActive
-                    ? AppConstants.primaryNavy
-                    : (isStockShortageStage ? const Color(0xFFFDE68A) : AppConstants.cardBorder),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.timer_outlined,
-                  size: 13,
-                  color: isActive
-                      ? Colors.white
-                      : (isStockShortageStage ? const Color(0xFFB45309) : AppConstants.textSecondary),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  timerText,
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: isActive
-                        ? Colors.white
-                        : (isStockShortageStage ? const Color(0xFFB45309) : AppConstants.textPrimary),
                   ),
                 ),
               ],
@@ -791,7 +628,7 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
       runSpacing: 10,
       children: [
         OutlinedButton.icon(
-          onPressed: _isRunning ? null : _startAnalysisPipeline,
+          onPressed: () => setState(() {}),
           icon: const Icon(Icons.replay_rounded, size: 16),
           label: const Text('Re-run Pipeline', style: TextStyle(fontSize: 12)),
           style: OutlinedButton.styleFrom(
@@ -808,7 +645,7 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
             const SizedBox(width: 8),
             if (_simulateStockShortage)
               ElevatedButton.icon(
-                onPressed: _isActionExecuting || _isRunning ? null : _handleDelayDispatch,
+                onPressed: _isActionExecuting ? null : _handleDelayDispatch,
                 icon: _isActionExecuting
                     ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.schedule_send_rounded, size: 16),
@@ -824,7 +661,7 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
               )
             else
               ElevatedButton.icon(
-                onPressed: _isActionExecuting || _isRunning ? null : _handleProceedNormalDispatch,
+                onPressed: _isActionExecuting ? null : _handleProceedNormalDispatch,
                 icon: _isActionExecuting
                     ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.lock_clock_rounded, size: 16),

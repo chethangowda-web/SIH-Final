@@ -327,7 +327,7 @@ void main() {
       expect(distributedAmount, equals(20.0));
     });
 
-    testWidgets('IntentSelectionScreen enforces combined quota ceiling and blocks over-entitlement',
+    testWidgets('IntentSelectionScreen locks commodity quantities as fixed read-only entitlement',
         (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1280, 1100);
       tester.view.devicePixelRatio = 1.0;
@@ -349,7 +349,7 @@ void main() {
           home: IntentSelectionScreen(
             beneficiary: mockBen,
             apiService: mockApi,
-            initialEligibleMembersCount: 3, // 3 x 5 = 15.0 kg Max
+            initialEligibleMembersCount: 3, // 3 x 5 = 15.0 kg Max (12 kg Rice + 3 kg Wheat)
           ),
         ),
       );
@@ -361,32 +361,73 @@ void main() {
       expect(find.text('3 Members × 5.0 kg = 15.0 kg Maximum Household Quota'), findsOneWidget);
       expect(find.text('15.0 / 15.0 kg'), findsOneWidget);
 
-      // Continue button should be enabled initially
-      final submitButton = find.byKey(const ValueKey('btn_continue_to_review'));
-      expect(submitButton, findsOneWidget);
+      // Verify Rice and Wheat are fixed read-only values
+      expect(find.text('12.0 kg'), findsOneWidget);
+      expect(find.text('3.0 kg'), findsOneWidget);
 
-      // 2. Increase Rice by 2 kg (Rice 12 -> 14 kg + Wheat 3 kg = 17 kg > 15 kg Max)
-      await tester.ensureVisible(find.byKey(const ValueKey('btn_increment_rice')));
-      await tester.tap(find.byKey(const ValueKey('btn_increment_rice')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('btn_increment_rice')));
-      await tester.pumpAndSettle();
+      // Verify NO stepper / increment / decrement buttons exist anywhere for commodities
+      expect(find.byKey(const ValueKey('btn_increment_rice')), findsNothing);
+      expect(find.byKey(const ValueKey('btn_decrement_rice')), findsNothing);
+      expect(find.byKey(const ValueKey('btn_increment_wheat')), findsNothing);
+      expect(find.byKey(const ValueKey('btn_decrement_wheat')), findsNothing);
 
-      // Verify Over-entitlement Alert Banner appears
-      expect(find.text('Combined requested quantity (17.0 kg) exceeds the maximum household entitlement (15.0 kg) for 3 eligible members.'), findsOneWidget);
-      expect(find.text('Adjust quantities to stay within your statutory entitlement ceiling.'), findsOneWidget);
-
-      // 3. Increment members to 4 (4 x 5 = 20.0 kg Max, so 17 kg becomes valid!)
+      // 2. Increment members to 4 (4 x 5 = 20.0 kg Max -> 16 kg Rice + 4 kg Wheat)
       await tester.ensureVisible(find.byKey(const ValueKey('btn_intent_increment_members')));
       await tester.tap(find.byKey(const ValueKey('btn_intent_increment_members')));
       await tester.pumpAndSettle();
 
       expect(find.text('4 Members × 5.0 kg = 20.0 kg Maximum Household Quota'), findsOneWidget);
-      // Over-entitlement alert should disappear
-      expect(find.text('Adjust quantities to stay within your statutory entitlement ceiling.'), findsNothing);
+      expect(find.text('20.0 / 20.0 kg'), findsOneWidget);
+      expect(find.text('16.0 kg'), findsOneWidget);
+      expect(find.text('4.0 kg'), findsOneWidget);
+
+      // Submit/continue button is available
+      final submitButton = find.byKey(const ValueKey('btn_continue_to_review'));
+      expect(submitButton, findsOneWidget);
     });
 
-    testWidgets('Multilingual switching translates household and biometric strings accurately',
+    testWidgets('BeneficiaryHomeScreen displays Expected Delivery Timer and counts down reactively',
+        (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1280, 1100);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final mockApi = MockHouseholdApiService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BeneficiaryHomeScreen(
+            beneficiaryId: 'BEN-KA-0001',
+            apiService: mockApi,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // 1. Expected Delivery Timer Card should be visible on active delivery
+      expect(find.byKey(const ValueKey('card_expected_delivery_timer')), findsOneWidget);
+      expect(find.byKey(const ValueKey('text_eta_countdown')), findsOneWidget);
+      expect(find.text('EXPECTED DELIVERY'), findsOneWidget);
+
+      // Get initial countdown text
+      final initialTextFinder = find.byKey(const ValueKey('text_eta_countdown'));
+      final initialTextWidget = tester.widget<Text>(initialTextFinder);
+      final initialCountdown = initialTextWidget.data;
+      expect(initialCountdown, isNotNull);
+
+      // 2. Advance clock by 2 seconds to verify reactive countdown
+      await tester.pump(const Duration(seconds: 2));
+
+      final updatedTextWidget = tester.widget<Text>(initialTextFinder);
+      final updatedCountdown = updatedTextWidget.data;
+
+      // Countdown should not be null or negative
+      expect(updatedCountdown, isNotNull);
+      expect(updatedCountdown!.contains('-'), isFalse);
+    });
+
+    testWidgets('Multilingual switching translates household, biometric, and ETA strings accurately',
         (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -408,6 +449,7 @@ void main() {
       // 1. English
       expect(find.text('ELIGIBLE HOUSEHOLD MEMBERS'), findsOneWidget);
       expect(find.text('5.0 kg / ELIGIBLE PERSON'), findsOneWidget);
+      expect(find.text('EXPECTED DELIVERY'), findsOneWidget);
 
       // 2. Switch to Hindi (हिंदी)
       LanguageController.instance.setLanguage(AppLanguage.hindi);
@@ -415,6 +457,7 @@ void main() {
 
       expect(find.text('पात्र परिवार के सदस्य'), findsOneWidget);
       expect(find.text('5.0 किग्रा / पात्र व्यक्ति'), findsOneWidget);
+      expect(find.text('अपेक्षित डिलीवरी समय'), findsOneWidget);
 
       // 3. Switch to Kannada (ಕನ್ನಡ)
       LanguageController.instance.setLanguage(AppLanguage.kannada);
@@ -422,6 +465,7 @@ void main() {
 
       expect(find.text('ಅರ್ಹ ಕುಟುಂಬ ಸದಸ್ಯರು'), findsOneWidget);
       expect(find.text('5.0 ಕೆ.ಜಿ. / ಅರ್ಹ ವ್ಯಕ್ತಿಗೆ'), findsOneWidget);
+      expect(find.text('ನಿರೀಕ್ಷಿತ ವಿತರಣಾ ಸಮಯ'), findsOneWidget);
     });
   });
 }

@@ -119,6 +119,11 @@ class AdminDashboardData {
   final List<Map<String, dynamic>> topIntentShiftFps;
   final List<AdminFpsRow> fpsList;
   final String workflowStatus;
+  final Map<String, dynamic>? planningCycleState;
+
+  int get planningDay => planningCycleState?['planning_day'] ?? (workflowStatus == 'PLANNING_OPEN' ? 22 : 25);
+  bool get isDemandLocked => planningCycleState?['is_demand_locked'] ?? (workflowStatus != 'PLANNING_OPEN');
+  bool get isChoiceWindowOpen => planningCycleState?['is_open'] ?? (workflowStatus == 'PLANNING_OPEN');
 
   AdminDashboardData({
     required this.district,
@@ -143,6 +148,7 @@ class AdminDashboardData {
     required this.topIntentShiftFps,
     required this.fpsList,
     required this.workflowStatus,
+    this.planningCycleState,
   });
 
   factory AdminDashboardData.fromJson(Map<String, dynamic> json) {
@@ -186,6 +192,9 @@ class AdminDashboardData {
               .toList() ??
           [],
       workflowStatus: json['workflow_status'] ?? 'PLANNING_OPEN',
+      planningCycleState: json['planning_cycle_state'] != null
+          ? Map<String, dynamic>.from(json['planning_cycle_state'])
+          : null,
     );
   }
 }

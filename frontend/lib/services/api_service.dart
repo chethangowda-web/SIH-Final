@@ -32,14 +32,16 @@ class AuthenticatedClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    // 1. Check expiration if token exists
-    if (session.token != null && session.isExpired) {
+    final isAuthOrHealth = request.url.path.contains('/auth/login') || request.url.path.contains('/health');
+
+    // 1. Check expiration if token exists (skip for login/health)
+    if (!isAuthOrHealth && session.token != null && session.isExpired) {
       session.trigger401();
       throw const UnauthorizedException('Session expired. Please log in again.');
     }
 
     // 2. Automatically inject Authorization header if authenticated
-    if (session.token != null && session.token!.isNotEmpty) {
+    if (!isAuthOrHealth && session.token != null && session.token!.isNotEmpty) {
       request.headers['Authorization'] = 'Bearer ${session.token}';
     }
 
@@ -111,6 +113,7 @@ class ApiService {
 
   /// Authenticate credentials and store the returned token into centralized AuthSession.
   Future<Map<String, dynamic>> login(String username, String password) async {
+    authSession.clear();
     final response = await client.post(
       Uri.parse('${AppConstants.apiBaseUrl}/auth/login'),
       headers: {'Content-Type': 'application/json'},
@@ -215,8 +218,16 @@ class ApiService {
         .timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 200) {
-      final list = json.decode(response.body) as List<dynamic>;
-      return list.map((item) => FpsShop.fromJson(item)).toList();
+      final decoded = json.decode(response.body);
+      final List<dynamic> list;
+      if (decoded is List) {
+        list = decoded;
+      } else if (decoded is Map && decoded.containsKey('items') && decoded['items'] is List) {
+        list = decoded['items'] as List<dynamic>;
+      } else {
+        list = [];
+      }
+      return list.map((item) => FpsShop.fromJson(Map<String, dynamic>.from(item as Map))).toList();
     } else {
       throw parseError(response, 'Failed to fetch FPS list: ${response.statusCode}');
     }
@@ -469,8 +480,16 @@ class ApiService {
         .timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 200) {
-      final list = json.decode(response.body) as List<dynamic>;
-      return list.map((item) => IntentRecord.fromJson(item)).toList();
+      final decoded = json.decode(response.body);
+      final List<dynamic> list;
+      if (decoded is List) {
+        list = decoded;
+      } else if (decoded is Map && decoded.containsKey('items') && decoded['items'] is List) {
+        list = decoded['items'] as List<dynamic>;
+      } else {
+        list = [];
+      }
+      return list.map((item) => IntentRecord.fromJson(Map<String, dynamic>.from(item as Map))).toList();
     } else {
       throw parseError(response, 'Failed to fetch intents: ${response.statusCode}');
     }
@@ -565,6 +584,36 @@ class ApiService {
     } else {
       final err = json.decode(response.body);
       throw parseError(response, err['detail'] ?? 'Failed to close choice window: ${response.statusCode}');
+    }
+  }
+
+  /// Retrieve the frozen demand snapshot for the cycle
+  Future<Map<String, dynamic>> fetchDemandSnapshot({String cycleId = '2026-09'}) async {
+    final response = await client
+        .get(Uri.parse('${AppConstants.apiBaseUrl}/admin/planning-cycle/demand-snapshot?cycle_id=$cycleId'),
+            headers: {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, err['detail'] ?? 'Failed to fetch demand snapshot: ${response.statusCode}');
+    }
+  }
+
+  /// Set the planning-cycle day for demo simulations (e.g. Day 21..24 -> Day 25)
+  Future<Map<String, dynamic>> setPlanningCycleDay(int day, {String cycleId = '2026-09'}) async {
+    final response = await client
+        .post(Uri.parse('${AppConstants.apiBaseUrl}/admin/planning-cycle/set-day?day=$day&cycle_id=$cycleId'),
+            headers: {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, err['detail'] ?? 'Failed to set planning day: ${response.statusCode}');
     }
   }
 

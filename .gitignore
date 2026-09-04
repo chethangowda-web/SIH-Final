@@ -56,3 +56,8 @@ frontend/.pub/
 .DS_Store
 Thumbs.db
 
+# Temporary stubs & scratch
+git_stub/
+scratch/
+backend/scratch/
+

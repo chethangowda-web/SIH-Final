@@ -15,6 +15,13 @@ from app.main import app
 def setup_test_database():
     """Ensure clean test database with required tables before running tests."""
     init_db()
+    conn = get_db_connection()
+    conn.execute("DELETE FROM demand_snapshots;")
+    conn.execute("DELETE FROM planning_cycle_config;")
+    conn.execute("INSERT OR REPLACE INTO planning_cycle_config (cycle_id, planning_day, is_manual_override, updated_at) VALUES ('2026-09', 22, 1, CURRENT_TIMESTAMP);")
+    conn.execute("DELETE FROM beneficiary_cycle_receipts;")
+    conn.commit()
+    conn.close()
     yield
 
 

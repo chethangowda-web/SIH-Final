@@ -1,14 +1,16 @@
 import time
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, APIRouter, Request
+from fastapi import FastAPI, APIRouter, Request, Depends, Query
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import sqlite3
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.database import init_db, get_db
 from app.core.logging_config import setup_logging, get_logger, CorrelationIdMiddleware
 from app.data.seed_data import seed_all_data, DEMO_NOTICE
+from app.models.schemas import ChoiceWindowStatusOut
 from app.api.health import router as health_router
 from app.api.beneficiaries import router as beneficiaries_router
 from app.api.fps import router as fps_router
@@ -65,6 +67,7 @@ async def add_security_headers(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,6 +75,25 @@ app.add_middleware(
 
 # Register Canonical API Routers under /api (documented in OpenAPI /docs)
 api_router = APIRouter(prefix=settings.API_V1_PREFIX)
+
+@api_router.get("/choice-window/status", tags=["Choice Window"], response_model=ChoiceWindowStatusOut)
+def public_choice_window_status_api(
+    cycle_id: str = Query("2026-09", description="Planning cycle ID"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Public real-time query for choice window status and planning-cycle day without requiring session auth."""
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    return planning_cycle_engine.get_cycle_state(db, cycle_id.strip())
+
+@app.get("/choice-window/status", tags=["Choice Window"], response_model=ChoiceWindowStatusOut, include_in_schema=False)
+def public_choice_window_status_root(
+    cycle_id: str = Query("2026-09", description="Planning cycle ID"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Public real-time query alias at root level."""
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    return planning_cycle_engine.get_cycle_state(db, cycle_id.strip())
+
 api_router.include_router(auth_router)
 api_router.include_router(health_router)
 api_router.include_router(beneficiaries_router)

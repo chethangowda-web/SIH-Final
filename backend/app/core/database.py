@@ -788,6 +788,25 @@ def _migration_005_indexes_and_constraints(cursor: sqlite3.Cursor) -> None:
         cursor.execute(idx_sql)
 
 
+def _migration_006_beneficiary_cycle_receipts(cursor: sqlite3.Cursor) -> None:
+    """006: Durable Beneficiary Distribution Cycle Receipts and Idempotency Tracking."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS beneficiary_cycle_receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        beneficiary_id TEXT NOT NULL,
+        cycle_id TEXT NOT NULL,
+        request_id TEXT,
+        received_rice_kg REAL DEFAULT 0.0,
+        received_wheat_kg REAL DEFAULT 0.0,
+        confirmed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status TEXT NOT NULL DEFAULT 'COMPLETED',
+        FOREIGN KEY (beneficiary_id) REFERENCES beneficiaries (pseudonymous_beneficiary_id),
+        UNIQUE(beneficiary_id, cycle_id)
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cycle_receipts_ben_cycle ON beneficiary_cycle_receipts (beneficiary_id, cycle_id);")
+
+
 # Migration Registry
 MIGRATIONS = [
     (1, "001_core_supply_chain_schema", _migration_001_core_supply_chain),
@@ -795,6 +814,7 @@ MIGRATIONS = [
     (3, "003_citizen_requests_and_disputes", _migration_003_citizen_requests_and_disputes),
     (4, "004_unified_governance_trail", _migration_004_unified_governance_trail),
     (5, "005_performance_and_fk_indexes", _migration_005_indexes_and_constraints),
+    (6, "006_beneficiary_cycle_receipts", _migration_006_beneficiary_cycle_receipts),
 ]
 
 
@@ -1016,6 +1036,7 @@ def drop_all_tables(conn: Optional[sqlite3.Connection] = None) -> None:
         "entitlement_policies",
         "governance_audit_logs",
         "citizen_requests",
+        "beneficiary_cycle_receipts",
         "scarcity_allocation_items",
         "scarcity_allocation_plans",
         "stockout_risk_predictions",

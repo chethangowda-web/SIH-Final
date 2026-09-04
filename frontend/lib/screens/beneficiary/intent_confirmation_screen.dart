@@ -61,6 +61,14 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
       _errorMessage = null;
     });
 
+    if (widget.entitlementSummary?.rationReceivedForCycle == true) {
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = 'Ration already received for this cycle. Please wait for the next distribution cycle to submit a new request.';
+      });
+      return;
+    }
+
     try {
       final riceQuota = widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0);
       final wheatQuota = widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0);

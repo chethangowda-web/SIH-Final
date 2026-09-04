@@ -437,6 +437,14 @@ def seed_all_data(recreate=False):
     VALUES (?, ?, ?, ?);
     """, users_data)
 
+    # 10. Initialize Planning Cycle Engine State (Day 22: Choice Window Open by Default)
+    cursor.execute("DELETE FROM demand_snapshots WHERE cycle_id = ?;", (CURRENT_CYCLE,))
+    cursor.execute("DELETE FROM planning_cycle_config WHERE cycle_id = ?;", (CURRENT_CYCLE,))
+    cursor.execute("""
+    INSERT OR REPLACE INTO planning_cycle_config (cycle_id, planning_day, is_manual_override, updated_at)
+    VALUES (?, 22, 0, CURRENT_TIMESTAMP);
+    """, (CURRENT_CYCLE,))
+
     conn.commit()
 
     # Verification counts

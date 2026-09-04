@@ -207,6 +207,9 @@ class BeneficiaryEntitlementSummary {
   final double remainingEligibleWheatKg;
   final double totalEligibleBalanceKg;
   final TransportFeeBreakdown transportPolicy;
+  final bool rationReceivedForCycle;
+  final String? receiptConfirmedAt;
+  final String? receiptStatusLabel;
 
   BeneficiaryEntitlementSummary({
     required this.beneficiaryId,
@@ -225,6 +228,9 @@ class BeneficiaryEntitlementSummary {
     required this.remainingEligibleWheatKg,
     required this.totalEligibleBalanceKg,
     required this.transportPolicy,
+    this.rationReceivedForCycle = false,
+    this.receiptConfirmedAt,
+    this.receiptStatusLabel,
   });
 
   factory BeneficiaryEntitlementSummary.fromJson(Map<String, dynamic> json) {
@@ -251,6 +257,9 @@ class BeneficiaryEntitlementSummary {
           (json['remaining_eligible_wheat_kg'] as num?)?.toDouble() ?? 5.0,
       totalEligibleBalanceKg:
           (json['total_eligible_balance_kg'] as num?)?.toDouble() ?? 25.0,
+      rationReceivedForCycle: json['ration_received_for_cycle'] ?? false,
+      receiptConfirmedAt: json['receipt_confirmed_at'],
+      receiptStatusLabel: json['receipt_status_label'],
       transportPolicy: json['transport_policy'] != null
           ? TransportFeeBreakdown.fromJson(json['transport_policy'])
           : TransportFeeBreakdown(
