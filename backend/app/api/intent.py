@@ -35,14 +35,14 @@ def submit_intent(
     # 1. Validate commodity
     if payload.commodity not in ["Rice", "Wheat"]:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid commodity '{payload.commodity}'. Must be either 'Rice' or 'Wheat'."
         )
 
     # 1.1 Validate declared quantity if provided
     if payload.declared_quantity_kg is not None and payload.declared_quantity_kg <= 0:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Declared quantity must be greater than 0 kg."
         )
 
@@ -106,7 +106,7 @@ def submit_intent(
     # Over-entitlement guard
     if payload.declared_quantity_kg is not None and payload.declared_quantity_kg > statutory_quota * 1.5:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Citizen declared quantity ({payload.declared_quantity_kg:.1f} kg) exceeds statutory monthly entitlement ceiling of {statutory_quota:.1f} kg for card type {entitlement['card_type']} ({entitlement['family_members_count']} members). Ration quantity is authoritatively determined by government statutory quotas."
         )
 
