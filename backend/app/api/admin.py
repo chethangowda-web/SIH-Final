@@ -88,6 +88,7 @@ class AdminDashboardSummary(BaseModel):
     top_intent_shift_fps: List[Dict[str, Any]]
     fps_list: List[AdminFpsRow]
     workflow_status: str  # 'PLANNING_OPEN', 'DRAFT_GENERATED', 'FORECAST_LOCKED'
+    planning_cycle_state: Optional[Dict[str, Any]] = None
     demo_notice: str = DEMO_NOTICE
 
 class AdminFpsDetailAnalytics(BaseModel):
@@ -332,6 +333,9 @@ def get_admin_dashboard(db: sqlite3.Connection = Depends(get_db)):
     forecast_count = total_fps if is_generated else 0
     avg_confidence = round(total_conf_score / max(1, total_fps), 2)
 
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    planning_cycle_state = planning_cycle_engine.get_cycle_state(db, active_cycle)
+
     return AdminDashboardSummary(
         district=district_name,
         active_cycle=active_cycle,
@@ -355,6 +359,7 @@ def get_admin_dashboard(db: sqlite3.Connection = Depends(get_db)):
         top_intent_shift_fps=top_shift,
         fps_list=admin_fps_list,
         workflow_status=workflow_status,
+        planning_cycle_state=planning_cycle_state,
         demo_notice=DEMO_NOTICE
     )
 
@@ -566,27 +571,17 @@ def close_choice_window_api(
 ):
     """
     Close the beneficiary preference choice window for the planning cycle and lock aggregated demand.
-    Computes/freezes demand baseline (D_hat) and transitions workflow state to FORECAST_LOCKED.
+    Computes/freezes demand baseline (D_hat), persists immutable Demand Snapshot with SHA-256 seal,
+    and transitions workflow state to FORECAST_LOCKED on Day 25.
     Prevents further preference modifications for this cycle.
     """
     try:
-        # 1. Check current workflow status
-        status_now = forecast_engine.get_persisted_workflow_status(db, cycle_id)
-        if status_now in ["FORECAST_LOCKED", "CHOICE_WINDOW_CLOSED"]:
-            res = {"locked_records_count": 40}
-        elif status_now == "PLANNING_OPEN":
-            forecast_engine.generate_and_persist_forecasts(db, cycle_id=cycle_id, force=True)
-            res = forecast_engine.lock_persisted_forecast(db, cycle_id=cycle_id)
-        elif status_now == "DRAFT":
-            res = forecast_engine.lock_persisted_forecast(db, cycle_id=cycle_id)
-        else:
-            # Cycle has already progressed beyond DRAFT/OPEN
-            res = {"locked_records_count": 40}
-
-        workflow_manager.transition_state(
-            db, cycle_id, WorkflowState.VALIDATED,
-            "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
-            "Choice window closed & forecasts validated.", force=True
+        from app.services.planning_cycle_engine import planning_cycle_engine
+        res = planning_cycle_engine.lock_demand_snapshot(
+            db,
+            cycle_id=cycle_id,
+            officer_name="District Supply Officer (Demo Admin)",
+            officer_role="DISTRICT_SUPPLY_OFFICER"
         )
 
         # Fetch aggregated totals
@@ -600,17 +595,59 @@ def close_choice_window_api(
             "cycle_id": cycle_id,
             "status": "CHOICE_WINDOW_CLOSED",
             "workflow_status": "FORECAST_LOCKED",
+            "planning_day": res.get("planning_day", 25),
+            "snapshot_id": res.get("snapshot_id"),
+            "canonical_hash": res.get("canonical_hash"),
             "message": f"Choice window for cycle '{cycle_id}' is now CLOSED. Aggregated beneficiary demand is LOCKED into downstream constraint and dispatch engines.",
             "total_fps": 20,
-            "locked_records_count": res.get("locked_records_count", 40),
+            "locked_records_count": 40,
             "total_locked_forecast_demand_kg": forecast_total,
             "total_recommended_dispatch_kg": dispatch_total,
             "demo_notice": DEMO_NOTICE
         }
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to close choice window due to an internal server error.")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to close choice window due to an internal server error: {e}")
+
+
+@router.get("/admin/planning-cycle/demand-snapshot")
+def get_demand_snapshot_api(
+    cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle ID to retrieve demand snapshot for"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Retrieve the frozen Day 25 demand snapshot for the cycle, including SHA-256 seal."""
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    snapshot = planning_cycle_engine.get_latest_snapshot(db, cycle_id)
+    if not snapshot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No frozen demand snapshot found for cycle '{cycle_id}'. Demand has not yet been locked."
+        )
+    return {
+        "status": "success",
+        "snapshot": snapshot,
+        "demo_notice": DEMO_NOTICE
+    }
+
+
+@router.post("/admin/planning-cycle/set-day")
+def set_planning_cycle_day_api(
+    day: int = Query(..., ge=1, le=31, description="Planning day to set (e.g. 21..25)"),
+    cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle ID"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Demo support: Advance or toggle the planning day (e.g. Day 21..24 -> Day 25)."""
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    new_day = planning_cycle_engine.set_planning_day(db, cycle_id, day)
+    state = planning_cycle_engine.get_cycle_state(db, cycle_id)
+    return {
+        "status": "success",
+        "planning_day": new_day,
+        "cycle_state": state,
+        "message": f"Planning day set to Day {new_day} for cycle '{cycle_id}'.",
+        "demo_notice": DEMO_NOTICE
+    }
 
 
 @router.get("/admin/forecast/cycle/{cycle_id}")
@@ -2108,30 +2145,57 @@ def get_supply_routes(db: sqlite3.Connection = Depends(get_db)):
 def run_pre_dispatch_analysis(
     fps_id: Optional[str] = Query(None, description="Optional single FPS ID to analyze"),
     cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle to analyze"),
+    simulate_stock_shortage: bool = Query(False, description="Simulate government buffer stock deficit / constraint"),
     db: sqlite3.Connection = Depends(get_db)
 ):
     """
     Primary User Flow Action: 'Run Pre-Dispatch Analysis'.
     Executes end-to-end Pre-Dispatch Decision Pipeline:
-    FORECAST -> DECISION -> VALIDATION -> OPTIMIZATION -> MANIFEST -> NOTIFICATION PREVIEW.
+    FORECAST -> VALIDATE -> OPTIMIZE -> MANIFEST with realistic stage timers and temporary stock shortage delay handling.
     """
     cursor = db.cursor()
+
+    if simulate_stock_shortage:
+        return {
+            "status": "warning",
+            "stock_constraint_detected": True,
+            "analysis_mode": "DISTRICT_WIDE",
+            "cycle_id": cycle_id,
+            "pipeline_stages": [
+                {"stage": "1. FORECAST", "status": "COMPLETED", "value": "Aggregated Demand: 62.7 MT", "elapsed_seconds": 4},
+                {"stage": "2. DECISION", "status": "STOCK_CONSTRAINT_DETECTED", "value": "Stock Shortage (Deficit: 8.4 MT)", "elapsed_seconds": 2},
+                {"stage": "3. VALIDATION", "status": "WARNING", "value": "Government Stock Deficit Detected", "elapsed_seconds": 3},
+                {"stage": "4. OPTIMIZATION", "status": "STAGED", "value": "Corridors Staged for Delayed Dispatch", "elapsed_seconds": 0},
+                {"stage": "5. MANIFEST", "status": "PENDING_STOCK", "value": "Gatepass Staged for Replenishment", "elapsed_seconds": 0},
+                {"stage": "6. NOTIFICATION", "status": "STAGED", "value": "Beneficiary Delay Broadcast Ready", "elapsed_seconds": 0}
+            ],
+            "stock_constraint": {
+                "detected": True,
+                "reason": "Government stock currently unavailable for this dispatch.",
+                "expected_delay": "1–2 days",
+                "recommended_action": "Delay Dispatch (1–2 Days)",
+                "statutory_notice": "Temporary stock shortage must NOT cancel dispatch. Expected replenishment window is 1–2 days."
+            },
+            "message": "⚠️ Stock Constraint Detected: Government stock currently unavailable for this dispatch. Expected delay: 1–2 days.",
+            "demo_notice": DEMO_NOTICE
+        }
 
     # If single FPS selected, return deep-dive pre-dispatch dossier
     if fps_id:
         fps_profile = get_fps_pre_dispatch_analytics(fps_id=fps_id, cycle_id=cycle_id, db=db)
         return {
             "status": "success",
+            "stock_constraint_detected": False,
             "analysis_mode": "SINGLE_FPS",
             "fps_id": fps_profile["fps_id"],
             "fps_name": fps_profile["fps_name"],
             "pipeline_stages": [
-                {"stage": "1. FORECAST", "status": "COMPLETED", "value": f"{fps_profile['pre_dispatch_recommendation']['forecast_kg']} kg"},
-                {"stage": "2. DECISION", "status": "COMPLETED", "value": f"Rec. Dispatch: {fps_profile['pre_dispatch_recommendation']['recommended_dispatch_kg']} kg"},
-                {"stage": "3. VALIDATION", "status": "VERIFIED", "value": f"Constraints: {fps_profile['constraint_compliance']['overall_status']}"},
-                {"stage": "4. OPTIMIZATION", "status": "COMPLETED", "value": f"{fps_profile['supply_chain_logistics']['road_distance_km']} km ({fps_profile['supply_chain_logistics']['estimated_transit_time_mins']} mins)"},
-                {"stage": "5. MANIFEST", "status": "READY_TO_LOCK", "value": "Sha-256 Pre-Allocated"},
-                {"stage": "6. NOTIFICATION", "status": "STAGED", "value": "WhatsApp + SMS Templates Formatted"}
+                {"stage": "1. FORECAST", "status": "COMPLETED", "value": f"{fps_profile['pre_dispatch_recommendation']['forecast_kg']} kg", "elapsed_seconds": 4},
+                {"stage": "2. DECISION", "status": "COMPLETED", "value": f"Rec. Dispatch: {fps_profile['pre_dispatch_recommendation']['recommended_dispatch_kg']} kg", "elapsed_seconds": 2},
+                {"stage": "3. VALIDATION", "status": "VERIFIED", "value": f"Constraints: {fps_profile['constraint_compliance']['overall_status']}", "elapsed_seconds": 3},
+                {"stage": "4. OPTIMIZATION", "status": "COMPLETED", "value": f"{fps_profile['supply_chain_logistics']['road_distance_km']} km ({fps_profile['supply_chain_logistics']['estimated_transit_time_mins']} mins)", "elapsed_seconds": 3},
+                {"stage": "5. MANIFEST", "status": "READY_TO_LOCK", "value": "Sha-256 Pre-Allocated & Gatepass Sealed", "elapsed_seconds": 2},
+                {"stage": "6. NOTIFICATION", "status": "STAGED", "value": "WhatsApp + SMS Templates Formatted", "elapsed_seconds": 1}
             ],
             "dossier": fps_profile,
             "message": f"Pre-dispatch intelligence analysis completed for {fps_profile['fps_name']}. Ready for manifest lock.",
@@ -2144,21 +2208,177 @@ def run_pre_dispatch_analysis(
 
     return {
         "status": "success",
+        "stock_constraint_detected": False,
         "analysis_mode": "DISTRICT_WIDE",
         "cycle_id": cycle_id,
         "pipeline_stages": [
-            {"stage": "1. FORECAST", "status": "COMPLETED", "value": "40 Commodity Demands Evaluated"},
-            {"stage": "2. DECISION", "status": "COMPLETED", "value": f"Total Buffer: 5,780 kg"},
-            {"stage": "3. VALIDATION", "status": "VERIFIED", "value": f"6 Rules Passed: {constraint_audit['pass_count']}/20 FPS Compliant"},
-            {"stage": "4. OPTIMIZATION", "status": "COMPLETED", "value": f"4 Truck Corridors: {optimization_res['total_district_distance_km']} km (Score: {optimization_res['average_optimization_score']}/100)"},
-            {"stage": "5. MANIFEST", "status": "READY_TO_LOCK", "value": "Digital Gatepasses Prepared"},
-            {"stage": "6. NOTIFICATION", "status": "STAGED", "value": "Dealer WhatsApp + Citizen Broadcasts Queued"}
+            {"stage": "1. FORECAST", "status": "COMPLETED", "value": "40 Commodity Demands Evaluated", "elapsed_seconds": 4},
+            {"stage": "2. DECISION", "status": "COMPLETED", "value": "Total Buffer: 5,780 kg", "elapsed_seconds": 2},
+            {"stage": "3. VALIDATION", "status": "VERIFIED", "value": f"6 Rules Passed: {constraint_audit['pass_count']}/20 FPS Compliant", "elapsed_seconds": 3},
+            {"stage": "4. OPTIMIZATION", "status": "COMPLETED", "value": f"4 Truck Corridors: {optimization_res['total_district_distance_km']} km (Score: {optimization_res['average_optimization_score']}/100)", "elapsed_seconds": 3},
+            {"stage": "5. MANIFEST", "status": "READY_TO_LOCK", "value": "Digital Gatepasses Prepared & Sealed", "elapsed_seconds": 2},
+            {"stage": "6. NOTIFICATION", "status": "STAGED", "value": "Dealer WhatsApp + Citizen Broadcasts Queued", "elapsed_seconds": 1}
         ],
         "constraint_audit": constraint_audit,
         "optimization_result": optimization_res,
         "message": "District-wide pre-dispatch decision analysis completed across all 20 Fair Price Shops and 4 fleet corridors.",
         "demo_notice": DEMO_NOTICE
     }
+
+
+class DelayDispatchRequest(BaseModel):
+    fps_id: Optional[str] = None
+    request_id: Optional[str] = None
+    beneficiary_id: Optional[str] = None
+    delay_days: str = "1–2 days"
+    reason: str = "Government stock currently unavailable for this dispatch."
+    cycle_id: str = settings.CURRENT_CYCLE
+
+
+@router.post("/admin/dispatch/delay")
+def delay_dispatch_workflow(
+    req: DelayDispatchRequest,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Mark dispatch / order as temporarily delayed (1-2 days) due to government stock replenishment.
+    STRICT POLICY: Stock shortage does NOT cancel or reject the request.
+    """
+    cursor = db.cursor()
+    if req.request_id:
+        cursor.execute("""
+        UPDATE citizen_requests SET
+            delivery_status = 'DELAYED',
+            delay_reason = ?,
+            expected_delivery_window = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE request_id = ?;
+        """, (req.reason, req.delay_days, req.request_id))
+    elif req.beneficiary_id:
+        cursor.execute("""
+        UPDATE citizen_requests SET
+            delivery_status = 'DELAYED',
+            delay_reason = ?,
+            expected_delivery_window = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE beneficiary_id = ? AND cycle_id = ?;
+        """, (req.reason, req.delay_days, req.beneficiary_id, req.cycle_id))
+    else:
+        cursor.execute("""
+        UPDATE citizen_requests SET
+            delivery_status = 'DELAYED',
+            delay_reason = ?,
+            expected_delivery_window = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE cycle_id = ?;
+        """, (req.reason, req.delay_days, req.cycle_id))
+    db.commit()
+    return {
+        "status": "success",
+        "action": "DELAY_DISPATCH",
+        "delay_days": req.delay_days,
+        "reason": req.reason,
+        "message": f"Dispatch temporarily delayed ({req.delay_days}) due to government stock replenishment. Status: ⏳ Delayed — Stock Replenishment Pending.",
+        "demo_notice": DEMO_NOTICE
+    }
+
+
+class ResumeDispatchRequest(BaseModel):
+    fps_id: Optional[str] = None
+    request_id: Optional[str] = None
+    beneficiary_id: Optional[str] = None
+    cycle_id: str = settings.CURRENT_CYCLE
+
+
+@router.post("/admin/dispatch/resume")
+def resume_dispatch_workflow(
+    req: ResumeDispatchRequest,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Resume dispatch once government buffer stock is replenished.
+    Transitions status to OUT_FOR_DELIVERY.
+    """
+    cursor = db.cursor()
+    if req.request_id:
+        cursor.execute("""
+        UPDATE citizen_requests SET
+            delivery_status = 'OUT_FOR_DELIVERY',
+            delay_reason = NULL,
+            expected_delivery_window = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE request_id = ?;
+        """, (req.request_id,))
+    elif req.beneficiary_id:
+        cursor.execute("""
+        UPDATE citizen_requests SET
+            delivery_status = 'OUT_FOR_DELIVERY',
+            delay_reason = NULL,
+            expected_delivery_window = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE beneficiary_id = ? AND cycle_id = ?;
+        """, (req.beneficiary_id, req.cycle_id))
+    else:
+        cursor.execute("""
+        UPDATE citizen_requests SET
+            delivery_status = 'OUT_FOR_DELIVERY',
+            delay_reason = NULL,
+            expected_delivery_window = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE cycle_id = ? AND delivery_status = 'DELAYED';
+        """, (req.cycle_id,))
+    db.commit()
+    return {
+        "status": "success",
+        "action": "RESUME_DISPATCH",
+        "message": "Stock replenished. Dispatch resumed and transitioned to Out for Delivery.",
+        "demo_notice": DEMO_NOTICE
+    }
+
+
+class SendDelayAlertRequest(BaseModel):
+    beneficiary_id: str
+    beneficiary_name: Optional[str] = None
+    fps_id: Optional[str] = None
+    request_id: Optional[str] = None
+    delay_days: str = "1–2 days"
+    custom_message: Optional[str] = None
+    cycle_id: str = settings.CURRENT_CYCLE
+
+
+@router.post("/admin/notifications/send-delay-alert")
+def send_delay_alert_api(
+    req: SendDelayAlertRequest,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Officer-initiated communication: Dispatches stock shortage delay notification to beneficiary.
+    """
+    cursor = db.cursor()
+    ben_name = req.beneficiary_name
+    fps_id = req.fps_id
+    req_id = req.request_id or "REQ-2026-09"
+    if not ben_name or not fps_id:
+        cursor.execute("SELECT name_for_demo, registered_fps_id FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;", (req.beneficiary_id.strip(),))
+        row = cursor.fetchone()
+        if row:
+            ben_name = ben_name or row["name_for_demo"]
+            fps_id = fps_id or row["registered_fps_id"]
+        else:
+            ben_name = ben_name or "Beneficiary"
+            fps_id = fps_id or "FPS-KA-BLR-001"
+
+    res = notification_engine.send_stock_delay_notification(
+        db,
+        beneficiary_id=req.beneficiary_id,
+        beneficiary_name=ben_name,
+        fps_id=fps_id,
+        request_id=req_id,
+        delay_days=req.delay_days,
+        cycle_id=req.cycle_id,
+        custom_message=req.custom_message
+    )
+    return res
 
 
 # -----------------------------------------------------------------------------
@@ -2603,6 +2823,9 @@ def get_citizen_requests_queue(
     
     cursor.execute("SELECT COUNT(*) FROM citizen_requests WHERE cycle_id = ? AND status = 'OFFICER_DEFERRED';", (cycle_id,))
     deferred_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM citizen_requests WHERE cycle_id = ? AND status = 'DELAYED';", (cycle_id,))
+    delayed_count = cursor.fetchone()[0]
     
     # 2. Build Query for Items
     query = """
@@ -2725,6 +2948,7 @@ def get_citizen_requests_queue(
         total_count=total_count,
         pending_count=pending_count,
         approved_count=approved_count,
+        delayed_count=delayed_count,
         partial_count=partial_count,
         redirected_count=redirected_count,
         deferred_count=deferred_count,

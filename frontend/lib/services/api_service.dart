@@ -32,14 +32,16 @@ class AuthenticatedClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    // 1. Check expiration if token exists
-    if (session.token != null && session.isExpired) {
+    final isAuthOrHealth = request.url.path.contains('/auth/login') || request.url.path.contains('/health');
+
+    // 1. Check expiration if token exists (skip for login/health)
+    if (!isAuthOrHealth && session.token != null && session.isExpired) {
       session.trigger401();
       throw const UnauthorizedException('Session expired. Please log in again.');
     }
 
     // 2. Automatically inject Authorization header if authenticated
-    if (session.token != null && session.token!.isNotEmpty) {
+    if (!isAuthOrHealth && session.token != null && session.token!.isNotEmpty) {
       request.headers['Authorization'] = 'Bearer ${session.token}';
     }
 
@@ -111,6 +113,7 @@ class ApiService {
 
   /// Authenticate credentials and store the returned token into centralized AuthSession.
   Future<Map<String, dynamic>> login(String username, String password) async {
+    authSession.clear();
     final response = await client.post(
       Uri.parse('${AppConstants.apiBaseUrl}/auth/login'),
       headers: {'Content-Type': 'application/json'},
@@ -215,8 +218,16 @@ class ApiService {
         .timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 200) {
-      final list = json.decode(response.body) as List<dynamic>;
-      return list.map((item) => FpsShop.fromJson(item)).toList();
+      final decoded = json.decode(response.body);
+      final List<dynamic> list;
+      if (decoded is List) {
+        list = decoded;
+      } else if (decoded is Map && decoded.containsKey('items') && decoded['items'] is List) {
+        list = decoded['items'] as List<dynamic>;
+      } else {
+        list = [];
+      }
+      return list.map((item) => FpsShop.fromJson(Map<String, dynamic>.from(item as Map))).toList();
     } else {
       throw parseError(response, 'Failed to fetch FPS list: ${response.statusCode}');
     }
@@ -469,8 +480,16 @@ class ApiService {
         .timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 200) {
-      final list = json.decode(response.body) as List<dynamic>;
-      return list.map((item) => IntentRecord.fromJson(item)).toList();
+      final decoded = json.decode(response.body);
+      final List<dynamic> list;
+      if (decoded is List) {
+        list = decoded;
+      } else if (decoded is Map && decoded.containsKey('items') && decoded['items'] is List) {
+        list = decoded['items'] as List<dynamic>;
+      } else {
+        list = [];
+      }
+      return list.map((item) => IntentRecord.fromJson(Map<String, dynamic>.from(item as Map))).toList();
     } else {
       throw parseError(response, 'Failed to fetch intents: ${response.statusCode}');
     }
@@ -565,6 +584,36 @@ class ApiService {
     } else {
       final err = json.decode(response.body);
       throw parseError(response, err['detail'] ?? 'Failed to close choice window: ${response.statusCode}');
+    }
+  }
+
+  /// Retrieve the frozen demand snapshot for the cycle
+  Future<Map<String, dynamic>> fetchDemandSnapshot({String cycleId = '2026-09'}) async {
+    final response = await client
+        .get(Uri.parse('${AppConstants.apiBaseUrl}/admin/planning-cycle/demand-snapshot?cycle_id=$cycleId'),
+            headers: {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, err['detail'] ?? 'Failed to fetch demand snapshot: ${response.statusCode}');
+    }
+  }
+
+  /// Set the planning-cycle day for demo simulations (e.g. Day 21..24 -> Day 25)
+  Future<Map<String, dynamic>> setPlanningCycleDay(int day, {String cycleId = '2026-09'}) async {
+    final response = await client
+        .post(Uri.parse('${AppConstants.apiBaseUrl}/admin/planning-cycle/set-day?day=$day&cycle_id=$cycleId'),
+            headers: {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, err['detail'] ?? 'Failed to set planning day: ${response.statusCode}');
     }
   }
 
@@ -999,10 +1048,13 @@ class ApiService {
 
   /// Execute 'Run Pre-Dispatch Analysis' pipeline
   Future<PreDispatchAnalysisResult> runPreDispatchAnalysis(
-      {String? fpsId, String cycleId = '2026-09'}) async {
+      {String? fpsId, String cycleId = '2026-09', bool simulateStockShortage = false}) async {
     String url = '${AppConstants.apiBaseUrl}/admin/analysis/run?cycle_id=$cycleId';
     if (fpsId != null && fpsId.isNotEmpty) {
       url += '&fps_id=$fpsId';
+    }
+    if (simulateStockShortage) {
+      url += '&simulate_stock_shortage=true';
     }
 
     final response = await client
@@ -1016,6 +1068,103 @@ class ApiService {
       final err = json.decode(response.body);
       throw parseError(response, 
           'Failed to execute pre-dispatch analysis: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Mark dispatch/order as temporarily delayed (1-2 days) due to government stock shortage
+  Future<Map<String, dynamic>> delayDispatch({
+    String? fpsId,
+    String? requestId,
+    String? beneficiaryId,
+    String delayDays = '1–2 days',
+    String reason = 'Government stock currently unavailable for this dispatch.',
+    String cycleId = '2026-09',
+  }) async {
+    final url = '${AppConstants.apiBaseUrl}/admin/dispatch/delay';
+    final payload = {
+      'fps_id': fpsId,
+      'request_id': requestId,
+      'beneficiary_id': beneficiaryId,
+      'delay_days': delayDays,
+      'reason': reason,
+      'cycle_id': cycleId,
+    };
+
+    final response = await client.post(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode(payload),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to delay dispatch: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Resume dispatch when government buffer stock is replenished
+  Future<Map<String, dynamic>> resumeDispatch({
+    String? fpsId,
+    String? requestId,
+    String? beneficiaryId,
+    String cycleId = '2026-09',
+  }) async {
+    final url = '${AppConstants.apiBaseUrl}/admin/dispatch/resume';
+    final payload = {
+      'fps_id': fpsId,
+      'request_id': requestId,
+      'beneficiary_id': beneficiaryId,
+      'cycle_id': cycleId,
+    };
+
+    final response = await client.post(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode(payload),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to resume dispatch: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Officer dispatches stock shortage delay notification to beneficiary
+  Future<Map<String, dynamic>> sendDelayAlert({
+    required String beneficiaryId,
+    String? beneficiaryName,
+    String? fpsId,
+    String? requestId,
+    String delayDays = '1–2 days',
+    String? customMessage,
+    String cycleId = '2026-09',
+  }) async {
+    final url = '${AppConstants.apiBaseUrl}/admin/notifications/send-delay-alert';
+    final payload = {
+      'beneficiary_id': beneficiaryId,
+      'beneficiary_name': beneficiaryName,
+      'fps_id': fpsId,
+      'request_id': requestId,
+      'delay_days': delayDays,
+      'custom_message': customMessage,
+      'cycle_id': cycleId,
+    };
+
+    final response = await client.post(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode(payload),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to send delay alert: ${err['detail'] ?? response.statusCode}');
     }
   }
 
@@ -1761,7 +1910,7 @@ class ApiService {
     required double availableDepotStockKg,
     String allocationStrategy = 'FAIR_SHARE_RISK_WEIGHTED',
     bool persistCandidate = false,
-    String actorName = 'District Supply Officer (Demo Admin)',
+    String actorName = 'District Supply Officer (Bengaluru Urban)',
     String notes = 'Simulated candidate plan generated for officer review',
   }) async {
     final uri = Uri.parse(
@@ -2132,6 +2281,7 @@ class CitizenRequestQueueResponse {
   final int totalCount;
   final int pendingCount;
   final int approvedCount;
+  final int delayedCount;
   final int partialCount;
   final int redirectedCount;
   final int deferredCount;
@@ -2142,6 +2292,7 @@ class CitizenRequestQueueResponse {
     required this.totalCount,
     required this.pendingCount,
     required this.approvedCount,
+    this.delayedCount = 0,
     required this.partialCount,
     required this.redirectedCount,
     required this.deferredCount,
@@ -2155,6 +2306,7 @@ class CitizenRequestQueueResponse {
       totalCount: json['total_count'] ?? 0,
       pendingCount: json['pending_count'] ?? 0,
       approvedCount: json['approved_count'] ?? 0,
+      delayedCount: json['delayed_count'] ?? 0,
       partialCount: json['partial_count'] ?? 0,
       redirectedCount: json['redirected_count'] ?? 0,
       deferredCount: json['deferred_count'] ?? 0,

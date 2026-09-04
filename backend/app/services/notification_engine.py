@@ -261,6 +261,62 @@ class NotificationEngine:
 
         return [dict(r) for r in rows]
 
+    def send_stock_delay_notification(
+        self,
+        db: sqlite3.Connection,
+        beneficiary_id: str,
+        beneficiary_name: str,
+        fps_id: str,
+        request_id: str,
+        delay_days: str = "1–2 days",
+        cycle_id: str = settings.CURRENT_CYCLE,
+        custom_message: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Dispatch official government stock shortage delay notification to beneficiary."""
+        cursor = db.cursor()
+        phone = f"+91-9845{random.randint(100000, 999999)}"
+        channel = "SMS"
+        message_title = "⏳ Delivery Delayed — Stock Replenishment Pending"
+        message_body = custom_message or (
+            f"Namaskara {beneficiary_name},\n"
+            f"Your ration delivery (Order #{request_id}) has been temporarily delayed because government stock is currently unavailable. "
+            f"The delivery is expected within {delay_days}. You do not need to submit the request again."
+        )
+
+        res_notify = self.service.send_sms(phone, beneficiary_name, message_body, ref_id=beneficiary_id)
+
+        cursor.execute("""
+        INSERT INTO notifications (
+            cycle_id, recipient_type, recipient_id, recipient_name, recipient_phone,
+            fps_id, channel, message_title, message_body, status, sent_at
+        ) VALUES (?, 'BENEFICIARY', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
+        """, (cycle_id, beneficiary_id, beneficiary_name, phone, fps_id, channel, message_title, message_body, res_notify["status"]))
+
+        # Also update citizen_requests record
+        cursor.execute("""
+        UPDATE citizen_requests SET
+            delivery_status = 'DELAYED',
+            delay_reason = 'Government stock currently unavailable for this dispatch.',
+            expected_delivery_window = ?,
+            delay_notified_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE beneficiary_id = ? AND cycle_id = ?;
+        """, (delay_days, beneficiary_id, cycle_id))
+
+        db.commit()
+
+        return {
+            "status": "success",
+            "message_id": res_notify.get("message_id"),
+            "beneficiary_id": beneficiary_id,
+            "beneficiary_name": beneficiary_name,
+            "channel": channel,
+            "title": message_title,
+            "body": message_body,
+            "expected_delay": delay_days,
+            "sent_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
     def get_notification_logs(
         self,
         db: sqlite3.Connection,

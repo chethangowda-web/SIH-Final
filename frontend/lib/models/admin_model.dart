@@ -119,6 +119,11 @@ class AdminDashboardData {
   final List<Map<String, dynamic>> topIntentShiftFps;
   final List<AdminFpsRow> fpsList;
   final String workflowStatus;
+  final Map<String, dynamic>? planningCycleState;
+
+  int get planningDay => planningCycleState?['planning_day'] ?? (workflowStatus == 'PLANNING_OPEN' ? 22 : 25);
+  bool get isDemandLocked => planningCycleState?['is_demand_locked'] ?? (workflowStatus != 'PLANNING_OPEN');
+  bool get isChoiceWindowOpen => planningCycleState?['is_open'] ?? (workflowStatus == 'PLANNING_OPEN');
 
   AdminDashboardData({
     required this.district,
@@ -143,6 +148,7 @@ class AdminDashboardData {
     required this.topIntentShiftFps,
     required this.fpsList,
     required this.workflowStatus,
+    this.planningCycleState,
   });
 
   factory AdminDashboardData.fromJson(Map<String, dynamic> json) {
@@ -186,6 +192,9 @@ class AdminDashboardData {
               .toList() ??
           [],
       workflowStatus: json['workflow_status'] ?? 'PLANNING_OPEN',
+      planningCycleState: json['planning_cycle_state'] != null
+          ? Map<String, dynamic>.from(json['planning_cycle_state'])
+          : null,
     );
   }
 }
@@ -1524,6 +1533,8 @@ class PreDispatchAnalysisResult {
   final List<PipelineStageItem> pipelineStages;
   final String message;
   final FpsAnalyticsProfile? dossier;
+  final bool stockConstraintDetected;
+  final Map<String, dynamic>? stockConstraint;
 
   PreDispatchAnalysisResult({
     required this.status,
@@ -1533,6 +1544,8 @@ class PreDispatchAnalysisResult {
     required this.pipelineStages,
     required this.message,
     this.dossier,
+    this.stockConstraintDetected = false,
+    this.stockConstraint,
   });
 
   factory PreDispatchAnalysisResult.fromJson(Map<String, dynamic> json) {
@@ -1556,6 +1569,8 @@ class PreDispatchAnalysisResult {
       pipelineStages: stages,
       message: json['message'] ?? '',
       dossier: d,
+      stockConstraintDetected: json['stock_constraint_detected'] ?? false,
+      stockConstraint: json['stock_constraint'] as Map<String, dynamic>?,
     );
   }
 }
@@ -1564,11 +1579,13 @@ class PipelineStageItem {
   final String stage;
   final String status;
   final String value;
+  final int elapsedSeconds;
 
   PipelineStageItem({
     required this.stage,
     required this.status,
     required this.value,
+    this.elapsedSeconds = 0,
   });
 
   factory PipelineStageItem.fromJson(Map<String, dynamic> json) {
@@ -1576,6 +1593,7 @@ class PipelineStageItem {
       stage: json['stage'] ?? '',
       status: json['status'] ?? '',
       value: json['value'] ?? '',
+      elapsedSeconds: (json['elapsed_seconds'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -3475,6 +3493,99 @@ class CausalTraceResponse {
     );
   }
 }
+
+/// Pre-Dispatch Operational Incident detected during Optimize Simulation
+class OperationalIncident {
+  final String id;
+  final String title;
+  final String scenarioBadge;
+  final String riskCategory;
+  final String severity; // 'HIGH_RISK', 'MEDIUM_RISK'
+  final String affectedFps;
+  final String affectedFpsId;
+  final String affectedTruckId;
+  final String projectedShortageOrConstraint;
+  final String supplyAdjustment;
+  final String explanation;
+  final String whyItMatters;
+  final String recommendation;
+  final String officerActionTitle;
+  bool isAcknowledged;
+  bool isActionApplied;
+
+  OperationalIncident({
+    required this.id,
+    required this.title,
+    required this.scenarioBadge,
+    required this.riskCategory,
+    required this.severity,
+    required this.affectedFps,
+    required this.affectedFpsId,
+    required this.affectedTruckId,
+    required this.projectedShortageOrConstraint,
+    required this.supplyAdjustment,
+    required this.explanation,
+    required this.whyItMatters,
+    required this.recommendation,
+    required this.officerActionTitle,
+    this.isAcknowledged = false,
+    this.isActionApplied = false,
+  });
+
+  static List<OperationalIncident> getDefaultPreDispatchIncidents() {
+    return [
+      OperationalIncident(
+        id: 'INC-2026-09-01',
+        title: 'Festival Demand Surge Detected',
+        scenarioBadge: 'GANESH CHATURTHI SURGE',
+        riskCategory: 'DEMAND SURGE / INFLUX',
+        severity: 'HIGH_RISK',
+        affectedFps: 'FPS-KA-BLR-001 (Malleshwaram Seva Kendra)',
+        affectedFpsId: 'FPS-KA-BLR-001',
+        affectedTruckId: 'DEMO-KA-04-E-1021 (North-West Heavy Corridor)',
+        projectedShortageOrConstraint: '+2,450 kg Rice (Deficit Risk: 88%)',
+        supplyAdjustment: '+2.45 MT Statutory Buffer Release Required',
+        explanation: 'A sudden +38% spike in declared beneficiary intent signals was detected for the Malleshwaram cluster due to upcoming Ganesh Chaturthi festivities. Projected consumption exceeds baseline allocation by 2.45 MT.',
+        whyItMatters: 'Without pre-dispatch intervention, this shop will stock out within 48 hours, causing statutory denial of food grains to over 490 cardholders.',
+        recommendation: 'Upgrade corridor carrier to 10 MT Heavy Hauler (KA-04-E-1021) and release +2.45 MT emergency buffer allocation from Central Hebbal Godown before truck departure.',
+        officerActionTitle: 'Authorize Fleet Upgrade & Buffer Release',
+      ),
+      OperationalIncident(
+        id: 'INC-2026-09-02',
+        title: 'FPS Storage / Headroom Constraint',
+        scenarioBadge: 'STORAGE HEADROOM LIMIT',
+        riskCategory: 'STORAGE / CAPACITY CONSTRAINT',
+        severity: 'MEDIUM_RISK',
+        affectedFps: 'FPS-KA-BLR-008 (Thanisandra Main Road Depot)',
+        affectedFpsId: 'FPS-KA-BLR-008',
+        affectedTruckId: 'DEMO-KA-04-E-1022 (East Corridor / IT Belt)',
+        projectedShortageOrConstraint: 'Safe Storage: 12,000 kg • Planned Dispatch: 14,800 kg',
+        supplyAdjustment: 'Excess Dispatch: +2,800 kg (123% Bay Overflow)',
+        explanation: 'The planned single-tour delivery of 14,800 kg exceeds the physical covered storage bay capacity of 12,000 kg by 2.8 MT.',
+        whyItMatters: 'Excess grain sacks stacked outdoors risk rain/moisture damage, pest contamination, and violate PDS Warehousing Rules.',
+        recommendation: 'Split delivery schedule into 2 staggered deliveries: Trip 1 (8.0 MT Morning) + Trip 2 (6.8 MT Evening) once initial day lifting clears bay headroom.',
+        officerActionTitle: 'Split Into 2 Staggered Delivery Schedules',
+      ),
+      OperationalIncident(
+        id: 'INC-2026-09-03',
+        title: 'Low Inventory / Critical Stockout Risk',
+        scenarioBadge: 'STOCKOUT RISK (< 18 HRS)',
+        riskCategory: 'LOW INVENTORY / STOCKOUT RISK',
+        severity: 'HIGH_RISK',
+        affectedFps: 'FPS-KA-BLR-015 (K.R. Puram Market Center)',
+        affectedFpsId: 'FPS-KA-BLR-015',
+        affectedTruckId: 'DEMO-KA-51-M-3419 (South Industrial Corridor)',
+        projectedShortageOrConstraint: 'Current Stock: 350 kg • Expected Influx Demand: 3,200 kg',
+        supplyAdjustment: 'Critical Depletion: < 18 Hours to Total Zero-Stock',
+        explanation: 'Opening inventory has dropped to 350 kg (below the 1,200 kg statutory 3-day buffer threshold) due to high initial lifting rate.',
+        whyItMatters: 'Immediate risk of biometric transaction denials at the ePoS terminal during the peak morning ration distribution rush.',
+        recommendation: 'Reprioritize K.R. Puram as Sequence Stop #1 in the East Corridor route and expedite digital gatepass clearance with immediate 2.85 MT replenishment.',
+        officerActionTitle: 'Reprioritize Route Sequence to Stop #1 & Expedite',
+      ),
+    ];
+  }
+}
+
 
 
 

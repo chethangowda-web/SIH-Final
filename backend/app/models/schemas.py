@@ -405,6 +405,7 @@ class CitizenRequestQueueResponse(BaseModel):
     total_count: int
     pending_count: int
     approved_count: int
+    delayed_count: int = 0
     partial_count: int
     redirected_count: int
     deferred_count: int
@@ -441,6 +442,9 @@ class BeneficiaryEntitlementSummaryOut(BaseModel):
     remaining_eligible_wheat_kg: float
     total_eligible_balance_kg: float
     transport_policy: TransportFeeBreakdownOut
+    ration_received_for_cycle: bool = False
+    receipt_confirmed_at: Optional[str] = None
+    receipt_status_label: Optional[str] = None
     demo_notice: str = DEMO_NOTICE
 
 
@@ -480,13 +484,39 @@ class DeliveryDisputeResolveIn(BaseModel):
 
 class ChoiceWindowStatusOut(BaseModel):
     cycle_id: str
+    planning_day: int = 22
+    choice_window_start_day: int = 21
+    choice_window_end_day: int = 24
+    demand_lock_day: int = 25
     is_open: bool
     status: str
+    stage_label: str = "BENEFICIARY CHOICE WINDOW"
     workflow_status: str
+    is_demand_locked: bool = False
     active_intents_count: int
     total_declared_intent_kg: float
+    snapshot_version: Optional[str] = None
+    snapshot_hash: Optional[str] = None
     closing_deadline: str
     governance_notice: str
+    demo_notice: str = DEMO_NOTICE
+
+
+class DemandSnapshotOut(BaseModel):
+    snapshot_id: str
+    cycle_id: str
+    version: str = "v1.0"
+    lock_status: str = "LOCKED"
+    lock_timestamp: str
+    locked_by: str
+    total_beneficiary_requests: int
+    total_declared_intent_kg: float
+    total_locked_demand_kg: float
+    fps_demand: Dict[str, Any]
+    commodity_quantities: Dict[str, float]
+    location_distribution: Dict[str, Any]
+    canonical_hash: str
+    is_frozen: bool = True
     demo_notice: str = DEMO_NOTICE
 
 

@@ -207,6 +207,9 @@ class BeneficiaryEntitlementSummary {
   final double remainingEligibleWheatKg;
   final double totalEligibleBalanceKg;
   final TransportFeeBreakdown transportPolicy;
+  final bool rationReceivedForCycle;
+  final String? receiptConfirmedAt;
+  final String? receiptStatusLabel;
 
   BeneficiaryEntitlementSummary({
     required this.beneficiaryId,
@@ -225,6 +228,9 @@ class BeneficiaryEntitlementSummary {
     required this.remainingEligibleWheatKg,
     required this.totalEligibleBalanceKg,
     required this.transportPolicy,
+    this.rationReceivedForCycle = false,
+    this.receiptConfirmedAt,
+    this.receiptStatusLabel,
   });
 
   factory BeneficiaryEntitlementSummary.fromJson(Map<String, dynamic> json) {
@@ -251,6 +257,9 @@ class BeneficiaryEntitlementSummary {
           (json['remaining_eligible_wheat_kg'] as num?)?.toDouble() ?? 5.0,
       totalEligibleBalanceKg:
           (json['total_eligible_balance_kg'] as num?)?.toDouble() ?? 25.0,
+      rationReceivedForCycle: json['ration_received_for_cycle'] ?? false,
+      receiptConfirmedAt: json['receipt_confirmed_at'],
+      receiptStatusLabel: json['receipt_status_label'],
       transportPolicy: json['transport_policy'] != null
           ? TransportFeeBreakdown.fromJson(json['transport_policy'])
           : TransportFeeBreakdown(
@@ -289,6 +298,9 @@ class CitizenDeliveryRecord {
   final String? registeredFpsName;
   final String? intendedFpsId;
   final String? intendedFpsName;
+  final String? delayReason;
+  final String? expectedDeliveryWindow;
+  final String? delayNotifiedAt;
   final String createdAt;
 
   CitizenDeliveryRecord({
@@ -313,6 +325,9 @@ class CitizenDeliveryRecord {
     this.registeredFpsName,
     this.intendedFpsId,
     this.intendedFpsName,
+    this.delayReason,
+    this.expectedDeliveryWindow,
+    this.delayNotifiedAt,
     required this.createdAt,
   });
 
@@ -339,6 +354,9 @@ class CitizenDeliveryRecord {
       registeredFpsName: json['registered_fps_name'],
       intendedFpsId: json['intended_fps_id'],
       intendedFpsName: json['intended_fps_name'],
+      delayReason: json['delay_reason'],
+      expectedDeliveryWindow: json['expected_delivery_window'],
+      delayNotifiedAt: json['delay_notified_at'],
       createdAt: json['created_at'] ?? '',
     );
   }

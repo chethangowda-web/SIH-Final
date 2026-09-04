@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
+import '../../core/localization.dart';
 import '../../models/beneficiary_model.dart';
 import '../../services/api_service.dart';
 import '../../widgets/status_badge.dart';
@@ -16,6 +17,9 @@ class IntentConfirmationScreen extends StatefulWidget {
   final double deliveryDistanceKm;
   final double transportFeeInr;
   final BeneficiaryEntitlementSummary? entitlementSummary;
+  final int eligibleMembersCount;
+  final double? customRiceKg;
+  final double? customWheatKg;
 
   const IntentConfirmationScreen({
     super.key,
@@ -29,6 +33,9 @@ class IntentConfirmationScreen extends StatefulWidget {
     this.deliveryDistanceKm = 0.6,
     this.transportFeeInr = 0.0,
     this.entitlementSummary,
+    this.eligibleMembersCount = 4,
+    this.customRiceKg,
+    this.customWheatKg,
   });
 
   @override
@@ -54,9 +61,17 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
       _errorMessage = null;
     });
 
+    if (widget.entitlementSummary?.rationReceivedForCycle == true) {
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = 'Ration already received for this cycle. Please wait for the next distribution cycle to submit a new request.';
+      });
+      return;
+    }
+
     try {
-      final riceQuota = widget.entitlementSummary?.remainingEligibleRiceKg ?? 20.0;
-      final wheatQuota = widget.entitlementSummary?.remainingEligibleWheatKg ?? 5.0;
+      final riceQuota = widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0);
+      final wheatQuota = widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0);
 
       final results = await _apiService.submitIntent(
         beneficiaryId: widget.beneficiary.pseudonymousBeneficiaryId,
@@ -91,50 +106,62 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
   Widget build(BuildContext context) {
     final isConfirmed = _completedRecords != null && _completedRecords!.isNotEmpty;
 
-    return Scaffold(
-      backgroundColor: AppConstants.backgroundLight,
-      appBar: AppBar(
-        automaticallyImplyLeading: !isConfirmed,
-        backgroundColor: AppConstants.primaryNavy,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        titleSpacing: 16,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              isConfirmed ? 'Collection Plan Submitted' : 'Review Your Collection Plan',
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.2),
+    return AnimatedBuilder(
+      animation: LanguageController.instance,
+      builder: (context, _) {
+        return Scaffold(
+          backgroundColor: AppConstants.backgroundLight,
+          appBar: AppBar(
+            automaticallyImplyLeading: !isConfirmed,
+            backgroundColor: AppConstants.primaryNavy,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            titleSpacing: 16,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isConfirmed ? tr('confirm.success_heading') : tr('confirm.review_title'),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.2),
+                ),
+                Text(
+                  '${tr('app.nfsa_notice')} • ${tr('app.cycle_label')}',
+                  style: const TextStyle(fontSize: 10.5, color: Colors.white70),
+                ),
+              ],
             ),
-            const Text(
-              'National Food Security Act • Public Distribution Portal',
-              style: TextStyle(fontSize: 10.5, color: Colors.white70),
-            ),
-          ],
-        ),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: AppConstants.space20, vertical: AppConstants.space20),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 680),
-              child: isConfirmed ? _buildSuccessConfirmedView() : _buildReviewStepView(),
+            actions: const [
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: LanguageSelectorWidget(isCompact: true),
+              ),
+              SizedBox(width: 8),
+            ],
+          ),
+          body: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: AppConstants.space20, vertical: AppConstants.space20),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 680),
+                  child: isConfirmed ? _buildSuccessConfirmedView() : _buildReviewStepView(),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   // STEP INDICATOR
   Widget _buildStepIndicator({required int activeStep}) {
     final steps = [
-      {'num': '1', 'title': 'Service Mode'},
-      {'num': '2', 'title': 'Location / FPS'},
-      {'num': '3', 'title': 'Review'},
-      {'num': '4', 'title': 'Confirmation'},
+      {'num': '1', 'title': tr('intent.step_service')},
+      {'num': '2', 'title': tr('intent.step_fps')},
+      {'num': '3', 'title': tr('intent.step_review')},
+      {'num': '4', 'title': tr('intent.step_confirm')},
     ];
 
     return Container(
@@ -217,9 +244,10 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
   // 1. REVIEW VIEW (Step 3: Review Your Collection Plan)
   Widget _buildReviewStepView() {
     final isHomeDelivery = widget.deliveryMode == 'HOME_DELIVERY';
-    final remainingKg = widget.entitlementSummary?.totalEligibleBalanceKg ?? 25.0;
-    final riceKg = widget.entitlementSummary?.remainingEligibleRiceKg ?? 20.0;
-    final wheatKg = widget.entitlementSummary?.remainingEligibleWheatKg ?? 5.0;
+    final riceKg = widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0);
+    final wheatKg = widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0);
+    final maxEntitlement = widget.eligibleMembersCount * 5.0;
+    final remainingKg = maxEntitlement - (riceKg + wheatKg);
     final locationText = isHomeDelivery
         ? (widget.deliveryAddress ?? 'Registered Home Address, Malleshwaram, Bengaluru')
         : '${widget.intendedFps.name} (${widget.intendedFps.fpsId})';
@@ -232,9 +260,9 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
         const SizedBox(height: AppConstants.space20),
 
         // Section Title
-        const Text(
-          'REVIEW YOUR COLLECTION PLAN',
-          style: TextStyle(
+        Text(
+          tr('confirm.review_title').toUpperCase(),
+          style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w800,
             color: AppConstants.primaryNavy,
@@ -242,9 +270,9 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Please verify your collection preferences before submitting to the district dispatch engine.',
-          style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+        Text(
+          tr('confirm.review_subtitle'),
+          style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary),
         ),
         const SizedBox(height: AppConstants.space16),
 
@@ -268,10 +296,19 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
             children: [
               _buildReviewRow(
                 label: 'SERVICE',
-                value: isHomeDelivery ? 'Assisted Home Delivery' : 'Fair Price Shop Collection',
-                badgeText: isHomeDelivery ? 'DOORSTEP SERVICE' : 'FREE PICKUP',
+                value: isHomeDelivery ? tr('service.home_choice_title') : tr('service.fps_choice_title'),
+                badgeText: isHomeDelivery ? tr('service.home_choice_badge') : tr('service.fps_choice_badge'),
                 badgeColor: isHomeDelivery ? const Color(0xFFD97706) : AppConstants.accentBlue,
                 icon: isHomeDelivery ? Icons.local_shipping_outlined : Icons.storefront_outlined,
+              ),
+              const Divider(height: 20),
+
+              _buildReviewRow(
+                label: 'ELIGIBLE HOUSEHOLD',
+                value: '${widget.eligibleMembersCount} Persons × 5.0 kg = ${maxEntitlement.toStringAsFixed(1)} kg Max Household Entitlement',
+                badgeText: '${widget.eligibleMembersCount} MEMBERS',
+                badgeColor: AppConstants.accentBlue,
+                icon: Icons.people_alt_outlined,
               ),
               const Divider(height: 20),
 
@@ -284,21 +321,91 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
 
               _buildReviewRow(
                 label: 'CYCLE',
-                value: 'September 2026 (Cycle 7)',
+                value: tr('app.cycle_label'),
                 icon: Icons.calendar_today_outlined,
               ),
               const Divider(height: 20),
 
+              // Itemized Commodities Table (Rice & Wheat)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.inventory_2_outlined, size: 18, color: AppConstants.textSecondary),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'ENTITLEMENT',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppConstants.textSecondary, letterSpacing: 0.4),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppConstants.backgroundLight,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppConstants.cardBorder),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.grain, size: 16, color: AppConstants.primaryNavy),
+                                const SizedBox(width: 6),
+                                Text(tr('commodity.rice'), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy)),
+                              ],
+                            ),
+                            Text('${riceKg.toStringAsFixed(1)} ${tr('commodity.kg')}  •  ₹0.00', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
+                          ],
+                        ),
+                        const Divider(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.bakery_dining, size: 16, color: Color(0xFFD97706)),
+                                const SizedBox(width: 6),
+                                Text(tr('commodity.wheat'), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy)),
+                              ],
+                            ),
+                            Text('${wheatKg.toStringAsFixed(1)} ${tr('commodity.kg')}  •  ₹0.00', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
+                          ],
+                        ),
+                        const Divider(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Total Monthly Ration Weight', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
+                            Text('${(riceKg + wheatKg).toStringAsFixed(1)} ${tr('commodity.kg')} (${tr('commodity.free_tag')})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF15803D))),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+
               _buildReviewRow(
-                label: 'ENTITLEMENT',
-                value: 'Rice: ${riceKg.toStringAsFixed(1)} kg + Wheat: ${wheatKg.toStringAsFixed(1)} kg (Government Determined)',
-                icon: Icons.inventory_2_outlined,
+                label: 'BIOMETRIC HANDOVER REQUIREMENT',
+                value: isHomeDelivery
+                    ? 'Beneficiary thumb verification required on arrival before doorstep distribution'
+                    : 'Biometric thumb verification required at FPS counter ePoS terminal before handover',
+                badgeText: 'MANDATORY',
+                badgeColor: const Color(0xFFB45309),
+                icon: Icons.fingerprint_rounded,
               ),
               const Divider(height: 20),
 
               _buildReviewRow(
                 label: 'REMAINING ENTITLEMENT',
-                value: '${remainingKg.toStringAsFixed(1)} kg Available to Collect',
+                value: '${remainingKg.toStringAsFixed(1)} ${tr('commodity.kg')} ${tr('entitlement.remaining_balance')}',
                 icon: Icons.verified_outlined,
                 isDominantGreen: true,
               ),
@@ -323,8 +430,11 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Foodgrain Cost (NFSA Subsidy)', style: TextStyle(fontSize: 12, color: AppConstants.textSecondary)),
-                  const Text('₹0.00 (100% Free)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                  const Flexible(
+                    child: Text('Foodgrain Cost (100% NFSA Subsidized)', style: TextStyle(fontSize: 12, color: AppConstants.textSecondary)),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('₹0.00 (${tr('commodity.free_tag')})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
                 ],
               ),
               if (isHomeDelivery) ...[
@@ -332,7 +442,10 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Transportation & Doorstep Fee', style: TextStyle(fontSize: 12, color: AppConstants.textSecondary)),
+                    const Flexible(
+                      child: Text('Doorstep Logistics & Conveyance Fee', style: TextStyle(fontSize: 12, color: AppConstants.textSecondary)),
+                    ),
+                    const SizedBox(width: 8),
                     Text('₹${widget.transportFeeInr.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
                   ],
                 ),
@@ -341,10 +454,13 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'TOTAL PAYABLE / YOU PAY',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.4),
+                  Flexible(
+                    child: Text(
+                      tr('confirm.you_pay'),
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.4),
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
@@ -374,26 +490,26 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.shield_outlined, size: 16, color: AppConstants.primaryNavy),
-                  SizedBox(width: 8),
+                  const Icon(Icons.shield_outlined, size: 16, color: AppConstants.primaryNavy),
+                  const SizedBox(width: 8),
                   Text(
-                    'IMPORTANT GOVERNANCE NOTICE',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
+                    tr('confirm.gov_notice_title'),
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
-              const Text(
-                'Your entitlement is determined by government policy. This request does not increase, decrease, or modify your statutory entitlement.',
-                style: TextStyle(fontSize: 11.5, color: AppConstants.textSecondary, height: 1.35),
+              Text(
+                tr('confirm.gov_notice_desc'),
+                style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary, height: 1.35),
               ),
               if (isHomeDelivery) ...[
                 const SizedBox(height: 4),
-                const Text(
-                  'Only transportation/logistics charges are payable.',
-                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
+                Text(
+                  tr('confirm.gov_transport_note'),
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
                 ),
               ],
             ],
@@ -412,9 +528,9 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'WHAT HAPPENS NEXT',
-                style: TextStyle(
+              Text(
+                tr('confirm.what_next_title'),
+                style: const TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w800,
                   color: AppConstants.primaryNavy,
@@ -422,11 +538,11 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              _buildNextStepItem('1', 'Request recorded', 'Your preferred pickup channel is logged into the district pre-dispatch intelligence engine.'),
-              _buildNextStepItem('2', 'Government allocation review', 'District Supply Office verifies buffer stock and schedules vehicle dispatch.'),
-              _buildNextStepItem('3', 'Allocation confirmed', 'Target Fair Price Shop / delivery fleet receives pre-positioned grain buffer.'),
-              _buildNextStepItem('4', 'Delivery / collection', 'Ration is delivered to your doorstep or ready for seamless counter pickup.'),
-              _buildNextStepItem('5', 'Citizen confirms receipt', 'You verify grain quantity and confirm full receipt on your digital portal.', isLast: true),
+              _buildNextStepItem('1', tr('confirm.step1_title'), tr('confirm.step1_desc')),
+              _buildNextStepItem('2', tr('confirm.step2_title'), tr('confirm.step2_desc')),
+              _buildNextStepItem('3', tr('confirm.step3_title'), tr('confirm.step3_desc')),
+              _buildNextStepItem('4', tr('confirm.step4_title'), tr('confirm.step4_desc')),
+              _buildNextStepItem('5', tr('confirm.step5_title'), tr('confirm.step5_desc'), isLast: true),
             ],
           ),
         ),
@@ -452,7 +568,10 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
           icon: _isSubmitting
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Icon(Icons.send_rounded, size: 18),
-          label: const Text('Submit Collection Plan', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+          label: Text(
+            _isSubmitting ? tr('confirm.btn_submitting') : tr('confirm.btn_submit_plan'),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppConstants.primaryNavy,
             foregroundColor: Colors.white,
@@ -472,7 +591,7 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusMedium)),
           ),
-          child: const Text('Go Back & Edit Options', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          child: Text(tr('confirm.btn_go_back'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
         ),
         const SizedBox(height: AppConstants.space16),
       ],
@@ -579,9 +698,6 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
     final firstRecord = _completedRecords!.first;
     final isHomeDelivery = widget.deliveryMode == 'HOME_DELIVERY';
     final requestId = firstRecord.id > 0 ? 'REQ-2026-09-${firstRecord.id.toString().padLeft(4, '0')}' : 'REQ-2026-09-INGESTED';
-    final commodityStr = _completedRecords!
-        .map((r) => '${r.commodity} (${r.declaredQuantityKg.toStringAsFixed(0)} kg)')
-        .join(' + ');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -606,20 +722,20 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
         const SizedBox(height: AppConstants.space16),
 
         // Heading
-        const Text(
-          'Collection Plan Submitted',
+        Text(
+          tr('confirm.success_heading'),
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,
             color: AppConstants.primaryNavy,
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Your collection preference has been successfully ingested into the PDS pre-dispatch intelligence engine.',
+        Text(
+          tr('confirm.success_desc'),
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12.5, color: AppConstants.textSecondary, height: 1.35),
+          style: const TextStyle(fontSize: 12.5, color: AppConstants.textSecondary, height: 1.35),
         ),
         const SizedBox(height: AppConstants.space20),
 
@@ -641,34 +757,39 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Row(
+              Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'DIGITAL PREFERENCE RECEIPT',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.6),
+                    tr('confirm.receipt_title'),
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.6),
                   ),
-                  StatusBadge(status: 'RECORDED'),
+                  const StatusBadge(status: 'RECORDED'),
                 ],
               ),
               const Divider(height: 20),
 
               _buildReceiptRow('Request ID', requestId, isHighlight: true),
-              _buildReceiptRow('Cycle', 'September 2026 (Cycle 7)'),
-              _buildReceiptRow('Selected Service', isHomeDelivery ? 'Assisted Home Delivery' : 'Fair Price Shop Collection', isHighlight: true),
+              _buildReceiptRow('Cycle', tr('app.cycle_label')),
+              _buildReceiptRow('Eligible Household', '${widget.eligibleMembersCount} Persons (${(widget.eligibleMembersCount * 5.0).toStringAsFixed(1)} kg Max Quota)', isHighlight: true),
+              _buildReceiptRow('Selected Service', isHomeDelivery ? tr('service.home_choice_title') : tr('service.fps_choice_title'), isHighlight: true),
 
               if (isHomeDelivery && widget.deliveryAddress != null)
-                _buildReceiptRow('Delivery Location', widget.deliveryAddress!),
+                _buildReceiptRow('Delivery Destination', widget.deliveryAddress!),
 
               if (!isHomeDelivery)
-                _buildReceiptRow('Target FPS Center', '${widget.intendedFps.name} (${widget.intendedFps.fpsId})'),
+                _buildReceiptRow('Collection Center', '${widget.intendedFps.name} (${widget.intendedFps.fpsId})'),
 
-              _buildReceiptRow('Entitlement Quota', commodityStr.isNotEmpty ? commodityStr : 'Rice (20 kg) + Wheat (5 kg)'),
+              _buildReceiptRow('Fortified Rice', '${(widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0)).toStringAsFixed(1)} ${tr('commodity.kg')} (₹0.00 Free)'),
+              _buildReceiptRow('Whole Wheat', '${(widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0)).toStringAsFixed(1)} ${tr('commodity.kg')} (₹0.00 Free)'),
+              _buildReceiptRow('Total Delivery Weight', '${((widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0)) + (widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0))).toStringAsFixed(1)} ${tr('commodity.kg')}'),
+              _buildReceiptRow('Biometric Verification', 'REQUIRED AT HANDOVER (ePoS / Mobile)', isHighlight: true),
 
               if (isHomeDelivery)
-                _buildReceiptRow('Logistics Fee', '₹${widget.transportFeeInr.toStringAsFixed(2)}', isHighlight: true),
+                _buildReceiptRow('Doorstep Logistics Fee', '₹${widget.transportFeeInr.toStringAsFixed(2)}', isHighlight: true),
 
-              _buildReceiptRow('Foodgrain Cost', '₹0.00 (100% Subsidized)', isHighlight: true),
+              _buildReceiptRow('Foodgrain Cost', '₹0.00 (${tr('commodity.entitled_free')})', isHighlight: true),
+              _buildReceiptRow('Total Amount Payable', isHomeDelivery ? '₹${widget.transportFeeInr.toStringAsFixed(2)}' : '₹0.00 (${tr('commodity.free_tag')})', isHighlight: true),
               const Divider(height: 20),
 
               // Next Step Note
@@ -680,12 +801,12 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text('NEXT STEP', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppConstants.accentBlue)),
-                        SizedBox(height: 2),
+                      children: [
+                        Text(tr('confirm.receipt_next_step'), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppConstants.accentBlue)),
+                        const SizedBox(height: 2),
                         Text(
-                          'District Supply Office is aggregating demand signals for cycle allocation. You will receive an SMS and portal update once stock is staged.',
-                          style: TextStyle(fontSize: 11.5, color: AppConstants.textSecondary, height: 1.35),
+                          tr('confirm.receipt_next_step_desc'),
+                          style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary, height: 1.35),
                         ),
                       ],
                     ),
@@ -706,7 +827,7 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
             padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusMedium)),
           ),
-          child: const Text('View Status in Citizen Portal', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold)),
+          child: Text(tr('confirm.btn_view_portal'), style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold)),
         ),
         const SizedBox(height: 8),
         OutlinedButton(
@@ -726,7 +847,7 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusMedium)),
           ),
-          child: const Text('View All Ingested Signals', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          child: Text(tr('confirm.btn_view_history'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
         ),
       ],
     );

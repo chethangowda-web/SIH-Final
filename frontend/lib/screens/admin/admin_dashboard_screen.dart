@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../models/admin_model.dart';
@@ -18,6 +19,7 @@ import 'judge_view_dialog.dart';
 import 'scarcity_reconciliation_dialog.dart';
 import 'citizen_request_queue_dialog.dart';
 import 'causal_trace_dialog.dart';
+import 'incident_detail_dialog.dart';
 import '../beneficiary/demo_login_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -39,6 +41,35 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _isActionExecuting = false;
   AdminFpsRow? _selectedDrawerFps;
 
+  // Pre-Dispatch Operational Incidents & Risk Anomaly State
+  final List<OperationalIncident> _dashboardIncidents =
+      OperationalIncident.getDefaultPreDispatchIncidents();
+
+  int get _activeDashboardIncidentsCount =>
+      _dashboardIncidents.where((i) => !i.isAcknowledged).length;
+
+  // 7-Phase Live Pre-Dispatch Decision Pipeline & Live Timers State
+  bool _isPipelineRunning = false;
+  bool _isPipelineCompleted = false;
+  bool _isPipelineDelayed = false;
+  bool _simulateStockShortage = false;
+  int _activePhaseIndex = -1; // -1: idle/initial, 0..6: active phase, 7: all complete
+  int _activePhaseSeconds = 0;
+  int _overallElapsedSeconds = 0;
+  final Map<int, int> _phaseDurations = {}; // stores preserved elapsed duration per phase
+  Timer? _pipelineTimer;
+
+  static const List<int> _targetPhaseDurations = [6, 8, 5, 11, 7, 6, 4];
+  static const List<String> _phaseTitles = [
+    'Forecast',
+    'Validate',
+    'Allocate',
+    'Optimize',
+    'Dispatch',
+    'Verify',
+    'Evaluate',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -47,46 +78,174 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _loadDashboardData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-
     try {
       final data = await _apiService.fetchAdminDashboard();
-
-      if (mounted) {
-        setState(() {
-          _dashboardData = data;
-          _isLoading = false;
-          if (_selectedDrawerFps != null) {
-            _selectedDrawerFps = data.fpsList.firstWhere(
-              (f) => f.fpsId == _selectedDrawerFps!.fpsId,
-              orElse: () => _selectedDrawerFps!,
-            );
-          }
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _dashboardData = data;
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Failed to load district admin telemetry: $e';
-          _isLoading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Failed to load dashboard data. Please check connectivity.\n$e';
+        _isLoading = false;
+      });
     }
   }
 
-  Future<void> _runDistrictPreDispatchAnalysis() async {
+  @override
+  void dispose() {
+    _pipelineTimer?.cancel();
+    super.dispose();
+  }
+
+  String _formatTimerSeconds(int seconds) {
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  void _startPreDispatchPipeline({bool isRerun = false}) {
+    _pipelineTimer?.cancel();
+    setState(() {
+      _isPipelineRunning = true;
+      _isPipelineCompleted = false;
+      _isPipelineDelayed = false;
+      _activePhaseIndex = 0;
+      _activePhaseSeconds = 0;
+      _overallElapsedSeconds = 0;
+      _phaseDurations.clear();
+    });
+
+    _pipelineTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      setState(() {
+        _overallElapsedSeconds++;
+        _activePhaseSeconds++;
+      });
+
+      final target = _targetPhaseDurations[_activePhaseIndex];
+      if (_activePhaseSeconds >= target) {
+        _advancePipelinePhase();
+      }
+    });
+  }
+
+  void _advancePipelinePhase() {
+    _phaseDurations[_activePhaseIndex] = _activePhaseSeconds;
+
+    // Check Scenario B: Government Stock Shortage stops at Phase 1 (Validate)
+    if (_simulateStockShortage && _activePhaseIndex == 1) {
+      _pipelineTimer?.cancel();
+      setState(() {
+        _isPipelineRunning = false;
+        _isPipelineDelayed = true;
+        _isPipelineCompleted = false;
+        _activePhaseIndex = 1;
+      });
+      _handleStockShortagePause();
+      return;
+    }
+
+    if (_activePhaseIndex < 6) {
+      setState(() {
+        _activePhaseIndex++;
+        _activePhaseSeconds = 0;
+      });
+      _syncPhaseBackend(_activePhaseIndex);
+    } else {
+      // Completed all 7 phases!
+      _pipelineTimer?.cancel();
+      setState(() {
+        _isPipelineRunning = false;
+        _isPipelineCompleted = true;
+        _activePhaseIndex = 7;
+      });
+      _completePipelineAnalysis();
+    }
+  }
+
+  Future<void> _syncPhaseBackend(int phaseIndex) async {
+    try {
+      if (phaseIndex == 1) {
+        _apiService.revalidateConstraints(cycleId: _dashboardData?.activeCycle ?? '2026-09');
+      } else if (phaseIndex == 4) {
+        _apiService.runPreDispatchAnalysis(cycleId: _dashboardData?.activeCycle ?? '2026-09', simulateStockShortage: false);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _handleStockShortagePause() async {
+    try {
+      await _apiService.delayDispatch(
+        cycleId: _dashboardData?.activeCycle ?? '2026-09',
+        delayDays: '1–2 days',
+        reason: 'Government buffer stock currently unavailable for this dispatch.',
+      );
+      await _loadDashboardData();
+    } catch (_) {}
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          '⚠️ Phase 2 (Validate) detected buffer deficit: Stock delay recorded (1–2 days).',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFFB45309),
+        action: SnackBarAction(
+          label: 'Notify Citizens',
+          textColor: Colors.white,
+          onPressed: _showAlertsDialog,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _completePipelineAnalysis() async {
+    try {
+      await _apiService.runPreDispatchAnalysis(
+        cycleId: _dashboardData?.activeCycle ?? '2026-09',
+        simulateStockShortage: false,
+      );
+      await _loadDashboardData();
+    } catch (_) {}
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '✓ Pre-Dispatch Analysis completed! All 7 stages validated in ${_formatTimerSeconds(_overallElapsedSeconds)}.',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: AppConstants.successGreen,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+
+
+  Future<void> _resumeStockDispatch() async {
     setState(() => _isActionExecuting = true);
     try {
-      final res = await _apiService.runPreDispatchAnalysis();
+      final res = await _apiService.resumeDispatch(cycleId: _dashboardData?.activeCycle ?? '2026-09');
       await _loadDashboardData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(res.message),
-          backgroundColor: AppConstants.accentBlue,
+          content: Text(res['message'] ?? 'Stock replenished! Dispatch resumed and moved to Out for Delivery.'),
+          backgroundColor: AppConstants.successGreen,
         ),
       );
     } catch (e) {
@@ -292,6 +451,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         apiService: _apiService,
         initialFpsId: fpsId,
         cycleId: _dashboardData?.activeCycle ?? '2026-09',
+      ),
+    );
+  }
+
+  void _showIncidentDetailDialog(OperationalIncident incident) {
+    showDialog(
+      context: context,
+      builder: (ctx) => IncidentDetailDialog(
+        incident: incident,
+        onAcknowledge: () => setState(() {}),
+        onApplyAction: () => setState(() {}),
       ),
     );
   }
@@ -952,9 +1122,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         PopupMenuButton<String>(
           tooltip: 'More Operations & Tools',
           onSelected: (value) {
-            if (value == 'CAUSAL_TRACE') _showCausalTraceDialog();
             if (value == 'WHAT_IF') _showForecastWhatIfDialog('FPS-KA-BLR-001');
-            if (value == 'ALERTS') _showAlertsDialog();
             if (value == 'CITIZEN_QUEUE') _showCitizenRequestQueueDialog();
             if (value == 'SCARCITY') _showScarcityDialog();
             if (value == 'EVALUATION') _showEvaluationModal();
@@ -980,32 +1148,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           itemBuilder: (context) => [
             const PopupMenuItem(
-              value: 'CAUSAL_TRACE',
-              child: Row(
-                children: [
-                  Icon(Icons.account_tree_outlined, color: AppConstants.accentBlue, size: 18),
-                  SizedBox(width: 10),
-                  Expanded(child: Text('Decision & Impact Trace', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
               value: 'WHAT_IF',
               child: Row(
                 children: [
                   Icon(Icons.science_outlined, color: AppConstants.accentBlue, size: 18),
                   SizedBox(width: 10),
                   Expanded(child: Text('What-If Sensitivity Sandbox', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'ALERTS',
-              child: Row(
-                children: [
-                  Icon(Icons.notifications_active_outlined, color: AppConstants.accentAmber, size: 18),
-                  SizedBox(width: 10),
-                  Expanded(child: Text('Readiness Alerts & Broadcasts', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
                 ],
               ),
             ),
@@ -1148,33 +1296,81 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   // SECTION 1: ENTERPRISE COMMAND BAR & 7-STAGE PRIMARY WORKFLOW STEPPER
   Widget _buildEnterpriseCommandBar() {
-    final status = _dashboardData?.workflowStatus ?? 'PLANNING_OPEN';
+    final dbStatus = _dashboardData?.workflowStatus ?? 'PLANNING_OPEN';
+    final hasRunLivePipeline = _isPipelineRunning || _isPipelineCompleted || _isPipelineDelayed || _phaseDurations.isNotEmpty;
 
-    bool isForecastDone = status != 'PLANNING_OPEN';
-    bool isForecastActive = status == 'PLANNING_OPEN';
+    // Stage Done / Active / Warning states
+    bool isForecastDone;
+    bool isForecastActive;
 
-    bool isValidateDone = status != 'PLANNING_OPEN' && status != 'DRAFT_GENERATED';
-    bool isValidateActive = status == 'DRAFT_GENERATED';
+    bool isValidateDone;
+    bool isValidateActive;
+    bool isValidateWarning = false;
 
-    bool isAllocateDone = status == 'DISPATCH_GENERATED' ||
-        status == 'ACTUAL_DISTRIBUTION_SIMULATED' ||
-        status == 'FORECAST_EVALUATED' ||
-        status == 'MODEL_CALIBRATED';
-    bool isAllocateActive = status == 'FORECAST_LOCKED';
+    bool isAllocateDone;
+    bool isAllocateActive;
 
-    bool isOptimizeDone = isAllocateDone;
-    bool isOptimizeActive = status == 'FORECAST_LOCKED';
+    bool isOptimizeDone;
+    bool isOptimizeActive;
 
-    bool isDispatchDone = status == 'ACTUAL_DISTRIBUTION_SIMULATED' ||
-        status == 'FORECAST_EVALUATED' ||
-        status == 'MODEL_CALIBRATED';
-    bool isDispatchActive = status == 'DISPATCH_GENERATED';
+    bool isDispatchDone;
+    bool isDispatchActive;
 
-    bool isVerifyDone = status == 'FORECAST_EVALUATED' || status == 'MODEL_CALIBRATED';
-    bool isVerifyActive = status == 'ACTUAL_DISTRIBUTION_SIMULATED';
+    bool isVerifyDone;
+    bool isVerifyActive;
 
-    bool isEvaluateDone = status == 'MODEL_CALIBRATED';
-    bool isEvaluateActive = status == 'FORECAST_EVALUATED';
+    bool isEvaluateDone;
+    bool isEvaluateActive;
+
+    if (hasRunLivePipeline) {
+      isForecastDone = _phaseDurations.containsKey(0);
+      isForecastActive = _isPipelineRunning && _activePhaseIndex == 0;
+
+      isValidateDone = _phaseDurations.containsKey(1) && !_isPipelineDelayed;
+      isValidateActive = _isPipelineRunning && _activePhaseIndex == 1;
+      isValidateWarning = _isPipelineDelayed;
+
+      isAllocateDone = _phaseDurations.containsKey(2);
+      isAllocateActive = _isPipelineRunning && _activePhaseIndex == 2;
+
+      isOptimizeDone = _phaseDurations.containsKey(3);
+      isOptimizeActive = _isPipelineRunning && _activePhaseIndex == 3;
+
+      isDispatchDone = _phaseDurations.containsKey(4);
+      isDispatchActive = _isPipelineRunning && _activePhaseIndex == 4;
+
+      isVerifyDone = _phaseDurations.containsKey(5);
+      isVerifyActive = _isPipelineRunning && _activePhaseIndex == 5;
+
+      isEvaluateDone = _phaseDurations.containsKey(6);
+      isEvaluateActive = _isPipelineRunning && _activePhaseIndex == 6;
+    } else {
+      isForecastDone = dbStatus != 'PLANNING_OPEN';
+      isForecastActive = dbStatus == 'PLANNING_OPEN';
+
+      isValidateDone = dbStatus != 'PLANNING_OPEN' && dbStatus != 'DRAFT_GENERATED';
+      isValidateActive = dbStatus == 'DRAFT_GENERATED';
+
+      isAllocateDone = dbStatus == 'DISPATCH_GENERATED' ||
+          dbStatus == 'ACTUAL_DISTRIBUTION_SIMULATED' ||
+          dbStatus == 'FORECAST_EVALUATED' ||
+          dbStatus == 'MODEL_CALIBRATED';
+      isAllocateActive = dbStatus == 'FORECAST_LOCKED';
+
+      isOptimizeDone = isAllocateDone;
+      isOptimizeActive = dbStatus == 'FORECAST_LOCKED';
+
+      isDispatchDone = dbStatus == 'ACTUAL_DISTRIBUTION_SIMULATED' ||
+          dbStatus == 'FORECAST_EVALUATED' ||
+          dbStatus == 'MODEL_CALIBRATED';
+      isDispatchActive = dbStatus == 'DISPATCH_GENERATED';
+
+      isVerifyDone = dbStatus == 'FORECAST_EVALUATED' || dbStatus == 'MODEL_CALIBRATED';
+      isVerifyActive = dbStatus == 'ACTUAL_DISTRIBUTION_SIMULATED';
+
+      isEvaluateDone = dbStatus == 'MODEL_CALIBRATED';
+      isEvaluateActive = dbStatus == 'FORECAST_EVALUATED';
+    }
 
     int completedStages = 0;
     if (isForecastDone) completedStages++;
@@ -1184,6 +1380,86 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (isDispatchDone) completedStages++;
     if (isVerifyDone) completedStages++;
     if (isEvaluateDone) completedStages++;
+
+    // Dynamic Subtexts showing Live Timer / Preserved Elapsed Duration
+    String forecastSubtext;
+    if (isForecastActive) {
+      forecastSubtext = 'Running • ${_formatTimerSeconds(_activePhaseSeconds)}';
+    } else if (_phaseDurations.containsKey(0)) {
+      forecastSubtext = 'Completed in ${_formatTimerSeconds(_phaseDurations[0]!)}';
+    } else if (_isPipelineRunning && _activePhaseIndex < 0) {
+      forecastSubtext = 'Pending';
+    } else {
+      forecastSubtext = isForecastDone ? 'Generated (62.7 MT)' : 'Not Generated';
+    }
+
+    String validateSubtext;
+    if (isValidateActive) {
+      validateSubtext = 'Running • ${_formatTimerSeconds(_activePhaseSeconds)}';
+    } else if (isValidateWarning) {
+      validateSubtext = 'Stock Deficit • ${_formatTimerSeconds(_phaseDurations[1] ?? 8)}';
+    } else if (_phaseDurations.containsKey(1)) {
+      validateSubtext = 'Completed in ${_formatTimerSeconds(_phaseDurations[1]!)}';
+    } else if (_isPipelineRunning && _activePhaseIndex < 1) {
+      validateSubtext = 'Pending';
+    } else {
+      validateSubtext = isValidateDone ? '9 Rules Compliant' : 'Pending';
+    }
+
+    String allocateSubtext;
+    if (isAllocateActive) {
+      allocateSubtext = 'Running • ${_formatTimerSeconds(_activePhaseSeconds)}';
+    } else if (_phaseDurations.containsKey(2)) {
+      allocateSubtext = 'Completed in ${_formatTimerSeconds(_phaseDurations[2]!)}';
+    } else if (_isPipelineRunning && _activePhaseIndex < 2) {
+      allocateSubtext = 'Pending';
+    } else {
+      allocateSubtext = isAllocateDone ? 'Calculated (3.2 MT)' : 'Pending';
+    }
+
+    String optimizeSubtext;
+    if (isOptimizeActive) {
+      optimizeSubtext = 'Running • ${_formatTimerSeconds(_activePhaseSeconds)}';
+    } else if (_phaseDurations.containsKey(3)) {
+      optimizeSubtext = 'Completed in ${_formatTimerSeconds(_phaseDurations[3]!)}';
+    } else if (_isPipelineRunning && _activePhaseIndex < 3) {
+      optimizeSubtext = 'Pending';
+    } else {
+      optimizeSubtext = isOptimizeDone ? '4 Fleet Corridors' : 'Pending';
+    }
+
+    String dispatchSubtext;
+    if (isDispatchActive) {
+      dispatchSubtext = 'Running • ${_formatTimerSeconds(_activePhaseSeconds)}';
+    } else if (_phaseDurations.containsKey(4)) {
+      dispatchSubtext = 'Completed in ${_formatTimerSeconds(_phaseDurations[4]!)}';
+    } else if (_isPipelineRunning && _activePhaseIndex < 4) {
+      dispatchSubtext = 'Pending';
+    } else {
+      dispatchSubtext = isDispatchDone ? 'Dispatched' : (isDispatchActive ? 'Gatepasses Ready' : 'Pending');
+    }
+
+    String verifySubtext;
+    if (isVerifyActive) {
+      verifySubtext = 'Running • ${_formatTimerSeconds(_activePhaseSeconds)}';
+    } else if (_phaseDurations.containsKey(5)) {
+      verifySubtext = 'Completed in ${_formatTimerSeconds(_phaseDurations[5]!)}';
+    } else if (_isPipelineRunning && _activePhaseIndex < 5) {
+      verifySubtext = 'Pending';
+    } else {
+      verifySubtext = isVerifyDone ? 'ePoS Lift Synced' : 'Pending';
+    }
+
+    String evaluateSubtext;
+    if (isEvaluateActive) {
+      evaluateSubtext = 'Running • ${_formatTimerSeconds(_activePhaseSeconds)}';
+    } else if (_phaseDurations.containsKey(6)) {
+      evaluateSubtext = 'Completed in ${_formatTimerSeconds(_phaseDurations[6]!)}';
+    } else if (_isPipelineRunning && _activePhaseIndex < 6) {
+      evaluateSubtext = 'Pending';
+    } else {
+      evaluateSubtext = isEvaluateDone ? '94.2% Accuracy' : 'Pending';
+    }
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.space16),
@@ -1232,7 +1508,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  StatusBadge(status: status, fontSize: 10.5),
+                  StatusBadge(status: _isPipelineDelayed ? 'DELAYED' : (_isPipelineCompleted ? 'MODEL_CALIBRATED' : dbStatus), fontSize: 10.5),
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1262,6 +1538,46 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  // Demo Scenario Toggle Chip
+                  InkWell(
+                    onTap: _isPipelineRunning
+                        ? null
+                        : () {
+                            setState(() {
+                              _simulateStockShortage = !_simulateStockShortage;
+                            });
+                          },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _simulateStockShortage ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _simulateStockShortage ? const Color(0xFFF59E0B) : AppConstants.cardBorder,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _simulateStockShortage ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+                            size: 13,
+                            color: _simulateStockShortage ? const Color(0xFFB45309) : AppConstants.primaryNavy,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            _simulateStockShortage ? 'Scenario B: Stock Shortage' : 'Scenario A: Stock Available',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: _simulateStockShortage ? const Color(0xFFB45309) : AppConstants.primaryNavy,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   OutlinedButton.icon(
                     onPressed: () => _showCausalTraceDialog('FPS-KA-BLR-001'),
                     icon: const Icon(Icons.account_tree_outlined, size: 15, color: AppConstants.primaryNavy),
@@ -1272,24 +1588,190 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ),
                   ),
                   ElevatedButton.icon(
-                    onPressed: _isActionExecuting ? null : _runDistrictPreDispatchAnalysis,
-                    icon: _isActionExecuting
+                    onPressed: _isPipelineRunning ? null : () => _startPreDispatchPipeline(isRerun: _isPipelineCompleted || _isPipelineDelayed || _phaseDurations.isNotEmpty),
+                    icon: _isPipelineRunning
                         ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.play_arrow_rounded, size: 16),
-                    label: const Text('Run Pre-Dispatch Analysis', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        : Icon((_isPipelineCompleted || _isPipelineDelayed || _phaseDurations.isNotEmpty) ? Icons.replay_rounded : Icons.play_arrow_rounded, size: 16),
+                    label: Text(
+                      _isPipelineRunning
+                          ? 'Analyzing Phase ${_activePhaseIndex + 1}/7...'
+                          : ((_isPipelineCompleted || _isPipelineDelayed || _phaseDurations.isNotEmpty) ? 'Re-run Pipeline' : 'Run Pre-Dispatch Analysis'),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppConstants.primaryNavy,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     ),
                   ),
+                  if (_dashboardData?.workflowStatus == 'DELAYED' || _dashboardData?.workflowStatus == 'STOCK_DELAYED' || _isPipelineDelayed)
+                    ElevatedButton.icon(
+                      onPressed: _isActionExecuting || _isPipelineRunning ? null : _resumeStockDispatch,
+                      icon: _isActionExecuting
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.play_circle_filled_rounded, size: 16),
+                      label: const Text('Resume Dispatch', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppConstants.successGreen,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                    ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          // 2. PRIMARY 7-STAGE WORKFLOW STEPPER
+          // 0. PDS PLANNING CYCLE & DEMAND LOCK ENGINE BAR
+          _buildPlanningCycleDemandLockBar(),
+          const SizedBox(height: 12),
+
+          // OVERALL PIPELINE LIVE TIMER / STATUS BANNER
+          if (_isPipelineRunning)
+            Container(
+              key: const ValueKey('banner_pipeline_running'),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF93C5FD), width: 1.2),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppConstants.accentBlue),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Pre-Dispatch Analysis • Running Phase ${_activePhaseIndex + 1} of 7: ${_phaseTitles[_activePhaseIndex]}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: const Color(0xFF93C5FD)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_outlined, size: 13, color: AppConstants.accentBlue),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Pre-Dispatch Analysis • Elapsed: ${_formatTimerSeconds(_overallElapsedSeconds)}',
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: AppConstants.accentBlue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (_isPipelineCompleted)
+            Container(
+              key: const ValueKey('banner_pipeline_completed'),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF86EFAC), width: 1.2),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF15803D)),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Pre-Dispatch Decision Pipeline • All 7 Stages Validated & Sealed',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: const Color(0xFF86EFAC)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_rounded, size: 13, color: Color(0xFF15803D)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Pre-Dispatch Analysis • Elapsed: ${_formatTimerSeconds(_overallElapsedSeconds)}',
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF15803D),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (_isPipelineDelayed)
+            Container(
+              key: const ValueKey('banner_pipeline_delayed'),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFDE68A), width: 1.2),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFB45309)),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Pre-Dispatch Analysis • Stock Shortage Paused at Validate (1–2 Day Delay Recorded)',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFFB45309)),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.hourglass_top_rounded, size: 13, color: Color(0xFFB45309)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Paused at: ${_formatTimerSeconds(_overallElapsedSeconds)}',
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFFB45309),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // 2. PRIMARY 7-STAGE WORKFLOW STEPPER WITH LIVE TIMERS
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -1297,7 +1779,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 _buildWorkflowStep(
                   1,
                   'Forecast',
-                  isForecastDone ? 'Generated (62.7 MT)' : 'Not Generated',
+                  forecastSubtext,
                   isDone: isForecastDone,
                   isActive: isForecastActive,
                   onTap: _generateForecast,
@@ -1306,16 +1788,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 _buildWorkflowStep(
                   2,
                   'Validate',
-                  isValidateDone ? '9 Rules Compliant' : (isValidateActive ? 'Validating...' : 'Pending'),
+                  validateSubtext,
                   isDone: isValidateDone,
                   isActive: isValidateActive,
+                  isWarning: isValidateWarning,
                   onTap: _showConstraintDialog,
                 ),
                 _buildStepConnector(isDone: isValidateDone),
                 _buildWorkflowStep(
                   3,
                   'Allocate',
-                  isAllocateDone ? 'Calculated (3.2 MT)' : 'Pending',
+                  allocateSubtext,
                   isDone: isAllocateDone,
                   isActive: isAllocateActive,
                   onTap: () => _showDispatchDecisionDialog('FPS-KA-BLR-001'),
@@ -1324,7 +1807,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 _buildWorkflowStep(
                   4,
                   'Optimize',
-                  isOptimizeDone ? '4 Fleet Corridors' : 'Pending',
+                  optimizeSubtext,
                   isDone: isOptimizeDone,
                   isActive: isOptimizeActive,
                   onTap: () => _showDispatchOptimizationDialog(),
@@ -1333,7 +1816,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 _buildWorkflowStep(
                   5,
                   'Dispatch',
-                  isDispatchDone ? 'Dispatched' : (isDispatchActive ? 'Gatepasses Ready' : 'Pending'),
+                  dispatchSubtext,
                   isDone: isDispatchDone,
                   isActive: isDispatchActive,
                   onTap: () => _showManifestDialog(),
@@ -1342,7 +1825,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 _buildWorkflowStep(
                   6,
                   'Verify',
-                  isVerifyDone ? 'ePoS Lift Synced' : 'Pending',
+                  verifySubtext,
                   isDone: isVerifyDone,
                   isActive: isVerifyActive,
                   onTap: _showAlertsDialog,
@@ -1351,7 +1834,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 _buildWorkflowStep(
                   7,
                   'Evaluate',
-                  isEvaluateDone ? '94.2% Accuracy' : 'Pending',
+                  evaluateSubtext,
                   isDone: isEvaluateDone,
                   isActive: isEvaluateActive,
                   onTap: _showEvaluationModal,
@@ -1359,6 +1842,267 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // 0. PDS PLANNING CYCLE & DEMAND LOCK ENGINE BAR
+  Widget _buildPlanningCycleDemandLockBar() {
+    final planningState = _dashboardData?.planningCycleState;
+    final planningDay = _dashboardData?.planningDay ?? 22;
+    final isLocked = _dashboardData?.isDemandLocked ?? false;
+    final snapshotHash = planningState?['snapshot_hash'] as String?;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isLocked ? const Color(0xFFF8FAFC) : const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+        border: Border.all(
+          color: isLocked ? const Color(0xFFCBD5E1) : const Color(0xFF86EFAC),
+          width: 1.2,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Icon badge
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: isLocked ? const Color(0xFFE2E8F0) : const Color(0xFFDCFCE7),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              isLocked ? Icons.lock_rounded : Icons.schedule_rounded,
+              size: 18,
+              color: isLocked ? AppConstants.primaryNavy : const Color(0xFF15803D),
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Title & Lifecycle Stepper
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'PDS PLANNING CYCLE: DAY $planningDay OF 30',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w900,
+                        color: isLocked ? AppConstants.primaryNavy : const Color(0xFF15803D),
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isLocked ? const Color(0xFFEFF6FF) : const Color(0xFFDCFCE7),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: isLocked ? const Color(0xFF93C5FD) : const Color(0xFF86EFAC)),
+                      ),
+                      child: Text(
+                        isLocked ? '🔒 DEMAND BASELINE LOCKED' : 'CHOICE WINDOW OPEN (DAY 21–24)',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: isLocked ? const Color(0xFF1D4ED8) : const Color(0xFF15803D),
+                        ),
+                      ),
+                    ),
+                    if (snapshotHash != null) ...[
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: _viewDemandSnapshotDetails,
+                        child: Text(
+                          'SHA-256: ${snapshotHash.substring(0, 10)}...',
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppConstants.accentBlue,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  isLocked
+                      ? 'Demand baseline D_hat is frozen (Day 25). 7-stage Pre-Dispatch engine consumes this immutable snapshot without mutating beneficiary signals.'
+                      : 'Beneficiaries are submitting preferred FPS / doorstep requests. District Supply Officer locks demand on Day 25 to initiate pre-dispatch allocation.',
+                  style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Quick Action: Advance Day (Demo) or Lock Demand
+          if (!isLocked) ...[
+            OutlinedButton.icon(
+              onPressed: _isActionExecuting ? null : () => _simulateAdvancePlanningDay(25),
+              icon: const Icon(Icons.fast_forward_rounded, size: 14),
+              label: const Text('Simulate Day 25', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                side: const BorderSide(color: Color(0xFF86EFAC)),
+                foregroundColor: const Color(0xFF15803D),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: _isActionExecuting ? null : _lockForecast,
+              icon: const Icon(Icons.lock_outline_rounded, size: 14),
+              label: const Text('Lock Demand', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppConstants.primaryNavy,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ] else ...[
+            OutlinedButton.icon(
+              onPressed: _viewDemandSnapshotDetails,
+              icon: const Icon(Icons.verified_outlined, size: 14, color: Color(0xFF15803D)),
+              label: const Text('View Sealed Snapshot', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                side: const BorderSide(color: Color(0xFF86EFAC)),
+              ),
+            ),
+            const SizedBox(width: 6),
+            TextButton(
+              onPressed: _isActionExecuting ? null : () => _simulateAdvancePlanningDay(22),
+              child: const Text('Re-open (Demo Day 22)', style: TextStyle(fontSize: 10.5, color: AppConstants.textSecondary)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _simulateAdvancePlanningDay(int day) async {
+    setState(() => _isActionExecuting = true);
+    try {
+      await _apiService.setPlanningCycleDay(day);
+      await _loadDashboardData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Planning cycle simulated to Day $day for active cycle.'),
+            backgroundColor: AppConstants.primaryNavy,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to set planning day: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isActionExecuting = false);
+    }
+  }
+
+  Future<void> _viewDemandSnapshotDetails() async {
+    setState(() => _isActionExecuting = true);
+    try {
+      final snapData = await _apiService.fetchDemandSnapshot();
+      if (!mounted) return;
+      final snap = snapData['snapshot'] as Map<String, dynamic>;
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Row(
+            children: [
+              const Icon(Icons.verified_rounded, color: Color(0xFF15803D), size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Frozen Demand Snapshot (${snap['snapshot_id']})',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy),
+              ),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.security, size: 16, color: Color(0xFF15803D)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Canonical SHA-256 Hash:\n${snap['canonical_hash']}',
+                          style: const TextStyle(fontFamily: 'monospace', fontSize: 10.5, color: Color(0xFF166534), fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildSnapshotMetricRow('Planning Cycle', '${snap['cycle_id']} (Frozen on Day 25)'),
+                _buildSnapshotMetricRow('Locked At', '${snap['lock_timestamp']}'),
+                _buildSnapshotMetricRow('Locked By', '${snap['locked_by']}'),
+                _buildSnapshotMetricRow('Beneficiary Requests', '${snap['total_beneficiary_requests']} requests'),
+                _buildSnapshotMetricRow('Total Declared Intent', '${snap['total_declared_intent_kg']} kg'),
+                _buildSnapshotMetricRow('Total Locked Demand', '${snap['total_locked_demand_kg']} kg'),
+                const Divider(height: 16),
+                const Text(
+                  'Governance Guarantee: This demand snapshot is immutable. What-If sensitivity tests and corridor optimizers operate strictly on isolated memory copies.',
+                  style: TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Demand snapshot not found: $e'), backgroundColor: Colors.orange.shade800),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isActionExecuting = false);
+    }
+  }
+
+  Widget _buildSnapshotMetricRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary)),
+          Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy)),
         ],
       ),
     );
@@ -1429,11 +2173,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: Center(
-                    child: isDone
-                        ? const Icon(Icons.check, size: 11, color: Colors.white)
-                        : (isWarning
-                            ? const Icon(Icons.priority_high, size: 11, color: Colors.white)
-                            : Text('$num', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.white))),
+                    child: isActive
+                        ? const SizedBox(
+                            width: 10,
+                            height: 10,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : (isDone
+                            ? const Icon(Icons.check, size: 11, color: Colors.white)
+                            : (isWarning
+                                ? const Icon(Icons.priority_high, size: 11, color: Colors.white)
+                                : Text('$num', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.white)))),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -1452,7 +2202,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               subtext,
               style: TextStyle(
                 fontSize: 9.5,
-                fontWeight: isDone || isActive ? FontWeight.w700 : FontWeight.normal,
+                fontWeight: isDone || isActive || isWarning ? FontWeight.w700 : FontWeight.normal,
                 color: subColor,
               ),
             ),
@@ -1543,11 +2293,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // SECTION 3: OPERATIONAL HEALTH & LIVE ATTENTION ITEMS (2x2 Grid + Live Alert Strip)
+  // SECTION 3: OPERATIONAL HEALTH & LIVE ATTENTION ITEMS (Pre-Dispatch Incident Alerts + 2x2 Grid)
   Widget _buildOperationalHealthAndAlerts() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // PART B: Live Pre-Dispatch Operational Incidents (Festival Surge & FPS Capacity Constraints)
+        _buildPreDispatchIncidentsPanel(),
+        const SizedBox(height: 14),
+
         // WHAT NEEDS ATTENTION? Compact Alert Strip
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -1677,6 +2431,288 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               );
             }
           },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreDispatchIncidentsPanel() {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.space16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB), // Warm alert tint for pre-dispatch awareness
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD97706).withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PRE-DISPATCH OPERATIONAL INCIDENTS — PREPARE BEFORE TRUCK DEPARTS',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF92400E),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      '"Don\'t reroute the truck after it leaves. Prepare the demand before it leaves."',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFFB45309),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _activeDashboardIncidentsCount > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _activeDashboardIncidentsCount > 0 ? const Color(0xFFFECACA) : const Color(0xFFBBF7D0)),
+                ),
+                child: Text(
+                  _activeDashboardIncidentsCount > 0
+                      ? '$_activeDashboardIncidentsCount LIVE PRE-DISPATCH ALERTS'
+                      : 'ALL ALERTS RESOLVED ✓',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: _activeDashboardIncidentsCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF15803D),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // 3 Visibly Distinct Incident Cards (Festival Surge, FPS Capacity Constraint, Stockout Risk)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 850;
+              final cards = _dashboardIncidents.map((inc) {
+                Color badgeColor;
+                IconData icon;
+                if (inc.severity == 'HIGH_RISK') {
+                  if (inc.riskCategory.contains('DEMAND SURGE')) {
+                    badgeColor = AppConstants.dangerRed;
+                    icon = Icons.celebration_rounded;
+                  } else {
+                    badgeColor = const Color(0xFFEA580C);
+                    icon = Icons.emergency_rounded;
+                  }
+                } else {
+                  badgeColor = const Color(0xFF7C3AED);
+                  icon = Icons.warehouse_rounded;
+                }
+
+                return _buildIncidentCard(
+                  title: inc.title,
+                  scenarioBadge: inc.scenarioBadge,
+                  badgeColor: badgeColor,
+                  icon: icon,
+                  affectedFps: inc.affectedFps,
+                  projectedShortage: inc.projectedShortageOrConstraint,
+                  additionalDispatch: inc.supplyAdjustment,
+                  recommendation: inc.recommendation,
+                  actionLabel: 'Inspect Incident Details →',
+                  isActionApplied: inc.isActionApplied,
+                  isAcknowledged: inc.isAcknowledged,
+                  onAction: () => _showIncidentDetailDialog(inc),
+                );
+              }).toList();
+
+              if (isWide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: cards.map((c) => Expanded(child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: c,
+                  ))).toList(),
+                );
+              } else {
+                return Column(
+                  children: cards.map((c) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: c,
+                  )).toList(),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncidentCard({
+    required String title,
+    required String scenarioBadge,
+    required Color badgeColor,
+    required IconData icon,
+    required String affectedFps,
+    required String projectedShortage,
+    required String additionalDispatch,
+    required String recommendation,
+    required String actionLabel,
+    bool isActionApplied = false,
+    bool isAcknowledged = false,
+    required VoidCallback onAction,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isActionApplied
+              ? const Color(0xFF86EFAC)
+              : (isAcknowledged ? const Color(0xFFCBD5E1) : const Color(0xFFFDE68A)),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(icon, size: 18, color: badgeColor),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  scenarioBadge,
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: badgeColor),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _buildIncidentField('Affected FPS', affectedFps, Icons.storefront_outlined),
+          const SizedBox(height: 4),
+          _buildIncidentField('Projected Deficit / Constraint', projectedShortage, Icons.trending_up_rounded, isHighlight: true),
+          const SizedBox(height: 4),
+          _buildIncidentField('Required Supply Adjustment', additionalDispatch, Icons.local_shipping_outlined),
+          const SizedBox(height: 4),
+          _buildIncidentField('Recommended Action', recommendation, Icons.lightbulb_outline, isPositive: true),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (isActionApplied)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('✓ Action Applied', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                )
+              else if (isAcknowledged)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('✓ Acknowledged', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('🔴 Live Alert', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                ),
+              InkWell(
+                onTap: onAction,
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(
+                    actionLabel,
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppConstants.accentBlue),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncidentField(String label, String value, IconData icon, {bool isHighlight = false, bool isPositive = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: isHighlight ? AppConstants.dangerRed : (isPositive ? AppConstants.successGreen : AppConstants.textSecondary)),
+        const SizedBox(width: 6),
+        Text('$label: ', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppConstants.textSecondary)),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: isHighlight ? AppConstants.dangerRed : (isPositive ? const Color(0xFF15803D) : AppConstants.primaryNavy),
+            ),
+          ),
         ),
       ],
     );

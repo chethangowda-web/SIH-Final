@@ -32,11 +32,6 @@ def submit_intent(
     verify_owner(current_user, payload.beneficiary_id)
     cursor = db.cursor()
 
-    # 0. Validate Choice Window Status for target cycle
-    from app.services.forecast_engine import forecast_engine
-    workflow_status = forecast_engine.get_persisted_workflow_status(db, payload.cycle_id.strip())
-    # Note: In demo mode, citizen preference updates are permitted across all workflow stages.
-
     # 1. Validate commodity
     if payload.commodity not in ["Rice", "Wheat"]:
         raise HTTPException(
@@ -69,6 +64,30 @@ def submit_intent(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Intended Fair Price Shop '{payload.intended_fps_id}' not found."
+        )
+
+    # 4. Validate Choice Window Status for target cycle
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    cycle_state = planning_cycle_engine.get_cycle_state(db, payload.cycle_id.strip())
+    if not cycle_state["is_open"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Choice window for cycle '{payload.cycle_id.strip()}' is closed and demand is locked for dispatch planning (Day {cycle_state['planning_day']}: {cycle_state['stage_label']}). Preferences can no longer be modified."
+        )
+
+    # 4.1 Enforce PDS Business Rule: Once ration receipt is confirmed for current cycle, no new request allowed for same cycle
+    cursor.execute("""
+    SELECT 1 FROM beneficiary_cycle_receipts 
+    WHERE beneficiary_id = ? AND cycle_id = ? AND status = 'COMPLETED'
+    UNION
+    SELECT 1 FROM citizen_requests
+    WHERE beneficiary_id = ? AND cycle_id = ? AND delivery_status = 'DELIVERY_CONFIRMED'
+    LIMIT 1;
+    """, (payload.beneficiary_id.strip(), payload.cycle_id.strip(), payload.beneficiary_id.strip(), payload.cycle_id.strip()))
+    if cursor.fetchone():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ration already received for this cycle. Please wait for the next distribution cycle to submit a new request."
         )
 
     intended_fps_name = fps_row["name"]
@@ -258,6 +277,21 @@ def get_beneficiary_entitlement_summary(
 
     total_remaining = ent["remaining_eligible_rice_kg"] + ent["remaining_eligible_wheat_kg"]
 
+    # Check whether ration has already been confirmed/received for target cycle
+    cursor = db.cursor()
+    cursor.execute("""
+    SELECT confirmed_at FROM beneficiary_cycle_receipts 
+    WHERE beneficiary_id = ? AND cycle_id = ? AND status = 'COMPLETED'
+    UNION
+    SELECT citizen_confirmed_at FROM citizen_requests
+    WHERE beneficiary_id = ? AND cycle_id = ? AND delivery_status = 'DELIVERY_CONFIRMED' AND citizen_confirmed_at IS NOT NULL
+    ORDER BY 1 DESC LIMIT 1;
+    """, (beneficiary_id.strip(), cycle_id.strip(), beneficiary_id.strip(), cycle_id.strip()))
+    receipt_row = cursor.fetchone()
+    ration_received = receipt_row is not None
+    receipt_confirmed_at = str(receipt_row[0]) if receipt_row and receipt_row[0] else None
+    receipt_status_label = "Ration Received — Wait for Next Cycle" if ration_received else None
+
     return BeneficiaryEntitlementSummaryOut(
         beneficiary_id=ent["beneficiary_id"],
         name=ent["name"],
@@ -284,6 +318,9 @@ def get_beneficiary_entitlement_summary(
             total_payable_inr=0.0,
             statutory_notice="Payment applies strictly to door-to-door transportation and does not alter statutory entitlement."
         ),
+        ration_received_for_cycle=ration_received,
+        receipt_confirmed_at=receipt_confirmed_at,
+        receipt_status_label=receipt_status_label,
         demo_notice=DEMO_NOTICE
     )
 
@@ -342,6 +379,15 @@ def confirm_delivery_api(
     conf_status = req.confirmation_status.upper()
 
     if conf_status == "DELIVERY_CONFIRMED":
+        # Idempotency check: If already confirmed, return success without duplicate audit log or duplicate records
+        if row["delivery_status"] == "DELIVERY_CONFIRMED":
+            return {
+                "status": "DELIVERY_CONFIRMED",
+                "request_id": req.request_id,
+                "message": "Delivery already confirmed for this cycle. Receipt is permanently recorded.",
+                "demo_notice": DEMO_NOTICE
+            }
+
         cursor.execute("""
         UPDATE citizen_requests SET
             delivery_status = 'DELIVERY_CONFIRMED',
@@ -354,6 +400,30 @@ def confirm_delivery_api(
             req.received_rice_kg or row["authorized_quantity_kg"],
             req.received_wheat_kg or 0.0,
             req.request_id
+        ))
+
+        # Close/complete beneficiary intent records for this cycle
+        cursor.execute("""
+        UPDATE intent SET status = 'COMPLETED'
+        WHERE beneficiary_id = ? AND cycle_id = ?;
+        """, (beneficiary_id.strip(), row["cycle_id"]))
+
+        # Record durable receipt in beneficiary_cycle_receipts
+        cursor.execute("""
+        INSERT INTO beneficiary_cycle_receipts (
+            beneficiary_id, cycle_id, request_id, received_rice_kg, received_wheat_kg, confirmed_at, status
+        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'COMPLETED')
+        ON CONFLICT(beneficiary_id, cycle_id) DO UPDATE SET
+            request_id = excluded.request_id,
+            received_rice_kg = excluded.received_rice_kg,
+            received_wheat_kg = excluded.received_wheat_kg,
+            status = 'COMPLETED';
+        """, (
+            beneficiary_id.strip(),
+            row["cycle_id"],
+            req.request_id,
+            req.received_rice_kg or row["authorized_quantity_kg"],
+            req.received_wheat_kg or 0.0
         ))
 
         from app.services.governance_trail import governance_trail
@@ -520,39 +590,3 @@ def list_intents(
         )
         for r in rows
     ]
-
-
-@router.get("/choice-window/status", response_model=ChoiceWindowStatusOut)
-def get_choice_window_status(
-    cycle_id: str = Query("2026-09", description="Planning cycle ID"),
-    db: sqlite3.Connection = Depends(get_db)
-):
-    """
-    Retrieve real-time Choice Window status, active beneficiary preference count, 
-    and aggregated demand locking status for an upcoming PDS planning cycle.
-    """
-    from app.services.forecast_engine import forecast_engine
-    cursor = db.cursor()
-    workflow_status = forecast_engine.get_persisted_workflow_status(db, cycle_id.strip())
-    is_open = (workflow_status == "PLANNING_OPEN")
-
-    cursor.execute("""
-    SELECT COUNT(DISTINCT beneficiary_id), COALESCE(SUM(declared_quantity_kg), 0.0)
-    FROM intent
-    WHERE cycle_id = ?;
-    """, (cycle_id.strip(),))
-    cnt_row = cursor.fetchone()
-    intents_count = int(cnt_row[0]) if cnt_row else 0
-    declared_kg = round(float(cnt_row[1]), 1) if cnt_row else 0.0
-
-    return {
-        "cycle_id": cycle_id.strip(),
-        "is_open": is_open,
-        "status": "CHOICE_WINDOW_OPEN" if is_open else "CHOICE_WINDOW_CLOSED",
-        "workflow_status": workflow_status,
-        "active_intents_count": intents_count,
-        "total_declared_intent_kg": declared_kg,
-        "closing_deadline": "5th of Planning Month (23:59 IST)",
-        "governance_notice": "Beneficiary preference is a location/demand signal only and does not reduce statutory NFSA ration entitlement.",
-        "demo_notice": DEMO_NOTICE
-    }

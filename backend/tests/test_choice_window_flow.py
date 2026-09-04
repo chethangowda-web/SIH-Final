@@ -16,6 +16,8 @@ def setup_database():
     conn.execute("DELETE FROM actual_distribution;")
     conn.execute("DELETE FROM dispatch;")
     conn.execute("DELETE FROM forecast;")
+    conn.execute("DELETE FROM demand_snapshots;")
+    conn.execute("DELETE FROM planning_cycle_config;")
     conn.commit()
     conn.close()
 
@@ -140,3 +142,48 @@ async def test_beneficiary_preference_does_not_reduce_statutory_entitlement():
         assert depot_res.status_code == 200
         # Mandatory statutory floor remains robust and untouched by low beneficiary signal
         assert depot_res.json()["statutory_floor_total_kg"] > 3000.0
+
+
+@pytest.mark.asyncio
+async def test_planning_day_advancement_and_snapshot_integrity():
+    """Test 7: Advance planning day to Day 25, lock demand, verify frozen snapshot and SHA-256 integrity seal."""
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Reset to open choice window Day 22
+        day_res = await client.post("/admin/planning-cycle/set-day?day=22&cycle_id=2026-09")
+        assert day_res.status_code == 200
+        assert day_res.json()["planning_day"] == 22
+        assert day_res.json()["cycle_state"]["is_open"] is True
+
+        # 2. Advance to Day 25
+        day25_res = await client.post("/admin/planning-cycle/set-day?day=25&cycle_id=2026-09")
+        assert day25_res.status_code == 200
+        assert day25_res.json()["planning_day"] == 25
+        # Day 25 choice window should now be closed for preference modifications
+        assert day25_res.json()["cycle_state"]["is_open"] is False
+
+        # 3. Lock Demand Snapshot
+        lock_res = await client.post("/admin/choice-window/close?cycle_id=2026-09")
+        assert lock_res.status_code == 200
+        lock_data = lock_res.json()
+        assert lock_data["status"] == "CHOICE_WINDOW_CLOSED"
+        assert lock_data["planning_day"] == 25
+        assert "snapshot_id" in lock_data
+        assert "canonical_hash" in lock_data
+        assert len(lock_data["canonical_hash"]) == 64  # SHA-256
+
+        # 4. Fetch the immutable Demand Snapshot via dedicated API
+        snap_res = await client.get("/admin/planning-cycle/demand-snapshot?cycle_id=2026-09")
+        assert snap_res.status_code == 200
+        snap_body = snap_res.json()
+        snapshot = snap_body["snapshot"]
+        assert snapshot["cycle_id"] == "2026-09"
+        assert snapshot["lock_status"] == "LOCKED"
+        assert snapshot["is_frozen"] is True
+        assert snapshot["canonical_hash"] == lock_data["canonical_hash"]
+        assert "FPS-KA-BLR-001" in snapshot["fps_demand"]
+        assert snapshot["total_locked_demand_kg"] > 0
+
+        # 5. Verify Idempotency: Calling lock again returns the same snapshot and hash
+        dup_lock_res = await client.post("/admin/choice-window/close?cycle_id=2026-09")
+        assert dup_lock_res.status_code == 200
+        assert dup_lock_res.json()["canonical_hash"] == lock_data["canonical_hash"]

@@ -38,6 +38,7 @@ class _CitizenRequestQueueDialogState extends State<CitizenRequestQueueDialog> w
     'ALL',
     'PENDING_OFFICER_REVIEW',
     'OFFICER_APPROVED',
+    'DELAYED',
     'OFFICER_PARTIAL_APPROVED',
     'OFFICER_REDIRECTED',
     'OFFICER_DEFERRED',
@@ -422,6 +423,7 @@ class _CitizenRequestQueueDialogState extends State<CitizenRequestQueueDialog> w
           Tab(text: 'All Requests (${_queueData?.totalCount ?? 0})'),
           Tab(text: 'Pending Review (${_queueData?.pendingCount ?? 0})'),
           Tab(text: 'Approved (${_queueData?.approvedCount ?? 0})'),
+          Tab(text: 'Delayed (${_queueData?.delayedCount ?? 0})'),
           Tab(text: 'Partial Allocation (${_queueData?.partialCount ?? 0})'),
           Tab(text: 'Redirected (${_queueData?.redirectedCount ?? 0})'),
           Tab(text: 'Deferred (${_queueData?.deferredCount ?? 0})'),
@@ -811,7 +813,20 @@ class _CitizenRequestQueueDialogState extends State<CitizenRequestQueueDialog> w
                     '${item.beneficiaryName} (${item.beneficiaryId})',
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(width: 18),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: Text(
+                      'Household: ${item.familyMembersCount} Members',
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppConstants.accentBlue),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
                   const Icon(Icons.storefront, size: 16, color: Colors.grey),
                   const SizedBox(width: 6),
                   Text('Home: ${item.registeredFpsName}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
@@ -839,7 +854,7 @@ class _CitizenRequestQueueDialogState extends State<CitizenRequestQueueDialog> w
                       Expanded(
                         child: _buildMetricTile(
                           'Statutory Quota',
-                          '${item.statutoryEntitlementCommodityKg.toStringAsFixed(1)} kg ${item.commodity}',
+                          '${(item.familyMembersCount * 5.0).toStringAsFixed(1)} kg (${item.familyMembersCount} × 5 kg)',
                           Icons.gavel,
                           Colors.blue.shade700,
                         ),

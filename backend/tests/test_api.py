@@ -16,6 +16,9 @@ def setup_database():
     conn.execute("DELETE FROM actual_distribution;")
     conn.execute("DELETE FROM dispatch;")
     conn.execute("DELETE FROM forecast;")
+    conn.execute("DELETE FROM demand_snapshots;")
+    conn.execute("DELETE FROM planning_cycle_config;")
+    conn.execute("INSERT OR REPLACE INTO planning_cycle_config (cycle_id, planning_day, is_manual_override, updated_at) VALUES ('2026-09', 22, 1, CURRENT_TIMESTAMP);")
     conn.commit()
     conn.close()
 

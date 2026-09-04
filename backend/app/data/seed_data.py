@@ -17,44 +17,44 @@ import random
 import sqlite3
 from app.core.database import get_db_connection, recreate_db, init_db
 
-DEMO_NOTICE = "DEMO DATA — NOT GOVERNMENT DATA"
-DEMO_DISTRICT = "Bengaluru Urban - Demo District"
+DEMO_NOTICE = "Govt. of Karnataka • Bengaluru Urban PDS Operations (DEMO DATA — NOT GOVERNMENT DATA)"
+DEMO_DISTRICT = "Bengaluru Urban District"
 HISTORICAL_CYCLES = ["2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"]
 CURRENT_CYCLE = "2026-09"
 
 # 20 Fair Price Shops Configuration
 FPS_CONFIGS = [
     # 1. Stable Demand (FPS 001 - 004) — Normal end-of-cycle replenishment needed
-    {"fps_id": "FPS-KA-BLR-001", "name": "Malleshwaram Seva Kendra (Demo)", "lat": 13.0031, "lng": 77.5643, "capacity_kg": 20000.0, "type": "STABLE", "base_rice": 4500.0, "base_wheat": 1500.0, "inv_pct": 0.20},
-    {"fps_id": "FPS-KA-BLR-002", "name": "Jayanagar 4th Block Depot (Demo)", "lat": 12.9250, "lng": 77.5938, "capacity_kg": 22000.0, "type": "STABLE", "base_rice": 4800.0, "base_wheat": 1600.0, "inv_pct": 0.22},
-    {"fps_id": "FPS-KA-BLR-003", "name": "Basavanagudi Grain Center (Demo)", "lat": 12.9422, "lng": 77.5756, "capacity_kg": 18000.0, "type": "STABLE", "base_rice": 4200.0, "base_wheat": 1400.0, "inv_pct": 0.18},
-    {"fps_id": "FPS-KA-BLR-004", "name": "Rajajinagar 1st Stage FPS (Demo)", "lat": 12.9982, "lng": 77.5530, "capacity_kg": 20000.0, "type": "STABLE", "base_rice": 4600.0, "base_wheat": 1500.0, "inv_pct": 0.20},
+    {"fps_id": "FPS-KA-BLR-001", "name": "Malleshwaram Seva Kendra", "lat": 13.0031, "lng": 77.5643, "capacity_kg": 20000.0, "type": "STABLE", "base_rice": 4500.0, "base_wheat": 1500.0, "inv_pct": 0.20},
+    {"fps_id": "FPS-KA-BLR-002", "name": "Jayanagar 4th Block Depot", "lat": 12.9250, "lng": 77.5938, "capacity_kg": 22000.0, "type": "STABLE", "base_rice": 4800.0, "base_wheat": 1600.0, "inv_pct": 0.22},
+    {"fps_id": "FPS-KA-BLR-003", "name": "Basavanagudi Grain Center", "lat": 12.9422, "lng": 77.5756, "capacity_kg": 18000.0, "type": "STABLE", "base_rice": 4200.0, "base_wheat": 1400.0, "inv_pct": 0.18},
+    {"fps_id": "FPS-KA-BLR-004", "name": "Rajajinagar 1st Stage FPS", "lat": 12.9982, "lng": 77.5530, "capacity_kg": 20000.0, "type": "STABLE", "base_rice": 4600.0, "base_wheat": 1500.0, "inv_pct": 0.20},
 
     # 2. Increasing Demand Corridors (FPS 005 - 008) — High growth replenishment
-    {"fps_id": "FPS-KA-BLR-005", "name": "Bellandur Outer Ring Road FPS (Demo)", "lat": 12.9260, "lng": 77.6762, "capacity_kg": 25000.0, "type": "INCREASING", "base_rice": 3800.0, "base_wheat": 1200.0, "inv_pct": 0.16},
-    {"fps_id": "FPS-KA-BLR-006", "name": "Sarjapur Road Extension FPS (Demo)", "lat": 12.9081, "lng": 77.6872, "capacity_kg": 24000.0, "type": "INCREASING", "base_rice": 3600.0, "base_wheat": 1100.0, "inv_pct": 0.18},
-    {"fps_id": "FPS-KA-BLR-007", "name": "Mahadevapura Sub-Center (Demo)", "lat": 12.9880, "lng": 77.6890, "capacity_kg": 26000.0, "type": "INCREASING", "base_rice": 4000.0, "base_wheat": 1300.0, "inv_pct": 0.15},
-    {"fps_id": "FPS-KA-BLR-008", "name": "Thanisandra Main Road Depot (Demo)", "lat": 13.0540, "lng": 77.6320, "capacity_kg": 22000.0, "type": "INCREASING", "base_rice": 3500.0, "base_wheat": 1150.0, "inv_pct": 0.19},
+    {"fps_id": "FPS-KA-BLR-005", "name": "Bellandur Outer Ring Road FPS", "lat": 12.9260, "lng": 77.6762, "capacity_kg": 25000.0, "type": "INCREASING", "base_rice": 3800.0, "base_wheat": 1200.0, "inv_pct": 0.16},
+    {"fps_id": "FPS-KA-BLR-006", "name": "Sarjapur Road Extension FPS", "lat": 12.9081, "lng": 77.6872, "capacity_kg": 24000.0, "type": "INCREASING", "base_rice": 3600.0, "base_wheat": 1100.0, "inv_pct": 0.18},
+    {"fps_id": "FPS-KA-BLR-007", "name": "Mahadevapura Sub-Center", "lat": 12.9880, "lng": 77.6890, "capacity_kg": 26000.0, "type": "INCREASING", "base_rice": 4000.0, "base_wheat": 1300.0, "inv_pct": 0.15},
+    {"fps_id": "FPS-KA-BLR-008", "name": "Thanisandra Main Road Depot", "lat": 13.0540, "lng": 77.6320, "capacity_kg": 22000.0, "type": "INCREASING", "base_rice": 3500.0, "base_wheat": 1150.0, "inv_pct": 0.19},
 
     # 3. Decreasing Demand Outflow Centers (FPS 009 - 012) — Surplus inventory, NO dispatch needed
-    {"fps_id": "FPS-KA-BLR-009", "name": "Chickpet Heritage Ration Depot (Demo)", "lat": 12.9698, "lng": 77.5750, "capacity_kg": 15000.0, "type": "DECREASING", "base_rice": 4200.0, "base_wheat": 1400.0, "inv_pct": 0.55},
-    {"fps_id": "FPS-KA-BLR-010", "name": "Shivajinagar Central FPS (Demo)", "lat": 12.9856, "lng": 77.6057, "capacity_kg": 16000.0, "type": "DECREASING", "base_rice": 4400.0, "base_wheat": 1500.0, "inv_pct": 0.60},
-    {"fps_id": "FPS-KA-BLR-011", "name": "Cottonpet Old Ward Seva Kendra (Demo)", "lat": 12.9650, "lng": 77.5680, "capacity_kg": 14000.0, "type": "DECREASING", "base_rice": 3900.0, "base_wheat": 1300.0, "inv_pct": 0.50},
-    {"fps_id": "FPS-KA-BLR-012", "name": "Ulsoor Bazaar Ration Counter (Demo)", "lat": 12.9830, "lng": 77.6250, "capacity_kg": 15000.0, "type": "DECREASING", "base_rice": 4100.0, "base_wheat": 1350.0, "inv_pct": 0.52},
+    {"fps_id": "FPS-KA-BLR-009", "name": "Chickpet Heritage Ration Depot", "lat": 12.9698, "lng": 77.5750, "capacity_kg": 15000.0, "type": "DECREASING", "base_rice": 4200.0, "base_wheat": 1400.0, "inv_pct": 0.55},
+    {"fps_id": "FPS-KA-BLR-010", "name": "Shivajinagar Central FPS", "lat": 12.9856, "lng": 77.6057, "capacity_kg": 16000.0, "type": "DECREASING", "base_rice": 4400.0, "base_wheat": 1500.0, "inv_pct": 0.60},
+    {"fps_id": "FPS-KA-BLR-011", "name": "Cottonpet Old Ward Seva Kendra", "lat": 12.9650, "lng": 77.5680, "capacity_kg": 14000.0, "type": "DECREASING", "base_rice": 3900.0, "base_wheat": 1300.0, "inv_pct": 0.50},
+    {"fps_id": "FPS-KA-BLR-012", "name": "Ulsoor Bazaar Ration Counter", "lat": 12.9830, "lng": 77.6250, "capacity_kg": 15000.0, "type": "DECREASING", "base_rice": 4100.0, "base_wheat": 1350.0, "inv_pct": 0.52},
 
     # 4. High Intent Shift / Migrant Hubs (FPS 013 - 016) — Inflow surge priority
-    {"fps_id": "FPS-KA-BLR-013", "name": "Peenya Industrial Area Phase-1 (Demo)", "lat": 13.0280, "lng": 77.5180, "capacity_kg": 30000.0, "type": "HIGH_MIGRANT", "base_rice": 5000.0, "base_wheat": 1800.0, "inv_pct": 0.12},
-    {"fps_id": "FPS-KA-BLR-014", "name": "Whitefield IT Corridor FPS (Demo)", "lat": 12.9698, "lng": 77.7499, "capacity_kg": 28000.0, "type": "HIGH_MIGRANT", "base_rice": 4800.0, "base_wheat": 1700.0, "inv_pct": 0.10},
-    {"fps_id": "FPS-KA-BLR-015", "name": "Electronic City Phase-2 Hub (Demo)", "lat": 12.8399, "lng": 77.6770, "capacity_kg": 26000.0, "type": "HIGH_MIGRANT", "base_rice": 4600.0, "base_wheat": 1600.0, "inv_pct": 0.14},
-    {"fps_id": "FPS-KA-BLR-016", "name": "Bommasandra Industrial FPS (Demo)", "lat": 12.8160, "lng": 77.6920, "capacity_kg": 25000.0, "type": "HIGH_MIGRANT", "base_rice": 4400.0, "base_wheat": 1500.0, "inv_pct": 0.11},
+    {"fps_id": "FPS-KA-BLR-013", "name": "Peenya Industrial Area Phase-1", "lat": 13.0280, "lng": 77.5180, "capacity_kg": 30000.0, "type": "HIGH_MIGRANT", "base_rice": 5000.0, "base_wheat": 1800.0, "inv_pct": 0.12},
+    {"fps_id": "FPS-KA-BLR-014", "name": "Whitefield IT Corridor FPS", "lat": 12.9698, "lng": 77.7499, "capacity_kg": 28000.0, "type": "HIGH_MIGRANT", "base_rice": 4800.0, "base_wheat": 1700.0, "inv_pct": 0.10},
+    {"fps_id": "FPS-KA-BLR-015", "name": "Electronic City Phase-2 Hub", "lat": 12.8399, "lng": 77.6770, "capacity_kg": 26000.0, "type": "HIGH_MIGRANT", "base_rice": 4600.0, "base_wheat": 1600.0, "inv_pct": 0.14},
+    {"fps_id": "FPS-KA-BLR-016", "name": "Bommasandra Industrial FPS", "lat": 12.8160, "lng": 77.6920, "capacity_kg": 25000.0, "type": "HIGH_MIGRANT", "base_rice": 4400.0, "base_wheat": 1500.0, "inv_pct": 0.11},
 
     # 5. Low Inventory Stress Nodes (FPS 017 - 018) — Critical stockout risk
-    {"fps_id": "FPS-KA-BLR-017", "name": "Kengeri Satellite Town FPS (Demo)", "lat": 12.9150, "lng": 77.4830, "capacity_kg": 18000.0, "type": "LOW_INVENTORY", "base_rice": 4000.0, "base_wheat": 1300.0, "inv_pct": 0.08},
-    {"fps_id": "FPS-KA-BLR-018", "name": "Yelahanka Old Town Depot (Demo)", "lat": 13.1007, "lng": 77.5963, "capacity_kg": 20000.0, "type": "LOW_INVENTORY", "base_rice": 4200.0, "base_wheat": 1400.0, "inv_pct": 0.10},
+    {"fps_id": "FPS-KA-BLR-017", "name": "Kengeri Satellite Town FPS", "lat": 12.9150, "lng": 77.4830, "capacity_kg": 18000.0, "type": "LOW_INVENTORY", "base_rice": 4000.0, "base_wheat": 1300.0, "inv_pct": 0.08},
+    {"fps_id": "FPS-KA-BLR-018", "name": "Yelahanka Old Town Depot", "lat": 13.1007, "lng": 77.5963, "capacity_kg": 20000.0, "type": "LOW_INVENTORY", "base_rice": 4200.0, "base_wheat": 1400.0, "inv_pct": 0.10},
 
     # 6. High Inventory Surplus Nodes (FPS 019 - 020) — Buffer warehouses, NO dispatch needed
-    {"fps_id": "FPS-KA-BLR-019", "name": "Hebbal Godown Distribution Point (Demo)", "lat": 13.0358, "lng": 77.5970, "capacity_kg": 28000.0, "type": "HIGH_INVENTORY", "base_rice": 4300.0, "base_wheat": 1450.0, "inv_pct": 0.75},
-    {"fps_id": "FPS-KA-BLR-020", "name": "Banaswadi Central Stock Depot (Demo)", "lat": 13.0100, "lng": 77.6500, "capacity_kg": 25000.0, "type": "HIGH_INVENTORY", "base_rice": 4100.0, "base_wheat": 1350.0, "inv_pct": 0.72},
+    {"fps_id": "FPS-KA-BLR-019", "name": "Hebbal Godown Distribution Point", "lat": 13.0358, "lng": 77.5970, "capacity_kg": 28000.0, "type": "HIGH_INVENTORY", "base_rice": 4300.0, "base_wheat": 1450.0, "inv_pct": 0.75},
+    {"fps_id": "FPS-KA-BLR-020", "name": "Banaswadi Central Stock Depot", "lat": 13.0100, "lng": 77.6500, "capacity_kg": 25000.0, "type": "HIGH_INVENTORY", "base_rice": 4100.0, "base_wheat": 1350.0, "inv_pct": 0.72},
 ]
 
 DEMO_FIRST_NAMES = [
@@ -83,7 +83,14 @@ def generate_beneficiaries(total_count=2000):
     for fps_id in fps_ids:
         for _ in range(cards_per_fps):
             pseudo_id = f"BEN-KA-{idx:04d}"
-            name = f"{random.choice(DEMO_FIRST_NAMES)} {random.choice(DEMO_LAST_INITIALS)} (Demo)"
+            if idx == 1:
+                name = "Swathi Bhat"
+            elif idx == 5:
+                name = "Sunita Devi"
+            elif idx == 15:
+                name = "Ramesh Kumar"
+            else:
+                name = f"{random.choice(DEMO_FIRST_NAMES)} {random.choice(DEMO_LAST_INITIALS)}"
             lang = random.choices(LANGUAGES, weights=LANGUAGE_WEIGHTS, k=1)[0]
             beneficiaries.append((pseudo_id, name, fps_id, lang, "ACTIVE"))
             idx += 1
@@ -91,7 +98,14 @@ def generate_beneficiaries(total_count=2000):
     # Remaining if total_count not evenly divisible
     while idx <= total_count:
         pseudo_id = f"BEN-KA-{idx:04d}"
-        name = f"{random.choice(DEMO_FIRST_NAMES)} {random.choice(DEMO_LAST_INITIALS)} (Demo)"
+        if idx == 1:
+            name = "Swathi Bhat"
+        elif idx == 5:
+            name = "Sunita Devi"
+        elif idx == 15:
+            name = "Ramesh Kumar"
+        else:
+            name = f"{random.choice(DEMO_FIRST_NAMES)} {random.choice(DEMO_LAST_INITIALS)}"
         lang = random.choices(LANGUAGES, weights=LANGUAGE_WEIGHTS, k=1)[0]
         beneficiaries.append((pseudo_id, name, random.choice(fps_ids), lang, "ACTIVE"))
         idx += 1
@@ -347,10 +361,10 @@ def seed_all_data(recreate=False):
 
     # 7. Insert Fleet Vehicles
     vehicles_data = [
-        ("DEMO-KA-04-E-1021", "Eicher Pro 10 MT (North-West Heavy Corridor)", "10-Ton Heavy Haulage Carrier", "NORTH_WEST", 10000.0, "Bengaluru Central FCI Godown (Hebbal)", 32.0, "Ramesh Kumar (Demo)", "+91-9876543210", "DEPOT-01", "AVAILABLE"),
-        ("DEMO-KA-04-E-1022", "Tata Ultra 10 MT (East Corridor / IT Belt)", "10-Ton Heavy Haulage Carrier", "EAST_IT_CORRIDOR", 10000.0, "Bengaluru Central FCI Godown (Hebbal)", 32.0, "Suresh Gowda (Demo)", "+91-9876543211", "DEPOT-01", "AVAILABLE"),
-        ("DEMO-KA-51-M-3419", "BharatBenz 10 MT (South Industrial Corridor)", "10-Ton Heavy Haulage Carrier", "SOUTH_INDUSTRIAL", 10000.0, "Banaswadi PDS Buffer Storage Depot", 32.0, "Manjunath V. (Demo)", "+91-9876543212", "DEPOT-02", "AVAILABLE"),
-        ("DEMO-KA-01-F-7801", "Ashok Leyland 8 MT (Central Urban / Heritage Cluster)", "8-Ton Urban Medium Logistics", "CENTRAL_HERITAGE", 8000.0, "Banaswadi PDS Buffer Storage Depot", 28.0, "Kiran Patil (Demo)", "+91-9876543213", "DEPOT-02", "AVAILABLE")
+        ("DEMO-KA-04-E-1021", "Eicher Pro 10 MT (North-West Heavy Corridor)", "10-Ton Heavy Haulage Carrier", "NORTH_WEST", 10000.0, "Bengaluru Central FCI Godown (Hebbal)", 32.0, "Ramesh Kumar", "+91-9876543210", "DEPOT-01", "AVAILABLE"),
+        ("DEMO-KA-04-E-1022", "Tata Ultra 10 MT (East Corridor / IT Belt)", "10-Ton Heavy Haulage Carrier", "EAST_IT_CORRIDOR", 10000.0, "Bengaluru Central FCI Godown (Hebbal)", 32.0, "Suresh Gowda", "+91-9876543211", "DEPOT-01", "AVAILABLE"),
+        ("DEMO-KA-51-M-3419", "BharatBenz 10 MT (South Industrial Corridor)", "10-Ton Heavy Haulage Carrier", "SOUTH_INDUSTRIAL", 10000.0, "Banaswadi PDS Buffer Storage Depot", 32.0, "Manjunath V.", "+91-9876543212", "DEPOT-02", "AVAILABLE"),
+        ("DEMO-KA-01-F-7801", "Ashok Leyland 8 MT (Central Urban / Heritage Cluster)", "8-Ton Urban Medium Logistics", "CENTRAL_HERITAGE", 8000.0, "Banaswadi PDS Buffer Storage Depot", 28.0, "Kiran Patil", "+91-9876543213", "DEPOT-02", "AVAILABLE")
     ]
     cursor.executemany("""
     INSERT OR REPLACE INTO vehicles (
@@ -422,6 +436,14 @@ def seed_all_data(recreate=False):
     )
     VALUES (?, ?, ?, ?);
     """, users_data)
+
+    # 10. Initialize Planning Cycle Engine State (Day 22: Choice Window Open by Default)
+    cursor.execute("DELETE FROM demand_snapshots WHERE cycle_id = ?;", (CURRENT_CYCLE,))
+    cursor.execute("DELETE FROM planning_cycle_config WHERE cycle_id = ?;", (CURRENT_CYCLE,))
+    cursor.execute("""
+    INSERT OR REPLACE INTO planning_cycle_config (cycle_id, planning_day, is_manual_override, updated_at)
+    VALUES (?, 22, 0, CURRENT_TIMESTAMP);
+    """, (CURRENT_CYCLE,))
 
     conn.commit()
 

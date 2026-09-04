@@ -101,19 +101,28 @@ class ForecastEngine:
         hist_avg = round(float(cursor.fetchone()[0]), 1)
 
         # 2. Intent-Derived Demand I and Average Intent Confidence C
-        cursor.execute("""
-        SELECT 
-            COALESCE(SUM(declared_quantity_kg), 0.0) as total_intent_kg,
-            COUNT(DISTINCT beneficiary_id) as intent_count,
-            COALESCE(AVG(confidence), 0.95) as avg_confidence
-        FROM intent
-        WHERE intended_fps_id = ? AND cycle_id = ? AND commodity = ?;
-        """, (fps_id, cycle_id, commodity))
-        intent_row = cursor.fetchone()
-        
-        intent_kg = round(float(intent_row[0]), 1)
-        intent_count = int(intent_row[1])
-        avg_confidence = round(float(intent_row[2]), 2)
+        # If an immutable Demand Snapshot has been locked on Day 25, consume the frozen baseline
+        from app.services.planning_cycle_engine import planning_cycle_engine
+        snapshot = planning_cycle_engine.get_latest_snapshot(cursor.connection if hasattr(cursor, 'connection') else None or cursor)
+        if snapshot and snapshot.get("fps_demand") and fps_id in snapshot["fps_demand"]:
+            fps_snap = snapshot["fps_demand"][fps_id]
+            intent_kg = round(float(fps_snap.get("commodities", {}).get(commodity, 0.0)), 1)
+            intent_count = int(fps_snap.get("total_requests", 0))
+            avg_confidence = 0.95
+        else:
+            cursor.execute("""
+            SELECT 
+                COALESCE(SUM(declared_quantity_kg), 0.0) as total_intent_kg,
+                COUNT(DISTINCT beneficiary_id) as intent_count,
+                COALESCE(AVG(confidence), 0.95) as avg_confidence
+            FROM intent
+            WHERE intended_fps_id = ? AND cycle_id = ? AND commodity = ?;
+            """, (fps_id, cycle_id, commodity))
+            intent_row = cursor.fetchone()
+            
+            intent_kg = round(float(intent_row[0]), 1)
+            intent_count = int(intent_row[1])
+            avg_confidence = round(float(intent_row[2]), 2)
 
         # If zero intent declared for this commodity, assume intent aligns with historical baseline
         effective_intent_kg = intent_kg if intent_kg > 0 else hist_avg
