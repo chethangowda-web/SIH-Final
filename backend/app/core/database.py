@@ -807,6 +807,40 @@ def _migration_006_beneficiary_cycle_receipts(cursor: sqlite3.Cursor) -> None:
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_cycle_receipts_ben_cycle ON beneficiary_cycle_receipts (beneficiary_id, cycle_id);")
 
 
+def _migration_007_planning_cycle_tables(cursor: sqlite3.Cursor) -> None:
+    """007: Planning Cycle State Machine and Demand Snapshots."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS demand_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        snapshot_id TEXT UNIQUE NOT NULL,
+        cycle_id TEXT NOT NULL,
+        version TEXT NOT NULL DEFAULT 'v1.0',
+        lock_status TEXT NOT NULL DEFAULT 'LOCKED',
+        lock_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        locked_by TEXT NOT NULL,
+        total_beneficiary_requests INTEGER NOT NULL,
+        total_declared_intent_kg REAL NOT NULL,
+        total_locked_demand_kg REAL NOT NULL,
+        fps_demand_json TEXT NOT NULL,
+        commodity_quantities_json TEXT NOT NULL,
+        location_distribution_json TEXT NOT NULL,
+        canonical_hash TEXT NOT NULL,
+        is_frozen INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_demand_snapshots_cycle ON demand_snapshots (cycle_id);")
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS planning_cycle_config (
+        cycle_id TEXT PRIMARY KEY,
+        planning_day INTEGER NOT NULL DEFAULT 22,
+        is_manual_override INTEGER NOT NULL DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+
 # Migration Registry
 MIGRATIONS = [
     (1, "001_core_supply_chain_schema", _migration_001_core_supply_chain),
@@ -815,6 +849,7 @@ MIGRATIONS = [
     (4, "004_unified_governance_trail", _migration_004_unified_governance_trail),
     (5, "005_performance_and_fk_indexes", _migration_005_indexes_and_constraints),
     (6, "006_beneficiary_cycle_receipts", _migration_006_beneficiary_cycle_receipts),
+    (7, "007_planning_cycle_tables", _migration_007_planning_cycle_tables),
 ]
 
 
@@ -883,6 +918,9 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         should_close = True
 
     run_migrations(conn)
+
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    planning_cycle_engine.ensure_tables(conn)
 
     if should_close:
         conn.close()

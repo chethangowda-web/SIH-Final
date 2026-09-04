@@ -438,6 +438,8 @@ def seed_all_data(recreate=False):
     """, users_data)
 
     # 10. Initialize Planning Cycle Engine State (Day 22: Choice Window Open by Default)
+    from app.services.planning_cycle_engine import planning_cycle_engine
+    planning_cycle_engine.ensure_tables(conn)
     cursor.execute("DELETE FROM demand_snapshots WHERE cycle_id = ?;", (CURRENT_CYCLE,))
     cursor.execute("DELETE FROM planning_cycle_config WHERE cycle_id = ?;", (CURRENT_CYCLE,))
     cursor.execute("""
