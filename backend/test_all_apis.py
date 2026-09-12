@@ -1,10 +1,13 @@
-"""Comprehensive API & Backend Verification Test Harness for PDS DemandSync."""
-
+import os
 import sys
-import httpx
+from pathlib import Path
 from datetime import datetime
 
-BASE_URL = "http://127.0.0.1:8000"
+# Add app parent directory to sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from fastapi.testclient import TestClient
+from app.main import app
 
 def log_test(name, passed, detail=""):
     symbol = "[PASS]" if passed else "[FAIL]"
@@ -13,10 +16,10 @@ def log_test(name, passed, detail=""):
 def run_all_tests():
     print("=" * 80)
     print(f"PDS DemandSync Full Backend & API Verification Suite")
-    print(f"Target Server: {BASE_URL} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Target: In-Memory FastAPI App | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 80)
 
-    client = httpx.Client(base_url=BASE_URL, timeout=10.0)
+    client = TestClient(app)
     passed_count = 0
     total_count = 0
 

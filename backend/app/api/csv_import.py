@@ -47,15 +47,15 @@ async def import_fps_csv(
             if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
                 raise ValueError("Invalid latitude/longitude range.")
 
-            valid_rows.append((fps_id, name, district, lat, lon, capacity, "ACTIVE", 0, capacity * 0.2, 0.0))
+            valid_rows.append((fps_id, name, district, lat, lon, capacity, "ACTIVE", 100))
         except Exception as exc:
             error_rows.append({"row_number": row_idx, "data": row, "error": str(exc)})
 
     # Upsert valid records into database
     if valid_rows:
         cursor.executemany("""
-            INSERT INTO fps (fps_id, name, district, latitude, longitude, capacity_kg, status, registered_beneficiaries_count, current_inventory_total_kg, declared_intent_cycle_kg)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO fps (fps_id, name, district, latitude, longitude, capacity_kg, status, beneficiaries_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(fps_id) DO UPDATE SET
                 name=excluded.name,
                 district=excluded.district,
