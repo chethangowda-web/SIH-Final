@@ -318,7 +318,54 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
     );
     """)
 
-    # 13. routes
+    # 13. feedback (Officer <-> Beneficiary & Officer <-> FPS Dealer Triage)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticket_id TEXT NOT NULL UNIQUE,
+        sender_type TEXT NOT NULL CHECK(sender_type IN ('BENEFICIARY', 'DEALER_FPS')),
+        sender_id TEXT NOT NULL,
+        target_fps_id TEXT,
+        category TEXT NOT NULL DEFAULT 'GENERAL',
+        subject TEXT NOT NULL,
+        message TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'NORMAL',
+        status TEXT NOT NULL DEFAULT 'OPEN',
+        officer_response TEXT,
+        resolved_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    # 14. refresh_tokens (Enterprise Auth & Session Security)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        username TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        revoked INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+    """)
+
+    # 15. truck_telemetry (Geofence Route Arrival & Deviation Checking)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS truck_telemetry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        truck_id TEXT NOT NULL,
+        target_fps_id TEXT NOT NULL,
+        current_lat REAL NOT NULL,
+        current_lon REAL NOT NULL,
+        distance_to_target_km REAL NOT NULL,
+        arrival_status TEXT NOT NULL DEFAULT 'EN_ROUTE',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    # 16. routes
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS routes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -841,6 +888,53 @@ def _migration_007_planning_cycle_tables(cursor: sqlite3.Cursor) -> None:
     """)
 
 
+def _migration_008_sih_v2_features(cursor: sqlite3.Cursor) -> None:
+    """008: Feedback, Refresh Tokens, and Truck Telemetry tables."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticket_id TEXT NOT NULL UNIQUE,
+        sender_type TEXT NOT NULL CHECK(sender_type IN ('BENEFICIARY', 'DEALER_FPS')),
+        sender_id TEXT NOT NULL,
+        target_fps_id TEXT,
+        category TEXT NOT NULL DEFAULT 'GENERAL',
+        subject TEXT NOT NULL,
+        message TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'NORMAL',
+        status TEXT NOT NULL DEFAULT 'OPEN',
+        officer_response TEXT,
+        resolved_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        username TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        revoked INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS truck_telemetry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        truck_id TEXT NOT NULL,
+        target_fps_id TEXT NOT NULL,
+        current_lat REAL NOT NULL,
+        current_lon REAL NOT NULL,
+        distance_to_target_km REAL NOT NULL,
+        arrival_status TEXT NOT NULL DEFAULT 'EN_ROUTE',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+
 # Migration Registry
 MIGRATIONS = [
     (1, "001_core_supply_chain_schema", _migration_001_core_supply_chain),
@@ -850,6 +944,7 @@ MIGRATIONS = [
     (5, "005_performance_and_fk_indexes", _migration_005_indexes_and_constraints),
     (6, "006_beneficiary_cycle_receipts", _migration_006_beneficiary_cycle_receipts),
     (7, "007_planning_cycle_tables", _migration_007_planning_cycle_tables),
+    (8, "008_sih_v2_features", _migration_008_sih_v2_features),
 ]
 
 
@@ -918,6 +1013,9 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         should_close = True
 
     run_migrations(conn)
+    cursor = conn.cursor()
+    _migration_008_sih_v2_features(cursor)
+    conn.commit()
 
     from app.services.planning_cycle_engine import planning_cycle_engine
     planning_cycle_engine.ensure_tables(conn)
@@ -1063,50 +1161,14 @@ def drop_all_tables(conn: Optional[sqlite3.Connection] = None) -> None:
         conn = get_db_connection()
         should_close = True
 
+    conn.execute("PRAGMA foreign_keys = OFF;")
     cursor = conn.cursor()
-    cursor.execute("PRAGMA foreign_keys = OFF;")
-    tables = [
-        "schema_migrations",
-        "users",
-        "workflow_audit_logs",
-        "cycle_workflow_states",
-        "delivery_disputes",
-        "entitlement_policies",
-        "governance_audit_logs",
-        "citizen_requests",
-        "beneficiary_cycle_receipts",
-        "scarcity_allocation_items",
-        "scarcity_allocation_plans",
-        "stockout_risk_predictions",
-        "depot_stock_cycles",
-        "manifest_audit_logs",
-        "manifests",
-        "routes",
-        "constraint_logs",
-        "notifications",
-        "gatepasses",
-        "vehicles",
-        "depots",
-        "model_calibration",
-        "forecast_evaluation",
-        "actual_distribution",
-        "dispatch",
-        "forecast",
-        "inventory",
-        "historical_demand",
-        "intent",
-        "beneficiaries",
-        "fps",
-        # clean legacy names if any
-        "fps_shops",
-        "intent_signals",
-        "cycle_forecasts",
-        "cycle_actuals"
-    ]
-    for table in tables:
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+    all_tables = [r[0] for r in cursor.fetchall()]
+    for table in all_tables:
         cursor.execute(f"DROP TABLE IF EXISTS {table};")
-    cursor.execute("PRAGMA foreign_keys = ON;")
     conn.commit()
+    conn.execute("PRAGMA foreign_keys = ON;")
 
     if should_close:
         conn.close()

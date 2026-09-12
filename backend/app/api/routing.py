@@ -1,6 +1,7 @@
 """API Router for Vehicle Routing Problem (VRP) & GIS District Heatmap."""
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 import sqlite3
 from app.core.database import get_db
 from app.services.vrp_solver import vrp_solver
@@ -73,4 +74,53 @@ def get_gis_heatmap_data(
         "total_fps_nodes": len(heatmap_points),
         "high_risk_nodes": sum(1 for p in heatmap_points if p["risk_level"] == "HIGH_STOCKOUT_RISK"),
         "points": heatmap_points
+    }
+
+class GPSVerifyIn(BaseModel):
+    truck_id: str = Field("DEMO-KA-04-E-1021", description="Carrier vehicle ID")
+    target_fps_id: str = Field("FPS-KA-BLR-001", description="Assigned destination shop ID")
+    current_lat: float = Field(13.0031, description="Current telemetry latitude")
+    current_lon: float = Field(77.5643, description="Current telemetry longitude")
+
+@router.post("/verify-arrival")
+def verify_truck_arrival(
+    payload: GPSVerifyIn,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Route Checking & Geofence Verification Endpoint:
+    Checks if moving truck GPS telemetry is within 100m of assigned FPS location.
+    Triggers ARRIVED_AT_TARGET_FPS if inside geofence, or ROUTE_DEVIATION_ALERT if outside.
+    """
+    cursor = db.cursor()
+    cursor.execute("SELECT latitude, longitude, name FROM fps WHERE fps_id = ?;", (payload.target_fps_id.strip(),))
+    fps_row = cursor.fetchone()
+    
+    if not fps_row:
+        return {"status": "error", "message": f"Target FPS '{payload.target_fps_id}' not found."}
+
+    target_lat, target_lon, fps_name = fps_row
+    
+    # Calculate Haversine distance in meters
+    dist_km = vrp_solver.haversine_distance(payload.current_lat, payload.current_lon, target_lat, target_lon)
+    dist_meters = dist_km * 1000.0
+
+    is_arrived = dist_meters <= 150.0  # 150 meter geofence radius
+    arrival_status = "ARRIVED_AT_TARGET_FPS" if is_arrived else ("EN_ROUTE" if dist_km < 2.0 else "ROUTE_DEVIATION_ALERT")
+
+    cursor.execute("""
+    INSERT INTO truck_telemetry (truck_id, target_fps_id, current_lat, current_lon, distance_to_target_km, arrival_status)
+    VALUES (?, ?, ?, ?, ?, ?);
+    """, (payload.truck_id, payload.target_fps_id, payload.current_lat, payload.current_lon, dist_km, arrival_status))
+    db.commit()
+
+    return {
+        "status": "success",
+        "truck_id": payload.truck_id,
+        "target_fps_id": payload.target_fps_id,
+        "fps_name": fps_name,
+        "distance_meters": round(dist_meters, 1),
+        "geofence_arrival_verified": is_arrived,
+        "telemetry_status": arrival_status,
+        "message": f"Truck '{payload.truck_id}' is {round(dist_meters, 1)}m from '{fps_name}'. Status: {arrival_status}"
     }

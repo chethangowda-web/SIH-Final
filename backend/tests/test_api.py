@@ -9,7 +9,7 @@ from app.data.seed_data import seed_all_data
 def setup_database():
     """Ensure database is seeded with benchmark data before tests."""
     init_db()
-    seed_all_data(recreate=False)
+    seed_all_data(recreate=True)
     conn = get_db_connection()
     conn.execute("DELETE FROM model_calibration;")
     conn.execute("DELETE FROM forecast_evaluation;")

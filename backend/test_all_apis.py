@@ -196,6 +196,71 @@ def run_all_tests():
     else:
         log_test("POST /api/intent/simulate-channel", False, f"status={r_sim.status_code}")
 
+    # 17. Feedback & Ticket System
+    total_count += 1
+    r_fb = client.post(
+        "/api/feedback/submit",
+        json={
+            "sender_type": "BENEFICIARY",
+            "sender_id": "BEN-KA-0005",
+            "target_fps_id": "FPS-KA-BLR-001",
+            "category": "SHORT_WEIGHT",
+            "subject": "Delivery Quantity Discrepancy",
+            "message": "Received 18 kg instead of 20 kg."
+        },
+        headers={"Authorization": f"Bearer {citizen_token}"}
+    )
+    if r_fb.status_code == 201 and "ticket_id" in r_fb.json():
+        passed_count += 1
+        log_test("POST /api/feedback/submit", True, f"ticket_id={r_fb.json()['ticket_id']}")
+    else:
+        log_test("POST /api/feedback/submit", False, f"status={r_fb.status_code}")
+
+    # 18. GPS Route Geofence Arrival Verification
+    total_count += 1
+    r_gps = client.post(
+        "/api/routing/verify-arrival",
+        json={
+            "truck_id": "DEMO-KA-04-E-1021",
+            "target_fps_id": "FPS-KA-BLR-001",
+            "current_lat": 13.0031,
+            "current_lon": 77.5643
+        }
+    )
+    if r_gps.status_code == 200 and r_gps.json().get("geofence_arrival_verified") is True:
+        passed_count += 1
+        log_test("POST /api/routing/verify-arrival", True, f"status={r_gps.json().get('telemetry_status')}")
+    else:
+        log_test("POST /api/routing/verify-arrival", False, f"status={r_gps.status_code}")
+
+    # 19. Officer Manual Override
+    total_count += 1
+    r_ovr = client.post(
+        "/api/admin/fps/FPS-KA-BLR-001/override",
+        json={
+            "override_rice_kg": 4600.0,
+            "override_wheat_kg": 1500.0,
+            "safety_buffer_pct": 15.0,
+            "emergency_priority": False
+        },
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+    if r_ovr.status_code == 200 and r_ovr.json().get("status") == "success":
+        passed_count += 1
+        log_test("POST /api/admin/fps/{id}/override", True, f"fps={r_ovr.json().get('fps_id')}")
+    else:
+        log_test("POST /api/admin/fps/{id}/override", False, f"status={r_ovr.status_code}")
+
+    # 20. AI Pre-Dispatch Stock Headroom Check
+    total_count += 1
+    r_stock = client.get("/api/admin/stock-headroom-check?cycle_id=2026-09", headers={"Authorization": f"Bearer {admin_token}"})
+    if r_stock.status_code == 200 and "ai_status" in r_stock.json():
+        passed_count += 1
+        log_test("GET /api/admin/stock-headroom-check", True, f"ai_status={r_stock.json().get('ai_status')}")
+    else:
+        log_test("GET /api/admin/stock-headroom-check", False, f"status={r_stock.status_code}")
+
+
 
 
     print("=" * 80)
