@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 class AppConstants {
   // App Branding
@@ -11,9 +11,18 @@ class AppConstants {
       'Govt. of Karnataka • Bengaluru Urban PDS Operations';
 
   // API Endpoints
+  static String? customBackendUrl;
+
   static String get apiBaseUrl {
+    if (customBackendUrl != null && customBackendUrl!.trim().isNotEmpty) {
+      return customBackendUrl!.trim();
+    }
     if (kIsWeb) {
       return '${Uri.base.origin}/api';
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      // 10.0.2.2 is the Android Emulator alias for localhost on the host development machine
+      return 'http://10.0.2.2:8000/api';
     }
     return 'http://127.0.0.1:8000/api';
   }

@@ -148,6 +148,53 @@ class ApiService {
     authSession.clear();
   }
 
+  /// Request a 6-digit OTP for a citizen Ration Card Number.
+  Future<Map<String, dynamic>> sendCitizenOtp(String cardId) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/auth/citizen/send-otp'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'card_id': cardId.trim()}),
+    ).timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response, 'Failed to send OTP');
+    }
+  }
+
+  /// Verify citizen OTP and establish authenticated session.
+  Future<Map<String, dynamic>> verifyCitizenOtp(String cardId, String otpCode) async {
+    authSession.clear();
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/auth/citizen/verify-otp'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'card_id': cardId.trim(),
+        'otp_code': otpCode.trim(),
+      }),
+    ).timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final token = data['access_token'] as String;
+      final role = (data['role'] ?? 'BENEFICIARY') as String;
+      final beneficiaryId = data['beneficiary_id'] as String?;
+      final expiresIn = (data['expires_in'] ?? 36000) as int;
+
+      authSession.setSession(
+        token: token,
+        username: data['username'] ?? cardId,
+        role: role,
+        beneficiaryId: beneficiaryId,
+        expiresInSeconds: expiresIn,
+      );
+      return data;
+    } else {
+      throw parseError(response, 'OTP verification failed');
+    }
+  }
+
   /// Performs a live health-check diagnostic ping against the FastAPI backend.
   Future<HealthModel> checkHealth({String? customUrl}) async {
     final url = Uri.parse(customUrl ?? '${AppConstants.apiBaseUrl}/health');
