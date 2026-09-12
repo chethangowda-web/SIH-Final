@@ -10,7 +10,10 @@ class AppConstants {
   static const String demoNotice =
       'Govt. of Karnataka • Bengaluru Urban PDS Operations';
 
-  // API Endpoints
+  // Production Railway cloud backend URL for mobile APKs and remote access
+  static const String defaultProductionBackendUrl =
+      'https://sih-final-production-d29c.up.railway.app/api';
+
   static String? customBackendUrl;
 
   static String get apiBaseUrl {
@@ -18,13 +21,14 @@ class AppConstants {
       return customBackendUrl!.trim();
     }
     if (kIsWeb) {
-      return '${Uri.base.origin}/api';
+      final origin = Uri.base.origin;
+      if (origin.contains('localhost') || origin.contains('127.0.0.1')) {
+        return '$origin/api';
+      }
+      return '$origin/api';
     }
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      // 10.0.2.2 is the Android Emulator alias for localhost on the host development machine
-      return 'http://10.0.2.2:8000/api';
-    }
-    return 'http://127.0.0.1:8000/api';
+    // Default native mobile apps (Android/iOS) to live cloud backend
+    return defaultProductionBackendUrl;
   }
   static String get healthEndpoint => '$apiBaseUrl/health';
 
