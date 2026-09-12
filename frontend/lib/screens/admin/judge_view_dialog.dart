@@ -958,11 +958,11 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
                   Padding(padding: EdgeInsets.all(8), child: Text('Pilot Recommendation', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                 ],
               ),
-              _buildGeoTableRow('Belagavi', '1,736 FPSs', '★ #1 BEST KARNATAKA PILOT (Largest Network)', Colors.amberAccent),
-              _buildGeoTableRow('Tumakuru', '1,086 FPSs', 'Very Good Alternative', Colors.white70),
-              _buildGeoTableRow('Mysuru', '1,022 FPSs', 'Very Good Alternative', Colors.white70),
-              _buildGeoTableRow('Kalaburagi', '983 FPSs', 'Strong Regional Node', Colors.white70),
-              _buildGeoTableRow('Hassan', '880 FPSs', 'Good Candidate', Colors.white70),
+              _buildDistrictTableRow('Belagavi', '1,736 FPSs', '★ #1 BEST KARNATAKA PILOT (Largest Network)', Colors.amberAccent),
+              _buildDistrictTableRow('Tumakuru', '1,086 FPSs', 'Very Good Alternative', Colors.white70),
+              _buildDistrictTableRow('Mysuru', '1,022 FPSs', 'Very Good Alternative', Colors.white70),
+              _buildDistrictTableRow('Kalaburagi', '983 FPSs', 'Strong Regional Node', Colors.white70),
+              _buildDistrictTableRow('Hassan', '880 FPSs', 'Good Candidate', Colors.white70),
             ],
           ),
           const SizedBox(height: 24),
@@ -1001,6 +1001,16 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
         Padding(padding: const EdgeInsets.all(8), child: Text(col2, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12))),
         Padding(padding: const EdgeInsets.all(8), child: Text(col3, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12))),
         Padding(padding: const EdgeInsets.all(8), child: Text(col4, style: TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.bold))),
+      ],
+    );
+  }
+
+  TableRow _buildDistrictTableRow(String col1, String col2, String col3, Color accent) {
+    return TableRow(
+      children: [
+        Padding(padding: const EdgeInsets.all(8), child: Text(col1, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))),
+        Padding(padding: const EdgeInsets.all(8), child: Text(col2, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12))),
+        Padding(padding: const EdgeInsets.all(8), child: Text(col3, style: TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.bold))),
       ],
     );
   }

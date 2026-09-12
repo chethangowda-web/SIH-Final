@@ -216,9 +216,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<String>(
-      valueListenable: AppLocalization.instance.currentLocale,
-      builder: (context, locale, child) {
+    return ListenableBuilder(
+      listenable: LanguageController.instance,
+      builder: (context, child) {
         return Scaffold(
           backgroundColor: const Color(0xFFF1F5F9),
           body: Center(
