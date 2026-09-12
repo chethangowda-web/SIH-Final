@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../core/constants.dart';
 import '../../core/localization.dart';
 import '../../models/beneficiary_model.dart';
 import '../../services/api_service.dart';
@@ -71,11 +70,39 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   Beneficiary? _selectedBeneficiary;
   bool _isAuthenticating = false;
 
+  // Modern GovTech Design System Tokens
+  static const Color _govNavy = Color(0xFF0F2942);
+  static const Color _govGreen = Color(0xFF15803D);
+  static const Color _govGreenLight = Color(0xFF16A34A);
+  static const Color _govGreenBg = Color(0xFFF0FDF4);
+  static const Color _govGreenBorder = Color(0xFF86EFAC);
+  static const Color _saffron = Color(0xFFFF9933);
+  static const Color _slate900 = Color(0xFF0F172A);
+  static const Color _slate700 = Color(0xFF334155);
+  static const Color _slate500 = Color(0xFF64748B);
+  static const Color _slate400 = Color(0xFF94A3B8);
+  static const Color _slate200 = Color(0xFFE2E8F0);
+  static const Color _slate100 = Color(0xFFF1F5F9);
+  static const Color _slate50 = Color(0xFFF8FAFC);
+
   @override
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
     _selectedBeneficiary = _beneficiaries.first;
+
+    if (widget.sessionExpiredMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.sessionExpiredMessage!),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      });
+    }
   }
 
   @override
@@ -139,7 +166,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               ),
             ],
           ),
-          backgroundColor: Colors.green.shade700,
+          backgroundColor: _govGreen,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -261,142 +288,81 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       listenable: LanguageController.instance,
       builder: (context, child) {
         return Scaffold(
-          backgroundColor: const Color(0xFFF8FAFC),
-          body: Stack(
-            children: [
-              // Subtle Indian Tricolor Ribbon Waves at Bottom Left
-              Positioned(
-                bottom: 0,
-                left: 0,
-                child: Opacity(
-                  opacity: 0.65,
-                  child: Image.asset(
-                    'assets/images/ribbon_wave.png',
-                    height: 180,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+          backgroundColor: _slate50,
+          body: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Top Clean Header
+                      _buildHeader(),
+
+                      const SizedBox(height: 24),
+
+                      // Main Login Card
+                      _buildCard(),
+
+                      const SizedBox(height: 20),
+
+                      // Footer with Diagnostics & NIC Branding
+                      _buildFooter(),
+                    ],
                   ),
                 ),
               ),
-
-              // Subtle Parliament / Heritage Building Skyline at Bottom Right
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Opacity(
-                  opacity: 0.45,
-                  child: Image.asset(
-                    'assets/images/skyline.png',
-                    height: 220,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
-                  ),
-                ),
-              ),
-
-              // Main Content Area
-              SafeArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1140),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Top Navigation & Header Bar
-                          _buildTopBar(),
-
-                          const SizedBox(height: 32),
-
-                          // Responsive Two-Column Layout (Hero on Left, Login Card on Right)
-                          LayoutBuilder(
-                            builder: (context, constraints) {
-                              final isWide = constraints.maxWidth >= 900;
-                              if (isWide) {
-                                return Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      flex: 12,
-                                      child: _buildLeftHeroSection(),
-                                    ),
-                                    const SizedBox(width: 44),
-                                    Expanded(
-                                      flex: 11,
-                                      child: _buildRightLoginCard(),
-                                    ),
-                                  ],
-                                );
-                              } else {
-                                return Column(
-                                  children: [
-                                    _buildLeftHeroSection(),
-                                    const SizedBox(height: 32),
-                                    ConstrainedBox(
-                                      constraints: const BoxConstraints(maxWidth: 540),
-                                      child: _buildRightLoginCard(),
-                                    ),
-                                  ],
-                                );
-                              }
-                            },
-                          ),
-
-                          const SizedBox(height: 32),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },
     );
   }
 
-  // Widget: Top Government Header Bar
-  Widget _buildTopBar() {
+  // ════════════════════════════════════════════════════════════════
+  // TOP BRAND HEADER
+  // ════════════════════════════════════════════════════════════════
+  Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Left: Ashoka Emblem & Brand
         Row(
           children: [
             Image.asset(
-              'assets/images/emblem.png',
-              height: 48,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => Container(
-                padding: const EdgeInsets.all(8),
+              'assets/images/emblem_gov.png',
+              height: 40,
+              errorBuilder: (_, __, ___) => Container(
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: AppConstants.primaryNavy.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
+                  color: _govNavy,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.shield_rounded, color: AppConstants.primaryNavy, size: 28),
+                child: const Icon(Icons.shield_rounded, color: Colors.white, size: 22),
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   tr('app.name'),
                   style: const TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.w900,
-                    color: AppConstants.primaryNavy,
-                    letterSpacing: -0.4,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: _govNavy,
+                    letterSpacing: -0.3,
                   ),
                 ),
                 Text(
                   tr('login.dept_title'),
                   style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                    color: _slate500,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -404,330 +370,157 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ],
         ),
 
-        // Right: Tagline & Multilingual Selector
+        // Language Switcher
         Row(
           children: [
-            Text(
-              tr('login.tagline'),
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Row(
-              children: [
-                _buildLangBadge('EN', 'en'),
-                const SizedBox(width: 4),
-                _buildLangBadge('हिंदी', 'hi'),
-                const SizedBox(width: 4),
-                _buildLangBadge('ಕನ್ನಡ', 'kn'),
-              ],
-            ),
+            _buildLangChip('EN', 'en'),
+            const SizedBox(width: 4),
+            _buildLangChip('हिंदी', 'hi'),
+            const SizedBox(width: 4),
+            _buildLangChip('ಕನ್ನಡ', 'kn'),
           ],
         ),
       ],
     );
   }
 
-  // Widget: Left Hero Section (Fair Distribution, Illustration, 4 Quick Features)
-  Widget _buildLeftHeroSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        Text(
-          '${tr('login.hero_title_1')}\n${tr('login.hero_title_2')}',
-          style: const TextStyle(
-            fontSize: 34,
-            fontWeight: FontWeight.w900,
-            color: Color(0xFF0F172A),
-            height: 1.18,
-            letterSpacing: -0.6,
-          ),
-        ),
-        const SizedBox(height: 12),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Text(
-            tr('login.hero_subtitle'),
-            style: const TextStyle(
-              fontSize: 13.5,
-              color: Color(0xFF475569),
-              height: 1.5,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-
-        // Indian Family & Ration Shop Hero Graphic
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Image.asset(
-              'assets/images/pds_family_hero.png',
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => Container(
-                height: 160,
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Center(
-                  child: Icon(Icons.storefront_rounded, size: 60, color: AppConstants.accentBlue),
-                ),
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 28),
-
-        // 4 Circular Feature Action Icons
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildFeatureIcon(
-                Icons.credit_card_rounded,
-                tr('login.feature_check_card'),
-                const Color(0xFFEFF6FF),
-                const Color(0xFF2563EB),
-                () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Ration Card Verification Module active: Entitlements synced with NFSA registry.'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
-              _buildFeatureIcon(
-                Icons.receipt_long_rounded,
-                tr('login.feature_track_entitlements'),
-                const Color(0xFFF0FDF4),
-                const Color(0xFF16A34A),
-                () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Entitlement Tracker: 5 kg grain quota per member guaranteed free under NFSA.'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
-              _buildFeatureIcon(
-                Icons.location_on_rounded,
-                tr('login.feature_find_shop'),
-                const Color(0xFFFAF5FF),
-                const Color(0xFF9333EA),
-                () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('ONORC Shop Locator: 2,400+ Fair Price Shops mapped across Bengaluru Urban.'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
-              _buildFeatureIcon(
-                Icons.headset_mic_rounded,
-                tr('login.feature_get_support'),
-                const Color(0xFFFFF7ED),
-                const Color(0xFFEA580C),
-                () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Toll-Free Grievance Helpline: Dial 1967 or 1800-425-9333 for immediate PDS assistance.'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFeatureIcon(IconData icon, String label, Color bg, Color iconColor, VoidCallback onTap) {
+  Widget _buildLangChip(String label, String code) {
+    final currentLang = LanguageController.instance.currentLanguage.code;
+    final isSelected = currentLang == code;
     return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        child: Column(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: bg,
-                shape: BoxShape.circle,
-                border: Border.all(color: iconColor.withValues(alpha: 0.2), width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: iconColor.withValues(alpha: 0.12),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(icon, color: iconColor, size: 22),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1E293B),
-                height: 1.2,
-              ),
-            ),
-          ],
+      onTap: () => LanguageController.instance.setLanguage(AppLanguage.fromCode(code)),
+      borderRadius: BorderRadius.circular(6),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? _govNavy : Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isSelected ? _govNavy : _slate200),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : _slate500,
+          ),
         ),
       ),
     );
   }
 
-  // Widget: Right Login Card
-  Widget _buildRightLoginCard() {
-    return Card(
-      elevation: 10,
-      shadowColor: Colors.black.withValues(alpha: 0.08),
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+  // ════════════════════════════════════════════════════════════════
+  // MAIN LOGIN CARD
+  // ════════════════════════════════════════════════════════════════
+  Widget _buildCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _slate200),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 20,
+            offset: Offset(0, 6),
+          ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(28.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Card Header: Shield Icon + "Citizen Login"
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFFBFDBFE)),
-                  ),
-                  child: const Icon(Icons.shield_rounded, color: Color(0xFF0F172A), size: 26),
-                ),
-                const SizedBox(width: 14),
-                Column(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Card Title & Subtitle
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      tr('login.citizen_login_title'),
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF0F172A),
-                        letterSpacing: -0.3,
+                    const Text(
+                      'Welcome Back',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: _slate900,
+                        letterSpacing: -0.4,
                       ),
                     ),
+                    const SizedBox(height: 3),
                     Text(
-                      tr('login.citizen_login_sub'),
+                      tr('login.welcome_sub'),
                       style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                        color: _slate500,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-
-            const SizedBox(height: 22),
-
-            // Capsule 3-Tab Segmented Selector
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
-              child: Row(
+              // Indian Tricolor Pill Indicator
+              Row(
                 children: [
-                  _buildSegmentTab(0, Icons.phone_android_rounded, tr('login.tab_citizen_otp')),
-                  const SizedBox(width: 4),
-                  _buildSegmentTab(1, Icons.account_balance_outlined, tr('login.tab_department')),
-                  const SizedBox(width: 4),
-                  _buildSegmentTab(2, Icons.group_outlined, tr('login.tab_demo_personas')),
+                  Container(width: 8, height: 4, decoration: BoxDecoration(color: _saffron, borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(width: 2),
+                  Container(width: 8, height: 4, decoration: BoxDecoration(color: _slate200, borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(width: 2),
+                  Container(width: 8, height: 4, decoration: BoxDecoration(color: _govGreenLight, borderRadius: BorderRadius.circular(2))),
                 ],
               ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // 3-Tab Segment Selector
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: _slate100,
+              borderRadius: BorderRadius.circular(10),
             ),
-
-            const SizedBox(height: 20),
-
-            // Active Tab Content
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: _selectedTabIndex == 0
-                  ? _buildCitizenOtpTab()
-                  : (_selectedTabIndex == 1
-                      ? _buildDepartmentLoginTab()
-                      : _buildDemoPersonasTab()),
+            child: Row(
+              children: [
+                _buildSegmentTab(0, Icons.phone_android_rounded, tr('login.tab_citizen_otp'), _govGreen),
+                _buildSegmentTab(1, Icons.badge_outlined, tr('login.tab_department'), _govNavy),
+                _buildSegmentTab(2, Icons.group_outlined, tr('login.tab_demo_personas'), _govGreen),
+              ],
             ),
+          ),
 
-            const SizedBox(height: 18),
+          const SizedBox(height: 22),
 
-            // Bottom Diagnostics Link
-            Center(
-              child: TextButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => ConnectivityScreen(apiService: _apiService),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.developer_board_outlined, size: 14, color: AppConstants.secondaryNavy),
-                label: Text(
-                  tr('login.system_diagnostics'),
-                  style: const TextStyle(
-                    color: AppConstants.secondaryNavy,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+          // Tab Content
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: _selectedTabIndex == 0
+                ? _buildCitizenOtpTab()
+                : (_selectedTabIndex == 1
+                    ? _buildDepartmentLoginTab()
+                    : _buildDemoPersonasTab()),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildSegmentTab(int index, IconData icon, String label) {
+  Widget _buildSegmentTab(int index, IconData icon, String label, Color activeColor) {
     final isSelected = _selectedTabIndex == index;
     return Expanded(
       child: InkWell(
         onTap: () => setState(() => _selectedTabIndex = index),
         borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 9),
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF0F172A) : Colors.transparent,
+            color: isSelected ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             boxShadow: isSelected
-                ? const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))]
+                ? const [BoxShadow(color: Color(0x0D000000), blurRadius: 4, offset: Offset(0, 2))]
                 : null,
           ),
           child: Row(
@@ -735,8 +528,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             children: [
               Icon(
                 icon,
-                size: 15,
-                color: isSelected ? Colors.white : const Color(0xFF475569),
+                size: 14,
+                color: isSelected ? activeColor : _slate500,
               ),
               const SizedBox(width: 6),
               Flexible(
@@ -746,8 +539,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: isSelected ? Colors.white : const Color(0xFF475569),
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? activeColor : _slate500,
                   ),
                 ),
               ),
@@ -758,74 +551,71 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     );
   }
 
-  // Widget: Citizen OTP Tab
+  // ════════════════════════════════════════════════════════════════
+  // CITIZEN OTP TAB
+  // ════════════════════════════════════════════════════════════════
   Widget _buildCitizenOtpTab() {
     return Column(
-      key: const ValueKey('citizen_tab'),
+      key: const ValueKey('citizen_otp'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          tr('login.enter_card_number'),
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: Color(0xFF0F172A)),
+        const Text(
+          'Ration Card Number',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _slate900),
         ),
-        const SizedBox(height: 4),
-        Text(
-          tr('login.sms_disclaimer'),
-          style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
 
-        // Quick Auto-Fill Chips (Swathi, Sunita, Ramesh)
+        // Quick Demo Personas Selection Chips
         Wrap(
           spacing: 6,
           runSpacing: 4,
           children: [
-            Text(tr('login.quick_select'), style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.w600)),
-            _buildQuickCardChip('BEN-KA-0001', 'Swathi'),
-            _buildQuickCardChip('BEN-KA-0005', 'Sunita'),
-            _buildQuickCardChip('BEN-KA-0015', 'Ramesh'),
+            _buildQuickChip('BEN-KA-0001', 'Swathi'),
+            _buildQuickChip('BEN-KA-0005', 'Sunita'),
+            _buildQuickChip('BEN-KA-0015', 'Ramesh'),
           ],
         ),
         const SizedBox(height: 10),
 
-        // Ration Card ID Input
         TextField(
           controller: _citizenCardController,
-          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            labelText: tr('login.ration_card_id'),
-            hintText: tr('login.ration_card_hint'),
-            prefixIcon: const Icon(Icons.credit_card_rounded, size: 18, color: Color(0xFF475569)),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppConstants.accentBlue, width: 1.6)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            hintText: 'e.g. BEN-KA-0001',
+            prefixIcon: const Icon(Icons.credit_card_rounded, size: 18, color: _slate500),
+            filled: true,
+            fillColor: _slate50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           ),
         ),
-        const SizedBox(height: 14),
+
+        const SizedBox(height: 16),
 
         if (!_otpSent)
-          ElevatedButton.icon(
+          ElevatedButton(
             onPressed: _isSendingOtp ? null : _handleSendOtp,
-            icon: _isSendingOtp
-                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.send_rounded, size: 16),
-            label: Text(_isSendingOtp ? tr('login.sending_otp') : tr('login.get_otp_btn')),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppConstants.accentBlue,
+              backgroundColor: _govNavy,
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 44),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
             ),
+            child: _isSendingOtp
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('Get OTP Code', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
           )
         else ...[
-          // OTP Verification Box with 6 Individual Digit Tiles
+          // OTP Received Box
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
+              color: _govGreenBg,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF86EFAC)),
+              border: Border.all(color: _govGreenBorder),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -833,65 +623,83 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
+                    const Row(
                       children: [
-                        const Icon(Icons.phone_android_rounded, size: 16, color: Color(0xFF15803D)),
-                        const SizedBox(width: 6),
+                        Icon(Icons.phone_android_rounded, size: 14, color: _govGreen),
+                        SizedBox(width: 4),
                         Text(
-                          tr('login.otp_sent_to_mobile'),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
+                          'OTP sent to mobile',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _govGreen),
                         ),
                       ],
                     ),
                     Text(
-                      '${tr('login.expires_in')} ${_formatTimer(_otpCountdownSeconds)}',
-                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
+                      _formatTimer(_otpCountdownSeconds),
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _govGreen),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  tr('login.otp_label'),
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
+
+                // 6 Input Digits
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(6, (index) {
+                    final otpText = _citizenOtpController.text.padRight(6, ' ');
+                    final char = otpText[index].trim();
+                    final hasVal = char.isNotEmpty;
+                    return Container(
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: hasVal ? _govGreenLight : _slate200,
+                          width: hasVal ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Text(
+                        char.isEmpty ? '•' : char,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: hasVal ? _slate900 : _slate400,
+                        ),
+                      ),
+                    );
+                  }),
                 ),
-                const SizedBox(height: 8),
-
-                // 6 Individual Digit Tiles (as in design)
-                _buildSixDigitTiles(),
 
                 const SizedBox(height: 8),
                 Text(
-                  tr('login.demo_otp_hint'),
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF15803D)),
+                  'Demo Code: ${_generatedOtpForDemo ?? "123456"} (Auto-filled)',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _govGreen),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 14),
 
-          // Big Emerald Green Button: Verify OTP & Login ->
+          const SizedBox(height: 16),
+
           ElevatedButton(
             onPressed: _isVerifyingOtp ? null : _handleVerifyOtpAndLogin,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF15803D),
+              backgroundColor: _govGreen,
               foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 46),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              elevation: 2,
+              minimumSize: const Size(double.infinity, 44),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
             ),
             child: _isVerifyingOtp
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Row(
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.check_circle_rounded, size: 17),
-                      const SizedBox(width: 8),
-                      Text(
-                        tr('login.verify_login_btn'),
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.arrow_forward_rounded, size: 17),
+                      Icon(Icons.check_circle_rounded, size: 16),
+                      SizedBox(width: 6),
+                      Text('Verify OTP & Login', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                     ],
                   ),
           ),
@@ -900,47 +708,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     );
   }
 
-  // Widget: 6 Individual Digit Tiles Matching the Design Mockup
-  Widget _buildSixDigitTiles() {
-    final otpText = _citizenOtpController.text.padRight(6, ' ');
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: List.generate(6, (index) {
-        final char = otpText[index].trim();
-        final hasVal = char.isNotEmpty;
-        return Container(
-          width: 44,
-          height: 48,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: hasVal ? const Color(0xFF16A34A) : const Color(0xFFCBD5E1),
-              width: hasVal ? 1.6 : 1.0,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black12,
-                blurRadius: 2,
-                offset: Offset(0, 1),
-              ),
-            ],
-          ),
-          child: Text(
-            char.isEmpty ? '•' : char,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: hasVal ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1),
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildQuickCardChip(String cardId, String name) {
+  Widget _buildQuickChip(String cardId, String name) {
     final isSelected = _citizenCardController.text == cardId;
     return InkWell(
       onTap: () {
@@ -949,198 +717,137 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           _otpSent = false;
         });
       },
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(6),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1)),
+          color: isSelected ? _govNavy : _slate100,
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
           '$cardId ($name)',
           style: TextStyle(
             fontSize: 10.5,
-            fontWeight: FontWeight.w700,
-            color: isSelected ? Colors.white : const Color(0xFF0F172A),
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : _slate700,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildLangBadge(String label, String code) {
-    final currentLang = LanguageController.instance.currentLanguage.code;
-    final isSelected = currentLang == code;
-    return InkWell(
-      onTap: () => LanguageController.instance.setLanguage(AppLanguage.fromCode(code)),
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0F172A) : Colors.transparent,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w700,
-            color: isSelected ? Colors.white : AppConstants.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Widget: Department Password Login Tab
+  // ════════════════════════════════════════════════════════════════
+  // DEPARTMENT LOGIN TAB
+  // ════════════════════════════════════════════════════════════════
   Widget _buildDepartmentLoginTab() {
     return Column(
-      key: const ValueKey('department_tab'),
+      key: const ValueKey('dept_login'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          tr('login.dept_portal_title'),
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: Color(0xFF0F172A)),
+        const Text(
+          'Official Username',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _slate900),
         ),
-        const SizedBox(height: 4),
-        Text(
-          tr('login.dept_portal_sub'),
-          style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
-        ),
-        const SizedBox(height: 10),
-
-        // Quick Role Preset Selector (DSO Admin, Field Officer, Auditor)
-        Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          children: [
-            Text(tr('login.role_presets'), style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.w600)),
-            _buildRolePresetChip('DSO Admin', 'admin_user', 'admin_pass'),
-            _buildRolePresetChip('Field Officer', 'dso_user', 'dso_pass'),
-            _buildRolePresetChip('Auditor', 'auditor_user', 'auditor_pass'),
-          ],
-        ),
-        const SizedBox(height: 12),
-
+        const SizedBox(height: 6),
         TextField(
           controller: _adminUsernameController,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            labelText: tr('login.username_label'),
-            prefixIcon: const Icon(Icons.person_rounded, size: 18),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            hintText: 'admin_user',
+            prefixIcon: const Icon(Icons.person_outline_rounded, size: 18, color: _slate500),
+            filled: true,
+            fillColor: _slate50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govNavy, width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 14),
 
+        const Text(
+          'Password',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _slate900),
+        ),
+        const SizedBox(height: 6),
         TextField(
           controller: _adminPasswordController,
           obscureText: _isPasswordObscured,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            labelText: tr('login.password_label'),
-            prefixIcon: const Icon(Icons.key_rounded, size: 18),
+            hintText: '••••••••',
+            prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18, color: _slate500),
             suffixIcon: IconButton(
-              icon: Icon(_isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+              icon: Icon(_isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: _slate500),
               onPressed: () => setState(() => _isPasswordObscured = !_isPasswordObscured),
             ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            filled: true,
+            fillColor: _slate50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govNavy, width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           ),
         ),
+
         const SizedBox(height: 16),
 
-        ElevatedButton.icon(
+        ElevatedButton(
           onPressed: _isAdminLoggingIn ? null : _handleDepartmentLogin,
-          icon: _isAdminLoggingIn
-              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.dashboard_rounded, size: 16),
-          label: Text(_isAdminLoggingIn ? tr('login.dept_authenticating') : tr('login.dept_signin_btn')),
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF0F172A),
+            backgroundColor: _govNavy,
             foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 46),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            minimumSize: const Size(double.infinity, 44),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            elevation: 0,
           ),
+          child: _isAdminLoggingIn
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Sign In as Official', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
         ),
       ],
     );
   }
 
-  Widget _buildRolePresetChip(String label, String u, String p) {
-    final isSelected = _adminUsernameController.text == u;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _adminUsernameController.text = u;
-          _adminPasswordController.text = p;
-        });
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w700,
-            color: isSelected ? Colors.white : const Color(0xFF0F172A),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Widget: Demo Personas Tab
+  // ════════════════════════════════════════════════════════════════
+  // DEMO PERSONAS TAB
+  // ════════════════════════════════════════════════════════════════
   Widget _buildDemoPersonasTab() {
     return Column(
-      key: const ValueKey('demo_tab'),
+      key: const ValueKey('demo_personas'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          tr('login.evaluator_title'),
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: Color(0xFF0F172A)),
+        const Text(
+          'Select Evaluator Persona',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _slate900),
         ),
-        const SizedBox(height: 4),
-        Text(
-          tr('login.evaluator_sub'),
-          style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
 
         ..._beneficiaries.map((b) {
           final isSelected = _selectedBeneficiary?.pseudonymousBeneficiaryId == b.pseudonymousBeneficiaryId;
           return Container(
-            margin: const EdgeInsets.only(bottom: 6),
+            margin: const EdgeInsets.only(bottom: 8),
             child: InkWell(
               onTap: () => setState(() => _selectedBeneficiary = b),
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFFEFF6FF) : Colors.white,
+                  color: isSelected ? _slate100 : Colors.white,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isSelected ? AppConstants.accentBlue : AppConstants.cardBorder,
-                    width: isSelected ? 1.6 : 1.0,
+                    color: isSelected ? _govNavy : _slate200,
+                    width: isSelected ? 1.5 : 1.0,
                   ),
                 ),
                 child: Row(
                   children: [
                     CircleAvatar(
                       radius: 14,
-                      backgroundColor: isSelected ? AppConstants.accentBlue : const Color(0xFFE2E8F0),
+                      backgroundColor: isSelected ? _govNavy : _slate200,
                       child: Text(
                         b.nameForDemo.substring(0, 1),
-                        style: TextStyle(color: isSelected ? Colors.white : AppConstants.primaryNavy, fontSize: 11, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: isSelected ? Colors.white : _govNavy, fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -1150,19 +857,19 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                         children: [
                           Text(
                             '${b.nameForDemo} (${b.pseudonymousBeneficiaryId})',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
+                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _slate900),
                           ),
                           Text(
                             b.registeredFpsName ?? '',
-                            style: const TextStyle(fontSize: 10.5, color: AppConstants.textSecondary),
+                            style: const TextStyle(fontSize: 11, color: _slate500),
                           ),
                         ],
                       ),
                     ),
                     Icon(
                       isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                      size: 16,
-                      color: isSelected ? AppConstants.accentBlue : const Color(0xFFCBD5E1),
+                      size: 18,
+                      color: isSelected ? _govNavy : _slate400,
                     ),
                   ],
                 ),
@@ -1171,18 +878,58 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           );
         }),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
 
-        ElevatedButton.icon(
+        ElevatedButton(
           onPressed: _isAuthenticating ? null : _proceedToBeneficiaryHome,
-          icon: const Icon(Icons.login_rounded, size: 16),
-          label: Text(_isAuthenticating ? tr('login.loading_profile') : tr('login.launch_session')),
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppConstants.accentBlue,
+            backgroundColor: _govNavy,
             foregroundColor: Colors.white,
             minimumSize: const Size(double.infinity, 44),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            elevation: 0,
           ),
+          child: _isAuthenticating
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Launch Demo Session', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        ),
+      ],
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // FOOTER WITH SYSTEM DIAGNOSTICS
+  // ════════════════════════════════════════════════════════════════
+  Widget _buildFooter() {
+    return Column(
+      children: [
+        // System Diagnostics Button
+        OutlinedButton.icon(
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ConnectivityScreen(apiService: _apiService),
+              ),
+            );
+          },
+          icon: const Icon(Icons.monitor_heart_outlined, size: 15, color: _slate500),
+          label: Text(
+            tr('login.system_diagnostics'),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _slate500),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: _slate200),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Official Gov Disclaimer
+        const Text(
+          'Department of Food & Civil Supplies • Government of India',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11, color: _slate400),
         ),
       ],
     );
