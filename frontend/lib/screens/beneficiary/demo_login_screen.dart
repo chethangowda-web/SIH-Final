@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../core/localization.dart';
@@ -28,12 +29,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
   String? _generatedOtpForDemo;
   bool _isSendingOtp = false;
   bool _isVerifyingOtp = false;
+  int _otpCountdownSeconds = 300;
+  Timer? _countdownTimer;
 
   // Controllers for Department / Admin Login
   final TextEditingController _adminUsernameController = TextEditingController(text: 'admin_user');
   final TextEditingController _adminPasswordController = TextEditingController(text: 'admin_pass');
-  String _selectedRole = 'ADMIN';
   bool _isAdminLoggingIn = false;
+  bool _isPasswordObscured = true;
 
   final List<Beneficiary> _beneficiaries = [
     Beneficiary(
@@ -78,12 +81,31 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _citizenCardController.dispose();
     _citizenOtpController.dispose();
     _adminUsernameController.dispose();
     _adminPasswordController.dispose();
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _startOtpTimer() {
+    _countdownTimer?.cancel();
+    setState(() => _otpCountdownSeconds = 300);
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_otpCountdownSeconds > 0) {
+        setState(() => _otpCountdownSeconds--);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  String _formatTimer(int sec) {
+    final m = (sec ~/ 60).toString().padLeft(2, '0');
+    final s = (sec % 60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 
   // Action: Send OTP to Citizen
@@ -104,11 +126,19 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
         _generatedOtpForDemo = res['demo_otp_code'] as String? ?? '123456';
         _citizenOtpController.text = _generatedOtpForDemo!;
       });
+      _startOtpTimer();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('OTP sent successfully! Demo Code: $_generatedOtpForDemo'),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text('OTP sent successfully! Demo Code: $_generatedOtpForDemo (auto-filled)')),
+            ],
+          ),
           backgroundColor: Colors.green.shade700,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (e) {
@@ -134,7 +164,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
 
     setState(() => _isVerifyingOtp = true);
     try {
-      final res = await _apiService.verifyCitizenOtp(cardId, otp);
+      await _apiService.verifyCitizenOtp(cardId, otp);
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -225,15 +255,16 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 580),
+                constraints: const BoxConstraints(maxWidth: 560),
                 child: Card(
-                  elevation: 4,
+                  elevation: 6,
+                  shadowColor: Colors.black12,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                     side: const BorderSide(color: Color(0xFFE2E8F0)),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(24.0),
+                    padding: const EdgeInsets.all(28.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       mainAxisSize: MainAxisSize.min,
@@ -243,7 +274,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: AppConstants.primaryNavy.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
@@ -256,7 +287,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
                               children: [
                                 Text(
                                   'PDS DemandSync',
-                                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy),
+                                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy, letterSpacing: -0.3),
                                 ),
                                 Text(
                                   'Department of Food & Civil Supplies',
@@ -267,27 +298,64 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
                           ],
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 22),
 
-                        // Tab Bar: Citizen OTP / Official Login / Demo Personas
+                        // Enhanced Segmented Tab Control (UX optimized)
                         Container(
+                          padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
                             color: const Color(0xFFE2E8F0),
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: TabBar(
                             controller: _tabController,
+                            indicatorSize: TabBarIndicatorSize.tab,
+                            dividerColor: Colors.transparent,
                             indicator: BoxDecoration(
                               color: AppConstants.primaryNavy,
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(9),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+                              ],
                             ),
                             labelColor: Colors.white,
-                            unselectedLabelColor: AppConstants.textSecondary,
-                            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                            unselectedLabelColor: const Color(0xFF475569),
+                            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+                            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5),
                             tabs: const [
-                              Tab(icon: Icon(Icons.phone_android_rounded, size: 16), text: 'Citizen OTP'),
-                              Tab(icon: Icon(Icons.admin_panel_settings_rounded, size: 16), text: 'Department'),
-                              Tab(icon: Icon(Icons.group_rounded, size: 16), text: 'Demo Personas'),
+                              Tab(
+                                height: 38,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.phone_android_rounded, size: 15),
+                                    SizedBox(width: 6),
+                                    Text('Citizen OTP'),
+                                  ],
+                                ),
+                              ),
+                              Tab(
+                                height: 38,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.admin_panel_settings_rounded, size: 15),
+                                    SizedBox(width: 6),
+                                    Text('Department'),
+                                  ],
+                                ),
+                              ),
+                              Tab(
+                                height: 38,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.group_rounded, size: 15),
+                                    SizedBox(width: 6),
+                                    Text('Demo Personas'),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -296,7 +364,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
 
                         // Tab Views
                         SizedBox(
-                          height: 330,
+                          height: 380,
                           child: TabBarView(
                             controller: _tabController,
                             children: [
@@ -312,7 +380,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
                           ),
                         ),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
 
                         // Bottom Diagnostics Link
                         Center(
@@ -327,7 +395,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
                             icon: const Icon(Icons.developer_board_outlined, size: 14, color: AppConstants.secondaryNavy),
                             label: const Text(
                               'System Diagnostics & Health Check',
-                              style: TextStyle(color: AppConstants.secondaryNavy, fontSize: 11, fontWeight: FontWeight.w600),
+                              style: TextStyle(color: AppConstants.secondaryNavy, fontSize: 11.5, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ),
@@ -348,23 +416,53 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Citizen Forward-Looking Intent Login',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppConstants.primaryNavy),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Citizen Forward-Looking Intent Login',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppConstants.primaryNavy),
+            ),
+            // Quick Language Selector
+            Row(
+              children: [
+                _buildLangBadge('EN', 'en'),
+                const SizedBox(width: 4),
+                _buildLangBadge('हिंदी', 'hi'),
+                const SizedBox(width: 4),
+                _buildLangBadge('ಕನ್ನಡ', 'kn'),
+              ],
+            ),
+          ],
         ),
         const SizedBox(height: 4),
         const Text(
           'Enter your Ration Card Number to receive a 6-digit verification code.',
-          style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+          style: TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
+
+        // Quick Auto-Fill Chips (UX feature)
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            const Text('Quick Select:', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.w600)),
+            _buildQuickCardChip('BEN-KA-0001', 'Swathi'),
+            _buildQuickCardChip('BEN-KA-0005', 'Sunita'),
+            _buildQuickCardChip('BEN-KA-0015', 'Ramesh'),
+          ],
+        ),
+        const SizedBox(height: 10),
 
         // Ration Card Input
         TextField(
           controller: _citizenCardController,
+          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            labelText: 'Ration Card ID (e.g. BEN-KA-0001)',
-            prefixIcon: const Icon(Icons.credit_card_rounded, size: 20),
+            labelText: 'Ration Card ID',
+            hintText: 'e.g. BEN-KA-0001',
+            prefixIcon: const Icon(Icons.credit_card_rounded, size: 18),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
@@ -377,26 +475,62 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
             icon: _isSendingOtp
                 ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.send_rounded, size: 16),
-            label: Text(_isSendingOtp ? 'Sending OTP...' : 'Get Verification OTP'),
+            label: Text(_isSendingOtp ? 'Sending Verification SMS...' : 'Get Verification OTP'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppConstants.accentBlue,
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 44),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
           )
         else ...[
-          TextField(
-            controller: _citizenOtpController,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: 'Enter 6-Digit OTP',
-              prefixIcon: const Icon(Icons.lock_clock_rounded, size: 20),
-              helperText: 'Demo Code: 123456 (auto-filled)',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          // OTP Entry Box with Countdown
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF86EFAC)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.sms_outlined, size: 15, color: Color(0xFF15803D)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'OTP sent to registered mobile',
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'Expires in: ${_formatTimer(_otpCountdownSeconds)}',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _citizenOtpController,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 4),
+                  decoration: InputDecoration(
+                    labelText: '6-Digit OTP',
+                    prefixIcon: const Icon(Icons.lock_clock_rounded, size: 18),
+                    helperText: 'Demo Code: 123456 (auto-filled)',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           ElevatedButton.icon(
             onPressed: _isVerifyingOtp ? null : _handleVerifyOtpAndLogin,
             icon: _isVerifyingOtp
@@ -404,13 +538,68 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
                 : const Icon(Icons.verified_user_rounded, size: 16),
             label: Text(_isVerifyingOtp ? 'Verifying...' : 'Verify OTP & Enter Portal'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade700,
+              backgroundColor: const Color(0xFF15803D),
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 44),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildQuickCardChip(String cardId, String name) {
+    final isSelected = _citizenCardController.text == cardId;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _citizenCardController.text = cardId;
+          _otpSent = false;
+        });
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: isSelected ? AppConstants.primaryNavy : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? AppConstants.primaryNavy : const Color(0xFFCBD5E1)),
+        ),
+        child: Text(
+          '$cardId ($name)',
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            color: isSelected ? Colors.white : AppConstants.primaryNavy,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLangBadge(String label, String code) {
+    final currentLang = LanguageController.instance.currentLanguage.code;
+    final isSelected = currentLang == code;
+    return InkWell(
+      onTap: () => LanguageController.instance.setLanguage(AppLanguage.fromCode(code)),
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: isSelected ? AppConstants.primaryNavy : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: isSelected ? AppConstants.primaryNavy : const Color(0xFFCBD5E1)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: isSelected ? Colors.white : AppConstants.textSecondary,
+          ),
+        ),
+      ),
     );
   }
 
@@ -421,34 +610,53 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
       children: [
         const Text(
           'Civil Supplies Official Portal',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppConstants.primaryNavy),
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppConstants.primaryNavy),
         ),
         const SizedBox(height: 4),
         const Text(
           'Restricted access for District Supply Officers (DSO) and Administrators.',
-          style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+          style: TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
-        TextField(
-          controller: _adminUsernameController,
-          decoration: InputDecoration(
-            labelText: 'Username (e.g. admin_user / dso_user)',
-            prefixIcon: const Icon(Icons.person_rounded, size: 20),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          ),
+        // Quick Role Preset Selector (UX feature)
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            const Text('Role Presets:', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.w600)),
+            _buildRolePresetChip('DSO Admin', 'admin_user', 'admin_pass'),
+            _buildRolePresetChip('Field Officer', 'dso_user', 'dso_pass'),
+            _buildRolePresetChip('Auditor', 'auditor_user', 'auditor_pass'),
+          ],
         ),
         const SizedBox(height: 10),
 
         TextField(
-          controller: _adminPasswordController,
-          obscureText: true,
+          controller: _adminUsernameController,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            labelText: 'Password (e.g. admin_pass)',
-            prefixIcon: const Icon(Icons.key_rounded, size: 20),
+            labelText: 'Official Username',
+            prefixIcon: const Icon(Icons.person_rounded, size: 18),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        TextField(
+          controller: _adminPasswordController,
+          obscureText: _isPasswordObscured,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            labelText: 'Password',
+            prefixIcon: const Icon(Icons.key_rounded, size: 18),
+            suffixIcon: IconButton(
+              icon: Icon(_isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+              onPressed: () => setState(() => _isPasswordObscured = !_isPasswordObscured),
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
         ),
         const SizedBox(height: 14),
@@ -458,14 +666,44 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
           icon: _isAdminLoggingIn
               ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Icon(Icons.dashboard_rounded, size: 16),
-          label: Text(_isAdminLoggingIn ? 'Authenticating...' : 'Sign In as Civil Supplies Officer'),
+          label: Text(_isAdminLoggingIn ? 'Authenticating Credentials...' : 'Sign In as Civil Supplies Officer'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppConstants.primaryNavy,
             foregroundColor: Colors.white,
             minimumSize: const Size(double.infinity, 44),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRolePresetChip(String label, String u, String p) {
+    final isSelected = _adminUsernameController.text == u;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _adminUsernameController.text = u;
+          _adminPasswordController.text = p;
+        });
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: isSelected ? AppConstants.primaryNavy : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? AppConstants.primaryNavy : const Color(0xFFCBD5E1)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            color: isSelected ? Colors.white : AppConstants.primaryNavy,
+          ),
+        ),
+      ),
     );
   }
 
@@ -476,12 +714,12 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
       children: [
         const Text(
           'Quick Evaluator Persona Login',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppConstants.primaryNavy),
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppConstants.primaryNavy),
         ),
         const SizedBox(height: 4),
         const Text(
           'Select a pre-configured synthetic profile for instant demo evaluation.',
-          style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+          style: TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
         ),
         const SizedBox(height: 10),
 
@@ -514,9 +752,18 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        '${b.nameForDemo} (${b.pseudonymousBeneficiaryId})',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${b.nameForDemo} (${b.pseudonymousBeneficiaryId})',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
+                          ),
+                          Text(
+                            b.registeredFpsName ?? '',
+                            style: const TextStyle(fontSize: 10.5, color: AppConstants.textSecondary),
+                          ),
+                        ],
                       ),
                     ),
                     Icon(
@@ -536,11 +783,12 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
         ElevatedButton.icon(
           onPressed: _isAuthenticating ? null : _proceedToBeneficiaryHome,
           icon: const Icon(Icons.login_rounded, size: 16),
-          label: Text(_isAuthenticating ? 'Loading...' : 'Launch Beneficiary Session'),
+          label: Text(_isAuthenticating ? 'Loading Profile...' : 'Launch Beneficiary Session'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppConstants.accentBlue,
             foregroundColor: Colors.white,
             minimumSize: const Size(double.infinity, 40),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ],
