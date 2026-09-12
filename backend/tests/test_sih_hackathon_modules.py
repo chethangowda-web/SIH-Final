@@ -58,15 +58,28 @@ def test_allocation_order_report_html():
     assert "PRE-DISPATCH GRAIN ALLOCATION ORDER" in response.text
 
 def test_fps_csv_import_validation():
-    """Test real CSV validation and ingestion endpoint."""
+    """Test CSV FPS bulk import validation endpoint."""
     csv_content = (
-        "fps_id,name,district,pincode,latitude,longitude,capacity_kg\n"
-        "FPS-TEST-001,Test Shop 1,Bengaluru Urban,560001,12.9716,77.5946,12000.0\n"
+        "fps_id,name,district,latitude,longitude,capacity_kg\n"
+        "FPS-KA-TEST-001,Test Seva Kendra,Bengaluru Urban,12.9716,77.5946,20000.0\n"
     )
-    file_bytes = io.BytesIO(csv_content.encode("utf-8"))
-    files = {"file": ("fps_test.csv", file_bytes, "text/csv")}
+    files = {"file": ("test_fps.csv", io.BytesIO(csv_content.encode("utf-8")), "text/csv")}
     response = client.post("/api/import/fps-csv", files=files)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
     assert data["successful_imports"] == 1
+
+def test_channel_simulate_api():
+    """Test Rural USSD / WhatsApp non-smartphone intent simulation endpoint."""
+    response = client.post("/api/intent/simulate-channel", json={
+        "channel": "WHATSAPP",
+        "beneficiary_card_id": "BEN-KA-0005",
+        "raw_message_text": "RICE 20KG FPS-KA-BLR-013",
+        "cycle_id": "2026-09"
+    })
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["channel"] == "WHATSAPP"
+    assert data["parsed_intent"]["declared_quantity_kg"] == 20.0

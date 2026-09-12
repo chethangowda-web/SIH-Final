@@ -28,7 +28,7 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadDefenseData();
   }
 
@@ -109,6 +109,7 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
                             _buildValueChainTab(),
                             _buildFormulationsTab(),
                             _buildFaqTab(),
+                            _buildGeographicTab(),
                           ],
                         ),
             ),
@@ -224,11 +225,15 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
           ),
           Tab(
             icon: Icon(Icons.functions_rounded, size: 18),
-            text: '3. Mathematical Formulations',
+            text: '3. Formulations',
           ),
           Tab(
             icon: Icon(Icons.shield_outlined, size: 18),
-            text: '4. Jury FAQ Defense Matrix',
+            text: '4. FAQ Matrix',
+          ),
+          Tab(
+            icon: Icon(Icons.map_rounded, size: 18),
+            text: '5. Geographic Scale & Evidence',
           ),
         ],
       ),
@@ -858,6 +863,145 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildGeographicTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.pin_drop_rounded, color: Color(0xFF60A5FA), size: 28),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'Evidence-Based Geographic Selection & Scale Defense (SIH 2026)',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Official evidence-backed geographic justification for PDS-DemandSync based on DFPD November 2024 Foodgrain Bulletin & Karnataka Economic Survey data.',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 1. National Scale Evidence Table
+          const Text(
+            '1. National Scale Evidence (DFPD Nov 2024 Bulletin)',
+            style: TextStyle(color: Color(0xFFF59E0B), fontSize: 14, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          Table(
+            border: TableBorder.all(color: const Color(0xFF334155)),
+            columnWidths: const {
+              0: FlexColumnWidth(1.5),
+              1: FlexColumnWidth(2.5),
+              2: FlexColumnWidth(1.2),
+              3: FlexColumnWidth(2.0),
+            },
+            children: [
+              TableRow(
+                decoration: const BoxDecoration(color: Color(0xFF1E293B)),
+                children: const [
+                  Padding(padding: EdgeInsets.all(8), child: Text('State', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  Padding(padding: EdgeInsets.all(8), child: Text('FPS Network Scale', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  Padding(padding: EdgeInsets.all(8), child: Text('Digital Infra', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  Padding(padding: EdgeInsets.all(8), child: Text('SIH Assessment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                ],
+              ),
+              _buildGeoTableRow('Uttar Pradesh', '79,216 FPSs (~3.63 Cr Ration Cards, 41.75 Lakh Portability Cards)', 'Strong', '★ BEST NATIONAL SCALE', Colors.greenAccent),
+              _buildGeoTableRow('Bihar', '50,951 FPSs (49,762 active FPS, 2.11 Cr Ration Cards)', 'Strong', 'Strongest Alternative', Colors.lightBlueAccent),
+              _buildGeoTableRow('Maharashtra', '52,642 FPSs', 'Strong', 'Excellent Scale', Colors.white70),
+              _buildGeoTableRow('Karnataka', '20,403 FPSs', 'Strong', '★ BEST PILOT STATE FIT', Colors.amberAccent),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // 2. Karnataka District Comparison Table
+          const Text(
+            '2. Karnataka District Comparison (Pilot Selection)',
+            style: TextStyle(color: Color(0xFFF59E0B), fontSize: 14, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          Table(
+            border: TableBorder.all(color: const Color(0xFF334155)),
+            columnWidths: const {
+              0: FlexColumnWidth(1.8),
+              1: FlexColumnWidth(2.0),
+              2: FlexColumnWidth(3.0),
+            },
+            children: [
+              TableRow(
+                decoration: const BoxDecoration(color: Color(0xFF1E293B)),
+                children: const [
+                  Padding(padding: EdgeInsets.all(8), child: Text('District', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  Padding(padding: EdgeInsets.all(8), child: Text('FPS Network Count', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  Padding(padding: EdgeInsets.all(8), child: Text('Pilot Recommendation', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                ],
+              ),
+              _buildGeoTableRow('Belagavi', '1,736 FPSs', '★ #1 BEST KARNATAKA PILOT (Largest Network)', Colors.amberAccent),
+              _buildGeoTableRow('Tumakuru', '1,086 FPSs', 'Very Good Alternative', Colors.white70),
+              _buildGeoTableRow('Mysuru', '1,022 FPSs', 'Very Good Alternative', Colors.white70),
+              _buildGeoTableRow('Kalaburagi', '983 FPSs', 'Strong Regional Node', Colors.white70),
+              _buildGeoTableRow('Hassan', '880 FPSs', 'Good Candidate', Colors.white70),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // 3. Supported Claims vs Claims to Avoid Matrix
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0284C7).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  '3. Official SIH Defense Guardrails & System Boundaries',
+                  style: TextStyle(color: Color(0xFF38BDF8), fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 10),
+                Text('✅ SUPPORTED CLAIMS: DemandSync operates as an AI-assisted pre-dispatch decision intelligence layer on top of existing ePoS/IMPDS digital infrastructure. Karnataka (Belagavi pilot) and Uttar Pradesh (national context) demonstrate operational relevance.', style: TextStyle(color: Colors.white, fontSize: 12)),
+                SizedBox(height: 8),
+                Text('🚫 CLAIMS TO AVOID: Do not claim DemandSync replaces ONORC, ePoS, or Anna Chakra. Do not claim real live government API integration for a student prototype.', style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TableRow _buildGeoTableRow(String col1, String col2, String col3, String col4, Color accent) {
+    return TableRow(
+      children: [
+        Padding(padding: const EdgeInsets.all(8), child: Text(col1, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))),
+        Padding(padding: const EdgeInsets.all(8), child: Text(col2, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12))),
+        Padding(padding: const EdgeInsets.all(8), child: Text(col3, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12))),
+        Padding(padding: const EdgeInsets.all(8), child: Text(col4, style: TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.bold))),
+      ],
     );
   }
 

@@ -178,6 +178,26 @@ def run_all_tests():
     else:
         log_test("GET /api/admin/dashboard", False, f"status={r_dash.status_code}")
 
+    # 16. Rural WhatsApp/USSD Feature-Phone Intent Simulator
+    total_count += 1
+    r_sim = client.post(
+        "/api/intent/simulate-channel",
+        json={
+            "channel": "WHATSAPP",
+            "beneficiary_card_id": "BEN-KA-0005",
+            "raw_message_text": "RICE 20KG FPS-KA-BLR-013",
+            "cycle_id": "2026-09"
+        },
+        headers={"Authorization": f"Bearer {citizen_token}"}
+    )
+    if r_sim.status_code in [200, 201] and r_sim.json().get("status") == "success":
+        passed_count += 1
+        log_test("POST /api/intent/simulate-channel", True, f"channel={r_sim.json().get('channel')}, qty={r_sim.json()['parsed_intent']['declared_quantity_kg']}kg")
+    else:
+        log_test("POST /api/intent/simulate-channel", False, f"status={r_sim.status_code}")
+
+
+
     print("=" * 80)
     print(f"SUMMARY: {passed_count}/{total_count} API Endpoint Tests PASSED ({passed_count/total_count*100:.1f}%)")
     print("=" * 80)

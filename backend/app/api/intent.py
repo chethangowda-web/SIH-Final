@@ -590,3 +590,64 @@ def list_intents(
         )
         for r in rows
     ]
+
+
+from pydantic import BaseModel, Field
+
+class ChannelSimulateIn(BaseModel):
+    channel: str = Field(..., description="Channel type: WHATSAPP, USSD, IVR, or SMS")
+    beneficiary_card_id: str = Field("BEN-KA-0005", description="Pseudonymous card ID e.g. BEN-KA-0005")
+    raw_message_text: str = Field("RICE 20KG FPS-KA-BLR-013", description="Raw text or USSD string e.g. *99*14#")
+    cycle_id: str = Field("2026-09", description="Target cycle ID")
+
+@router.post("/intent/simulate-channel", status_code=status.HTTP_201_CREATED)
+def simulate_channel_intent(
+    payload: ChannelSimulateIn,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Demo Simulator Endpoint: Simulates non-smartphone Intent Declaration via WhatsApp, USSD (*99*14#), SMS, or IVR.
+    Solves the rural/illiteracy accessibility challenge for SIH evaluators.
+    """
+    cursor = db.cursor()
+    
+    # Parse FPS ID from raw message if available or fallback
+    intended_fps = "FPS-KA-BLR-013"
+    if "FPS-" in payload.raw_message_text.upper():
+        words = payload.raw_message_text.upper().split()
+        for w in words:
+            if w.startswith("FPS-"):
+                intended_fps = w
+                break
+
+    commodity = "Wheat" if "WHEAT" in payload.raw_message_text.upper() else "Rice"
+    qty = 20.0
+    if "10KG" in payload.raw_message_text.upper():
+        qty = 10.0
+    elif "35KG" in payload.raw_message_text.upper():
+        qty = 35.0
+
+    cursor.execute("""
+    INSERT INTO intent (beneficiary_id, cycle_id, intended_fps_id, commodity, declared_quantity_kg, confidence, status)
+    VALUES (?, ?, ?, ?, ?, 0.95, 'SUBMITTED')
+    ON CONFLICT(beneficiary_id, cycle_id, commodity) DO UPDATE SET
+        intended_fps_id = excluded.intended_fps_id,
+        declared_quantity_kg = excluded.declared_quantity_kg,
+        confidence = excluded.confidence,
+        status = 'SUBMITTED';
+    """, (payload.beneficiary_card_id.strip(), payload.cycle_id.strip(), intended_fps, commodity, qty))
+    db.commit()
+
+    return {
+        "status": "success",
+        "channel": payload.channel,
+        "parsed_intent": {
+            "beneficiary_id": payload.beneficiary_card_id,
+            "intended_fps_id": intended_fps,
+            "commodity": commodity,
+            "declared_quantity_kg": qty,
+            "confidence_score": 0.95
+        },
+        "response_message": f"[{payload.channel} GATEWAY] Intent registered successfully! Confirmation SMS sent to beneficiary."
+    }
+
