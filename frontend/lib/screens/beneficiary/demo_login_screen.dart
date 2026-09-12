@@ -111,7 +111,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     final cardId = _citizenCardController.text.trim();
     if (cardId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid Ration Card Number.')),
+        SnackBar(content: Text(tr('login.enter_valid_card'))),
       );
       return;
     }
@@ -132,7 +132,11 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             children: [
               const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
               const SizedBox(width: 8),
-              Expanded(child: Text('OTP sent successfully! Demo Code: $_generatedOtpForDemo (auto-filled)')),
+              Expanded(
+                child: Text(
+                  tr('login.otp_sent_success', params: {'code': _generatedOtpForDemo!}),
+                ),
+              ),
             ],
           ),
           backgroundColor: Colors.green.shade700,
@@ -142,7 +146,10 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send OTP: $e'), backgroundColor: Colors.red.shade700),
+        SnackBar(
+          content: Text(tr('login.otp_send_failed', params: {'error': e.toString()})),
+          backgroundColor: Colors.red.shade700,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSendingOtp = false);
@@ -155,7 +162,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     final otp = _citizenOtpController.text.trim();
     if (otp.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter the 6-digit OTP.')),
+        SnackBar(content: Text(tr('login.enter_otp_hint'))),
       );
       return;
     }
@@ -175,7 +182,10 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('OTP Verification Failed: $e'), backgroundColor: Colors.red.shade700),
+        SnackBar(
+          content: Text(tr('login.otp_verify_failed', params: {'error': e.toString()})),
+          backgroundColor: Colors.red.shade700,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isVerifyingOtp = false);
@@ -188,7 +198,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     final password = _adminPasswordController.text.trim();
     if (username.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter username and password.')),
+        SnackBar(content: Text(tr('login.enter_creds_hint'))),
       );
       return;
     }
@@ -205,7 +215,10 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Department Login Failed: $e'), backgroundColor: Colors.red.shade700),
+        SnackBar(
+          content: Text(tr('login.dept_login_failed', params: {'error': e.toString()})),
+          backgroundColor: Colors.red.shade700,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isAdminLoggingIn = false);
@@ -233,7 +246,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Beneficiary login failed: $e'),
+          content: Text(tr('login.dept_login_failed', params: {'error': e.toString()})),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -280,16 +293,16 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                               child: const Icon(Icons.shield_rounded, color: AppConstants.primaryNavy, size: 28),
                             ),
                             const SizedBox(width: 12),
-                            const Column(
+                            Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'PDS DemandSync',
-                                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy, letterSpacing: -0.3),
+                                  tr('app.name'),
+                                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy, letterSpacing: -0.3),
                                 ),
                                 Text(
-                                  'Department of Food & Civil Supplies',
-                                  style: TextStyle(fontSize: 12, color: AppConstants.textSecondary, fontWeight: FontWeight.w600),
+                                  tr('login.dept_title'),
+                                  style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary, fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -308,11 +321,11 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                           ),
                           child: Row(
                             children: [
-                              _buildSegmentTab(0, Icons.phone_android_rounded, 'Citizen OTP'),
+                              _buildSegmentTab(0, Icons.phone_android_rounded, tr('login.tab_citizen_otp')),
                               const SizedBox(width: 4),
-                              _buildSegmentTab(1, Icons.admin_panel_settings_rounded, 'Department'),
+                              _buildSegmentTab(1, Icons.admin_panel_settings_rounded, tr('login.tab_department')),
                               const SizedBox(width: 4),
-                              _buildSegmentTab(2, Icons.group_rounded, 'Demo Personas'),
+                              _buildSegmentTab(2, Icons.group_rounded, tr('login.tab_demo_personas')),
                             ],
                           ),
                         ),
@@ -342,9 +355,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                               );
                             },
                             icon: const Icon(Icons.developer_board_outlined, size: 14, color: AppConstants.secondaryNavy),
-                            label: const Text(
-                              'System Diagnostics & Health Check',
-                              style: TextStyle(color: AppConstants.secondaryNavy, fontSize: 11.5, fontWeight: FontWeight.w600),
+                            label: Text(
+                              tr('login.system_diagnostics'),
+                              style: const TextStyle(color: AppConstants.secondaryNavy, fontSize: 11.5, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ),
@@ -385,12 +398,16 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                 color: isSelected ? Colors.white : const Color(0xFF475569),
               ),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected ? Colors.white : const Color(0xFF475569),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? Colors.white : const Color(0xFF475569),
+                  ),
                 ),
               ),
             ],
@@ -409,10 +426,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Citizen Forward-Looking Intent Login',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppConstants.primaryNavy),
+            Expanded(
+              child: Text(
+                tr('login.citizen_intent_title'),
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppConstants.primaryNavy),
+              ),
             ),
+            const SizedBox(width: 8),
             // Quick Language Selector
             Row(
               children: [
@@ -426,9 +446,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ],
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Enter your Ration Card Number to receive a 6-digit verification code.',
-          style: TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
+        Text(
+          tr('login.citizen_intent_sub'),
+          style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
         ),
         const SizedBox(height: 12),
 
@@ -437,7 +457,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           spacing: 6,
           runSpacing: 4,
           children: [
-            const Text('Quick Select:', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.w600)),
+            Text(tr('login.quick_select'), style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.w600)),
             _buildQuickCardChip('BEN-KA-0001', 'Swathi'),
             _buildQuickCardChip('BEN-KA-0005', 'Sunita'),
             _buildQuickCardChip('BEN-KA-0015', 'Ramesh'),
@@ -450,8 +470,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           controller: _citizenCardController,
           style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            labelText: 'Ration Card ID',
-            hintText: 'e.g. BEN-KA-0001',
+            labelText: tr('login.ration_card_id'),
+            hintText: tr('login.ration_card_hint'),
             prefixIcon: const Icon(Icons.credit_card_rounded, size: 18),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -465,7 +485,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             icon: _isSendingOtp
                 ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.send_rounded, size: 16),
-            label: Text(_isSendingOtp ? 'Sending Verification SMS...' : 'Get Verification OTP'),
+            label: Text(_isSendingOtp ? tr('login.sending_otp') : tr('login.get_otp_btn')),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppConstants.accentBlue,
               foregroundColor: Colors.white,
@@ -493,13 +513,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                         const Icon(Icons.sms_outlined, size: 15, color: Color(0xFF15803D)),
                         const SizedBox(width: 6),
                         Text(
-                          'OTP sent to registered mobile',
+                          tr('login.otp_sent_to_mobile'),
                           style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
                         ),
                       ],
                     ),
                     Text(
-                      'Expires in: ${_formatTimer(_otpCountdownSeconds)}',
+                      '${tr('login.expires_in')} ${_formatTimer(_otpCountdownSeconds)}',
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
                     ),
                   ],
@@ -510,9 +530,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   keyboardType: TextInputType.number,
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 4),
                   decoration: InputDecoration(
-                    labelText: '6-Digit OTP',
+                    labelText: tr('login.otp_label'),
                     prefixIcon: const Icon(Icons.lock_clock_rounded, size: 18),
-                    helperText: 'Demo Code: 123456 (auto-filled)',
+                    helperText: tr('login.demo_otp_hint'),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
@@ -526,7 +546,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             icon: _isVerifyingOtp
                 ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.verified_user_rounded, size: 16),
-            label: Text(_isVerifyingOtp ? 'Verifying...' : 'Verify OTP & Enter Portal'),
+            label: Text(_isVerifyingOtp ? tr('login.verifying') : tr('login.verify_otp_btn')),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF15803D),
               foregroundColor: Colors.white,
@@ -599,14 +619,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       key: const ValueKey('department_tab'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Civil Supplies Official Portal',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppConstants.primaryNavy),
+        Text(
+          tr('login.dept_portal_title'),
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppConstants.primaryNavy),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Restricted access for District Supply Officers (DSO) and Administrators.',
-          style: TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
+        Text(
+          tr('login.dept_portal_sub'),
+          style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
         ),
         const SizedBox(height: 10),
 
@@ -615,7 +635,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           spacing: 6,
           runSpacing: 4,
           children: [
-            const Text('Role Presets:', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.w600)),
+            Text(tr('login.role_presets'), style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.w600)),
             _buildRolePresetChip('DSO Admin', 'admin_user', 'admin_pass'),
             _buildRolePresetChip('Field Officer', 'dso_user', 'dso_pass'),
             _buildRolePresetChip('Auditor', 'auditor_user', 'auditor_pass'),
@@ -627,7 +647,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           controller: _adminUsernameController,
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            labelText: 'Official Username',
+            labelText: tr('login.username_label'),
             prefixIcon: const Icon(Icons.person_rounded, size: 18),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -640,7 +660,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           obscureText: _isPasswordObscured,
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            labelText: 'Password',
+            labelText: tr('login.password_label'),
             prefixIcon: const Icon(Icons.key_rounded, size: 18),
             suffixIcon: IconButton(
               icon: Icon(_isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
@@ -657,7 +677,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           icon: _isAdminLoggingIn
               ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Icon(Icons.dashboard_rounded, size: 16),
-          label: Text(_isAdminLoggingIn ? 'Authenticating Credentials...' : 'Sign In as Civil Supplies Officer'),
+          label: Text(_isAdminLoggingIn ? tr('login.dept_authenticating') : tr('login.dept_signin_btn')),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppConstants.primaryNavy,
             foregroundColor: Colors.white,
@@ -704,14 +724,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       key: const ValueKey('demo_tab'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Quick Evaluator Persona Login',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppConstants.primaryNavy),
+        Text(
+          tr('login.evaluator_title'),
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppConstants.primaryNavy),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Select a pre-configured synthetic profile for instant demo evaluation.',
-          style: TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
+        Text(
+          tr('login.evaluator_sub'),
+          style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
         ),
         const SizedBox(height: 10),
 
@@ -775,7 +795,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         ElevatedButton.icon(
           onPressed: _isAuthenticating ? null : _proceedToBeneficiaryHome,
           icon: const Icon(Icons.login_rounded, size: 16),
-          label: Text(_isAuthenticating ? 'Loading Profile...' : 'Launch Beneficiary Session'),
+          label: Text(_isAuthenticating ? tr('login.loading_profile') : tr('login.launch_session')),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppConstants.accentBlue,
             foregroundColor: Colors.white,
