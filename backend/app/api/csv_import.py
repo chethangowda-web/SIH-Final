@@ -3,26 +3,27 @@
 import io
 import csv
 import sqlite3
-from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Request
 from app.core.database import get_db
 
 router = APIRouter(prefix="/import", tags=["Real Data Ingestion & Validation"])
 
+class CsvImportPayload(BaseModel):
+    csv_data: str = Field(..., description="Raw CSV string content")
+    file_name: Optional[str] = "upload.csv"
+
 @router.post("/fps-csv")
 async def import_fps_csv(
-    file: UploadFile = File(...),
+    payload: CsvImportPayload,
     db: sqlite3.Connection = Depends(get_db)
 ):
     """
     Validates and ingests real-world Fair Price Shop (FPS) Master CSV datasets.
     Required columns: fps_id, name, district, pincode, latitude, longitude, capacity_kg
     """
-    if not file.filename.endswith(('.csv', '.txt')):
-        raise HTTPException(status_code=400, detail="Only CSV files are supported.")
-
-    content = await file.read()
-    decoded = content.decode('utf-8')
+    decoded = payload.csv_data
     reader = csv.DictReader(io.StringIO(decoded))
 
     required_fields = {"fps_id", "name", "district", "latitude", "longitude", "capacity_kg"}
@@ -66,7 +67,7 @@ async def import_fps_csv(
         db.commit()
 
     return {
-        "file_name": file.filename,
+        "file_name": payload.file_name,
         "status": "success" if not error_rows else "partial_success",
         "total_rows_processed": len(valid_rows) + len(error_rows),
         "successful_imports": len(valid_rows),
@@ -76,18 +77,14 @@ async def import_fps_csv(
 
 @router.post("/beneficiaries-csv")
 async def import_beneficiaries_csv(
-    file: UploadFile = File(...),
+    payload: CsvImportPayload,
     db: sqlite3.Connection = Depends(get_db)
 ):
     """
     Validates and ingests real Beneficiary & Entitlement CSV datasets.
     Required columns: card_id, scheme_type, members_count, home_fps_id, monthly_rice_kg, monthly_wheat_kg
     """
-    if not file.filename.endswith(('.csv', '.txt')):
-        raise HTTPException(status_code=400, detail="Only CSV files are supported.")
-
-    content = await file.read()
-    decoded = content.decode('utf-8')
+    decoded = payload.csv_data
     reader = csv.DictReader(io.StringIO(decoded))
 
     required_fields = {"card_id", "scheme_type", "members_count", "home_fps_id"}
@@ -122,10 +119,11 @@ async def import_beneficiaries_csv(
         db.commit()
 
     return {
-        "file_name": file.filename,
+        "file_name": payload.file_name,
         "status": "success" if not error_rows else "partial_success",
         "total_rows_processed": len(valid_rows) + len(error_rows),
         "successful_imports": len(valid_rows),
         "failed_imports": len(error_rows),
         "errors": error_rows[:10]
     }
+

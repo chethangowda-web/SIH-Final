@@ -2,7 +2,6 @@ import sqlite3
 import random
 import time
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -105,11 +104,11 @@ def login(
 
 @router.post("/auth/token", response_model=UserLoginOut, include_in_schema=False)
 def login_oauth2_form(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    payload: LoginPayload,
     db: sqlite3.Connection = Depends(get_db)
 ):
-    """OAuth2 Password Request Form endpoint for Swagger UI Authorization."""
-    return login(LoginPayload(username=form_data.username, password=form_data.password), db=db)
+    """OAuth2 JSON token endpoint for authentication."""
+    return login(payload, db=db)
 
 
 @router.post("/auth/citizen/send-otp")
