@@ -284,6 +284,12 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallMobile = screenWidth < 380;
+    final isTabletOrDesktop = screenWidth >= 600;
+    final horizontalPad = isSmallMobile ? 12.0 : (isTabletOrDesktop ? 28.0 : 16.0);
+    final verticalPad = isSmallMobile ? 16.0 : 24.0;
+
     return ListenableBuilder(
       listenable: LanguageController.instance,
       builder: (context, child) {
@@ -292,25 +298,25 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           body: SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+                padding: EdgeInsets.symmetric(horizontal: horizontalPad, vertical: verticalPad),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
+                  constraints: const BoxConstraints(maxWidth: 460),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Top Clean Header
-                      _buildHeader(),
+                      // Top Responsive Brand Header
+                      _buildHeader(isSmallMobile),
 
-                      const SizedBox(height: 24),
+                      SizedBox(height: isSmallMobile ? 16 : 22),
 
                       // Main Login Card
-                      _buildCard(),
+                      _buildCard(isSmallMobile),
 
-                      const SizedBox(height: 20),
+                      SizedBox(height: isSmallMobile ? 16 : 20),
 
                       // Footer with Diagnostics & NIC Branding
-                      _buildFooter(),
+                      _buildFooter(isSmallMobile),
                     ],
                   ),
                 ),
@@ -323,68 +329,73 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   }
 
   // ════════════════════════════════════════════════════════════════
-  // TOP BRAND HEADER
+  // TOP BRAND HEADER (Adaptive Mobile Layout)
   // ════════════════════════════════════════════════════════════════
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isSmall) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Image.asset(
-              'assets/images/emblem_gov.png',
-              height: 40,
-              errorBuilder: (_, __, ___) => Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: _govNavy,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.shield_rounded, color: Colors.white, size: 22),
-              ),
+        // Emblem + Brand
+        Image.asset(
+          'assets/images/emblem_gov.png',
+          height: isSmall ? 32 : 38,
+          errorBuilder: (_, __, ___) => Container(
+            width: isSmall ? 32 : 38,
+            height: isSmall ? 32 : 38,
+            decoration: BoxDecoration(
+              color: _govNavy,
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  tr('app.name'),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: _govNavy,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                Text(
-                  tr('login.dept_title'),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: _slate500,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
+            child: Icon(Icons.shield_rounded, color: Colors.white, size: isSmall ? 18 : 22),
+          ),
         ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                tr('app.name'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: isSmall ? 16 : 18,
+                  fontWeight: FontWeight.w800,
+                  color: _govNavy,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              Text(
+                tr('login.dept_title'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: isSmall ? 10 : 11,
+                  color: _slate500,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
 
-        // Language Switcher
+        // Language Switcher (Compact Chips)
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _buildLangChip('EN', 'en'),
-            const SizedBox(width: 4),
-            _buildLangChip('हिंदी', 'hi'),
-            const SizedBox(width: 4),
-            _buildLangChip('ಕನ್ನಡ', 'kn'),
+            _buildLangChip('EN', 'en', isSmall),
+            const SizedBox(width: 3),
+            _buildLangChip('हिंदी', 'hi', isSmall),
+            const SizedBox(width: 3),
+            _buildLangChip('ಕನ್ನಡ', 'kn', isSmall),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildLangChip(String label, String code) {
+  Widget _buildLangChip(String label, String code, bool isSmall) {
     final currentLang = LanguageController.instance.currentLanguage.code;
     final isSelected = currentLang == code;
     return InkWell(
@@ -392,7 +403,10 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       borderRadius: BorderRadius.circular(6),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        padding: EdgeInsets.symmetric(
+          horizontal: isSmall ? 6 : 8,
+          vertical: isSmall ? 3 : 4,
+        ),
         decoration: BoxDecoration(
           color: isSelected ? _govNavy : Colors.white,
           borderRadius: BorderRadius.circular(6),
@@ -401,7 +415,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: isSmall ? 10 : 11,
             fontWeight: FontWeight.w600,
             color: isSelected ? Colors.white : _slate500,
           ),
@@ -411,57 +425,58 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   }
 
   // ════════════════════════════════════════════════════════════════
-  // MAIN LOGIN CARD
+  // MAIN LOGIN CARD (Adaptive Mobile Layout)
   // ════════════════════════════════════════════════════════════════
-  Widget _buildCard() {
+  Widget _buildCard(bool isSmall) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(isSmall ? 14 : 16),
         border: Border.all(color: _slate200),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0A000000),
-            blurRadius: 20,
-            offset: Offset(0, 6),
+            blurRadius: 18,
+            offset: Offset(0, 4),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isSmall ? 16 : 22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Card Title & Subtitle
+          // Card Title & Subtitle + Tricolor
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Welcome Back',
                       style: TextStyle(
-                        fontSize: 22,
+                        fontSize: isSmall ? 19 : 22,
                         fontWeight: FontWeight.w800,
                         color: _slate900,
                         letterSpacing: -0.4,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Text(
                       tr('login.welcome_sub'),
-                      style: const TextStyle(
-                        fontSize: 12.5,
+                      style: TextStyle(
+                        fontSize: isSmall ? 11.5 : 12.5,
                         color: _slate500,
                       ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               // Indian Tricolor Pill Indicator
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(width: 8, height: 4, decoration: BoxDecoration(color: _saffron, borderRadius: BorderRadius.circular(2))),
                   const SizedBox(width: 2),
@@ -473,52 +488,52 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             ],
           ),
 
-          const SizedBox(height: 20),
+          SizedBox(height: isSmall ? 16 : 20),
 
-          // 3-Tab Segment Selector
+          // 3-Tab Segment Selector (Adaptive)
           Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(3.5),
             decoration: BoxDecoration(
               color: _slate100,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               children: [
-                _buildSegmentTab(0, Icons.phone_android_rounded, tr('login.tab_citizen_otp'), _govGreen),
-                _buildSegmentTab(1, Icons.badge_outlined, tr('login.tab_department'), _govNavy),
-                _buildSegmentTab(2, Icons.group_outlined, tr('login.tab_demo_personas'), _govGreen),
+                _buildSegmentTab(0, Icons.phone_android_rounded, 'Citizen OTP', _govGreen, isSmall),
+                _buildSegmentTab(1, Icons.badge_outlined, 'Department', _govNavy, isSmall),
+                _buildSegmentTab(2, Icons.group_outlined, 'Demo Personas', _govGreen, isSmall),
               ],
             ),
           ),
 
-          const SizedBox(height: 22),
+          SizedBox(height: isSmall ? 16 : 20),
 
           // Tab Content
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 180),
             child: _selectedTabIndex == 0
-                ? _buildCitizenOtpTab()
+                ? _buildCitizenOtpTab(isSmall)
                 : (_selectedTabIndex == 1
-                    ? _buildDepartmentLoginTab()
-                    : _buildDemoPersonasTab()),
+                    ? _buildDepartmentLoginTab(isSmall)
+                    : _buildDemoPersonasTab(isSmall)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSegmentTab(int index, IconData icon, String label, Color activeColor) {
+  Widget _buildSegmentTab(int index, IconData icon, String label, Color activeColor, bool isSmall) {
     final isSelected = _selectedTabIndex == index;
     return Expanded(
       child: InkWell(
         onTap: () => setState(() => _selectedTabIndex = index),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(7),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: EdgeInsets.symmetric(vertical: isSmall ? 7 : 8),
           decoration: BoxDecoration(
             color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(7),
             boxShadow: isSelected
                 ? const [BoxShadow(color: Color(0x0D000000), blurRadius: 4, offset: Offset(0, 2))]
                 : null,
@@ -528,17 +543,17 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             children: [
               Icon(
                 icon,
-                size: 14,
+                size: isSmall ? 12 : 14,
                 color: isSelected ? activeColor : _slate500,
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               Flexible(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: isSmall ? 10 : 11.5,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                     color: isSelected ? activeColor : _slate500,
                   ),
@@ -552,16 +567,16 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   }
 
   // ════════════════════════════════════════════════════════════════
-  // CITIZEN OTP TAB
+  // CITIZEN OTP TAB (Mobile Responsive)
   // ════════════════════════════════════════════════════════════════
-  Widget _buildCitizenOtpTab() {
+  Widget _buildCitizenOtpTab(bool isSmall) {
     return Column(
       key: const ValueKey('citizen_otp'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Ration Card Number',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _slate900),
+          style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
         ),
         const SizedBox(height: 6),
 
@@ -570,29 +585,29 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           spacing: 6,
           runSpacing: 4,
           children: [
-            _buildQuickChip('BEN-KA-0001', 'Swathi'),
-            _buildQuickChip('BEN-KA-0005', 'Sunita'),
-            _buildQuickChip('BEN-KA-0015', 'Ramesh'),
+            _buildQuickChip('BEN-KA-0001', 'Swathi', isSmall),
+            _buildQuickChip('BEN-KA-0005', 'Sunita', isSmall),
+            _buildQuickChip('BEN-KA-0015', 'Ramesh', isSmall),
           ],
         ),
         const SizedBox(height: 10),
 
         TextField(
           controller: _citizenCardController,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             hintText: 'e.g. BEN-KA-0001',
-            prefixIcon: const Icon(Icons.credit_card_rounded, size: 18, color: _slate500),
+            prefixIcon: Icon(Icons.credit_card_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.5)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 10 : 12),
           ),
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
         if (!_otpSent)
           ElevatedButton(
@@ -606,12 +621,12 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             ),
             child: _isSendingOtp
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('Get OTP Code', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                : Text('Get OTP Code', style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
           )
         else ...[
-          // OTP Received Box
+          // OTP Received Box (Fully Adaptive to Screen Width)
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: EdgeInsets.all(isSmall ? 10 : 14),
             decoration: BoxDecoration(
               color: _govGreenBg,
               borderRadius: BorderRadius.circular(10),
@@ -623,49 +638,50 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.phone_android_rounded, size: 14, color: _govGreen),
-                        SizedBox(width: 4),
+                        Icon(Icons.phone_android_rounded, size: isSmall ? 13 : 14, color: _govGreen),
+                        const SizedBox(width: 4),
                         Text(
                           'OTP sent to mobile',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _govGreen),
+                          style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700, color: _govGreen),
                         ),
                       ],
                     ),
                     Text(
                       _formatTimer(_otpCountdownSeconds),
-                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _govGreen),
+                      style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w700, color: _govGreen),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
 
-                // 6 Input Digits
+                // 6 Input Digits (Expanded layout: Never overflows!)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: List.generate(6, (index) {
                     final otpText = _citizenOtpController.text.padRight(6, ' ');
                     final char = otpText[index].trim();
                     final hasVal = char.isNotEmpty;
-                    return Container(
-                      width: 44,
-                      height: 44,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: hasVal ? _govGreenLight : _slate200,
-                          width: hasVal ? 1.5 : 1.0,
+                    return Expanded(
+                      child: Container(
+                        margin: EdgeInsets.only(right: index < 5 ? (isSmall ? 4 : 6) : 0),
+                        height: isSmall ? 42 : 46,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: hasVal ? _govGreenLight : _slate200,
+                            width: hasVal ? 1.5 : 1.0,
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        char.isEmpty ? '•' : char,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: hasVal ? _slate900 : _slate400,
+                        child: Text(
+                          char.isEmpty ? '•' : char,
+                          style: TextStyle(
+                            fontSize: isSmall ? 15 : 17,
+                            fontWeight: FontWeight.w800,
+                            color: hasVal ? _slate900 : _slate400,
+                          ),
                         ),
                       ),
                     );
@@ -675,13 +691,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Demo Code: ${_generatedOtpForDemo ?? "123456"} (Auto-filled)',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _govGreen),
+                  style: TextStyle(fontSize: isSmall ? 10 : 11, fontWeight: FontWeight.w600, color: _govGreen),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
           ElevatedButton(
             onPressed: _isVerifyingOtp ? null : _handleVerifyOtpAndLogin,
@@ -694,12 +710,12 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             ),
             child: _isVerifyingOtp
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Row(
+                : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_circle_rounded, size: 16),
-                      SizedBox(width: 6),
-                      Text('Verify OTP & Login', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                      Icon(Icons.check_circle_rounded, size: isSmall ? 15 : 16),
+                      const SizedBox(width: 6),
+                      Text('Verify OTP & Login', style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
                     ],
                   ),
           ),
@@ -708,7 +724,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     );
   }
 
-  Widget _buildQuickChip(String cardId, String name) {
+  Widget _buildQuickChip(String cardId, String name, bool isSmall) {
     final isSelected = _citizenCardController.text == cardId;
     return InkWell(
       onTap: () {
@@ -719,7 +735,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       },
       borderRadius: BorderRadius.circular(6),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: EdgeInsets.symmetric(horizontal: isSmall ? 6 : 8, vertical: 3),
         decoration: BoxDecoration(
           color: isSelected ? _govNavy : _slate100,
           borderRadius: BorderRadius.circular(6),
@@ -727,7 +743,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         child: Text(
           '$cardId ($name)',
           style: TextStyle(
-            fontSize: 10.5,
+            fontSize: isSmall ? 9.5 : 10.5,
             fontWeight: FontWeight.w600,
             color: isSelected ? Colors.white : _slate700,
           ),
@@ -737,48 +753,48 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   }
 
   // ════════════════════════════════════════════════════════════════
-  // DEPARTMENT LOGIN TAB
+  // DEPARTMENT LOGIN TAB (Responsive)
   // ════════════════════════════════════════════════════════════════
-  Widget _buildDepartmentLoginTab() {
+  Widget _buildDepartmentLoginTab(bool isSmall) {
     return Column(
       key: const ValueKey('dept_login'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Official Username',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _slate900),
+          style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
         ),
         const SizedBox(height: 6),
         TextField(
           controller: _adminUsernameController,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             hintText: 'admin_user',
-            prefixIcon: const Icon(Icons.person_outline_rounded, size: 18, color: _slate500),
+            prefixIcon: Icon(Icons.person_outline_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govNavy, width: 1.5)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 10 : 12),
           ),
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: isSmall ? 10 : 14),
 
-        const Text(
+        Text(
           'Password',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _slate900),
+          style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
         ),
         const SizedBox(height: 6),
         TextField(
           controller: _adminPasswordController,
           obscureText: _isPasswordObscured,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             hintText: '••••••••',
-            prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18, color: _slate500),
+            prefixIcon: Icon(Icons.lock_outline_rounded, size: isSmall ? 16 : 18, color: _slate500),
             suffixIcon: IconButton(
-              icon: Icon(_isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: _slate500),
+              icon: Icon(_isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: isSmall ? 16 : 18, color: _slate500),
               onPressed: () => setState(() => _isPasswordObscured = !_isPasswordObscured),
             ),
             filled: true,
@@ -786,11 +802,11 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govNavy, width: 1.5)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 10 : 12),
           ),
         ),
 
-        const SizedBox(height: 16),
+        SizedBox(height: isSmall ? 12 : 16),
 
         ElevatedButton(
           onPressed: _isAdminLoggingIn ? null : _handleDepartmentLogin,
@@ -803,23 +819,23 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ),
           child: _isAdminLoggingIn
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Text('Sign In as Official', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              : Text('Sign In as Official', style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
         ),
       ],
     );
   }
 
   // ════════════════════════════════════════════════════════════════
-  // DEMO PERSONAS TAB
+  // DEMO PERSONAS TAB (Responsive)
   // ════════════════════════════════════════════════════════════════
-  Widget _buildDemoPersonasTab() {
+  Widget _buildDemoPersonasTab(bool isSmall) {
     return Column(
       key: const ValueKey('demo_personas'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Select Evaluator Persona',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _slate900),
+          style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
         ),
         const SizedBox(height: 8),
 
@@ -831,7 +847,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               onTap: () => setState(() => _selectedBeneficiary = b),
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(isSmall ? 8 : 10),
                 decoration: BoxDecoration(
                   color: isSelected ? _slate100 : Colors.white,
                   borderRadius: BorderRadius.circular(8),
@@ -843,32 +859,34 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                 child: Row(
                   children: [
                     CircleAvatar(
-                      radius: 14,
+                      radius: isSmall ? 12 : 14,
                       backgroundColor: isSelected ? _govNavy : _slate200,
                       child: Text(
                         b.nameForDemo.substring(0, 1),
-                        style: TextStyle(color: isSelected ? Colors.white : _govNavy, fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: isSelected ? Colors.white : _govNavy, fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.bold),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             '${b.nameForDemo} (${b.pseudonymousBeneficiaryId})',
-                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _slate900),
+                            style: TextStyle(fontSize: isSmall ? 11.5 : 12.5, fontWeight: FontWeight.w700, color: _slate900),
                           ),
                           Text(
                             b.registeredFpsName ?? '',
-                            style: const TextStyle(fontSize: 11, color: _slate500),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: isSmall ? 10 : 11, color: _slate500),
                           ),
                         ],
                       ),
                     ),
                     Icon(
                       isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                      size: 18,
+                      size: isSmall ? 16 : 18,
                       color: isSelected ? _govNavy : _slate400,
                     ),
                   ],
@@ -878,7 +896,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           );
         }),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
         ElevatedButton(
           onPressed: _isAuthenticating ? null : _proceedToBeneficiaryHome,
@@ -891,16 +909,16 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ),
           child: _isAuthenticating
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Text('Launch Demo Session', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              : Text('Launch Demo Session', style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
         ),
       ],
     );
   }
 
   // ════════════════════════════════════════════════════════════════
-  // FOOTER WITH SYSTEM DIAGNOSTICS
+  // FOOTER WITH SYSTEM DIAGNOSTICS (Responsive)
   // ════════════════════════════════════════════════════════════════
-  Widget _buildFooter() {
+  Widget _buildFooter(bool isSmall) {
     return Column(
       children: [
         // System Diagnostics Button
@@ -912,24 +930,24 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               ),
             );
           },
-          icon: const Icon(Icons.monitor_heart_outlined, size: 15, color: _slate500),
+          icon: Icon(Icons.monitor_heart_outlined, size: isSmall ? 14 : 15, color: _slate500),
           label: Text(
             tr('login.system_diagnostics'),
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _slate500),
+            style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w600, color: _slate500),
           ),
           style: OutlinedButton.styleFrom(
             side: const BorderSide(color: _slate200),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 16, vertical: isSmall ? 8 : 10),
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: isSmall ? 8 : 12),
 
         // Official Gov Disclaimer
-        const Text(
+        Text(
           'Department of Food & Civil Supplies • Government of India',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: _slate400),
+          style: TextStyle(fontSize: isSmall ? 10 : 11, color: _slate400),
         ),
       ],
     );
