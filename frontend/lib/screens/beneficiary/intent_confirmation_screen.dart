@@ -178,16 +178,20 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
           ),
         ],
       ),
-      child: Row(
-        children: steps.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final step = entry.value;
-          final stepNum = idx + 1;
-          final isCompleted = stepNum < activeStep;
-          final isCurrent = stepNum == activeStep;
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: steps.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final step = entry.value;
+            final stepNum = idx + 1;
+            final isCompleted = stepNum < activeStep;
+            final isCurrent = stepNum == activeStep;
 
-          return Expanded(
-            child: Row(
+            return Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   width: 22,
@@ -212,31 +216,26 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    step['title'] as String,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: isCurrent || isCompleted ? FontWeight.w800 : FontWeight.w500,
-                      color: isCurrent ? AppConstants.primaryNavy : (isCompleted ? AppConstants.successGreen : AppConstants.textSecondary),
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  step['title'] as String,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isCurrent || isCompleted ? FontWeight.w800 : FontWeight.w500,
+                    color: isCurrent ? AppConstants.primaryNavy : (isCompleted ? AppConstants.successGreen : AppConstants.textSecondary),
                   ),
                 ),
                 if (idx < steps.length - 1) ...[
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Container(
-                      height: 1.5,
-                      color: isCompleted ? AppConstants.successGreen : const Color(0xFFE2E8F0),
-                    ),
+                  Container(
+                    width: 16,
+                    height: 1.5,
+                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                    color: isCompleted ? AppConstants.successGreen : const Color(0xFFE2E8F0),
                   ),
-                  const SizedBox(width: 6),
                 ],
               ],
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }

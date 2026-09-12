@@ -115,68 +115,79 @@ class DeliveryTimeline extends StatelessWidget {
               ),
               const SizedBox(height: AppConstants.space12),
 
-              Row(
-                children: List.generate(_steps.length * 2 - 1, (index) {
-                  if (index.isOdd) {
-                    final stepIndex = index ~/ 2;
-                    final isPassed = stepIndex < currentIndex;
-                    return Expanded(
-                      child: Container(
-                        height: 2,
-                        color: isPassed ? AppConstants.successGreen : AppConstants.cardBorder,
-                      ),
-                    );
-                  }
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 320),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: List.generate(_steps.length * 2 - 1, (index) {
+                      if (index.isOdd) {
+                        final stepIndex = index ~/ 2;
+                        final isPassed = stepIndex < currentIndex;
+                        return Container(
+                          width: 24,
+                          height: 2,
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          color: isPassed ? AppConstants.successGreen : AppConstants.cardBorder,
+                        );
+                      }
 
-                  final stepIndex = index ~/ 2;
-                  final step = _steps[stepIndex];
-                  final isCompleted = stepIndex < currentIndex;
-                  final isCurrent = stepIndex == currentIndex;
+                      final stepIndex = index ~/ 2;
+                      final step = _steps[stepIndex];
+                      final isCompleted = stepIndex < currentIndex;
+                      final isCurrent = stepIndex == currentIndex;
 
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: isCompleted
-                              ? AppConstants.successGreen
-                              : (isCurrent
-                                  ? (isDispute ? Colors.orange.shade800 : AppConstants.primaryNavy)
-                                  : const Color(0xFFF1F5F9)),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isCompleted
-                                ? AppConstants.successGreen
-                                : (isCurrent ? (isDispute ? Colors.orange.shade800 : AppConstants.primaryNavy) : AppConstants.cardBorder),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Center(
-                          child: isCompleted
-                              ? const Icon(Icons.check, size: 14, color: Colors.white)
-                              : Icon(
-                                  step['icon'] as IconData,
-                                  size: 13,
-                                  color: isCurrent ? Colors.white : AppConstants.textSecondary,
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: isCompleted
+                                    ? AppConstants.successGreen
+                                    : (isCurrent
+                                        ? (isDispute ? Colors.orange.shade800 : AppConstants.primaryNavy)
+                                        : const Color(0xFFF1F5F9)),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isCompleted
+                                      ? AppConstants.successGreen
+                                      : (isCurrent ? (isDispute ? Colors.orange.shade800 : AppConstants.primaryNavy) : AppConstants.cardBorder),
+                                  width: 1.5,
                                 ),
+                              ),
+                              child: Center(
+                                child: isCompleted
+                                    ? const Icon(Icons.check, size: 14, color: Colors.white)
+                                    : Icon(
+                                        step['icon'] as IconData,
+                                        size: 13,
+                                        color: isCurrent ? Colors.white : AppConstants.textSecondary,
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              tr(step['labelKey'] as String),
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w500,
+                                color: isCurrent
+                                    ? AppConstants.primaryNavy
+                                    : (isCompleted ? AppConstants.textPrimary : AppConstants.textTertiary),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        tr(step['labelKey'] as String),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w500,
-                          color: isCurrent
-                              ? AppConstants.primaryNavy
-                              : (isCompleted ? AppConstants.textPrimary : AppConstants.textTertiary),
-                        ),
-                      ),
-                    ],
-                  );
-                }),
+                      );
+                    }),
+                  ),
+                ),
               ),
             ],
           ),

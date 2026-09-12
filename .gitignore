@@ -33,6 +33,7 @@ backend/.pytest_cache/
 .env.*
 
 # Flutter / Dart
+*.apk
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies

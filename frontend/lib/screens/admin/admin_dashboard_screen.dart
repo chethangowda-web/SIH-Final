@@ -1000,7 +1000,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         child: Material(
                           elevation: 16,
                           child: SizedBox(
-                            width: 520,
+                            width: MediaQuery.of(context).size.width > 600 ? 520.0 : MediaQuery.of(context).size.width * 0.92,
                             child: Stack(
                               children: [
                                 FpsDetailDrawer(

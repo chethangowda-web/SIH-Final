@@ -809,10 +809,14 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 6,
         children: [
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.language_rounded, size: 18, color: AppConstants.primaryNavy),
               const SizedBox(width: 8),
@@ -912,19 +916,23 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.grey.shade300),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildDayStepNode(21, 'Day 21', planningDay, isOpen),
-                _buildStepSeparator(planningDay > 21),
-                _buildDayStepNode(22, 'Day 22', planningDay, isOpen),
-                _buildStepSeparator(planningDay > 22),
-                _buildDayStepNode(23, 'Day 23', planningDay, isOpen),
-                _buildStepSeparator(planningDay > 23),
-                _buildDayStepNode(24, 'Day 24', planningDay, isOpen),
-                _buildStepSeparator(planningDay >= 25),
-                _buildDayStepNode(25, '🔒 Day 25', planningDay, isOpen, isLockDay: true),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildDayStepNode(21, 'Day 21', planningDay, isOpen),
+                  _buildStepSeparator(planningDay > 21),
+                  _buildDayStepNode(22, 'Day 22', planningDay, isOpen),
+                  _buildStepSeparator(planningDay > 22),
+                  _buildDayStepNode(23, 'Day 23', planningDay, isOpen),
+                  _buildStepSeparator(planningDay > 23),
+                  _buildDayStepNode(24, 'Day 24', planningDay, isOpen),
+                  _buildStepSeparator(planningDay >= 25),
+                  _buildDayStepNode(25, '🔒 Day 25', planningDay, isOpen, isLockDay: true),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -1109,9 +1117,12 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      b.nameForDemo,
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppConstants.textPrimary),
+                    Flexible(
+                      child: Text(
+                        b.nameForDemo,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppConstants.textPrimary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1214,16 +1225,18 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           const SizedBox(height: 14),
 
           // Stepper & Live Formula Row
-          Row(
-            children: [
-              // Interactive Stepper
-              Container(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 420;
+              final stepper = Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppConstants.cardBorder),
                 ),
                 child: Row(
+                  mainAxisSize: isNarrow ? MainAxisSize.max : MainAxisSize.min,
+                  mainAxisAlignment: isNarrow ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
                   children: [
                     IconButton(
                       key: const ValueKey('btn_decrement_members'),
@@ -1260,38 +1273,54 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 14),
+              );
 
-              // Live Calculation Pill
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFBBF7D0)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        tr('members.formula', params: {
-                          'count': '$_eligibleMembersCount',
-                          'max': maxEntitlement.toStringAsFixed(1),
-                        }),
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Combined Quota: ${(maxEntitlement * 0.8).toStringAsFixed(1)} kg Rice + ${(maxEntitlement * 0.2).toStringAsFixed(1)} kg Wheat',
-                        style: const TextStyle(fontSize: 10.5, color: Color(0xFF166534)),
-                      ),
-                    ],
-                  ),
+              final calcPill = Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFBBF7D0)),
                 ),
-              ),
-            ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tr('members.formula', params: {
+                        'count': '$_eligibleMembersCount',
+                        'max': maxEntitlement.toStringAsFixed(1),
+                      }),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Combined Quota: ${(maxEntitlement * 0.8).toStringAsFixed(1)} kg Rice + ${(maxEntitlement * 0.2).toStringAsFixed(1)} kg Wheat',
+                      style: const TextStyle(fontSize: 10.5, color: Color(0xFF166534)),
+                    ),
+                  ],
+                ),
+              );
+
+              if (isNarrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    stepper,
+                    const SizedBox(height: 10),
+                    calcPill,
+                  ],
+                );
+              } else {
+                return Row(
+                  children: [
+                    stepper,
+                    const SizedBox(width: 14),
+                    Expanded(child: calcPill),
+                  ],
+                );
+              }
+            },
           ),
         ],
       ),
@@ -1369,74 +1398,90 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           const SizedBox(height: AppConstants.space16),
 
           // Main Hero Highlight: Remaining Entitlement (Visually Dominant)
-          Container(
-            padding: const EdgeInsets.all(AppConstants.space16),
-            decoration: BoxDecoration(
-              color: AppConstants.primaryNavy,
-              borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 440;
+              final leftCol = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('entitlement.remaining_balance').toUpperCase(),
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70, letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        tr('entitlement.remaining_balance').toUpperCase(),
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70, letterSpacing: 0.5),
+                        remainingBalanceKg.toStringAsFixed(1),
+                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
+                      const SizedBox(width: 6),
+                      Text(
+                        tr('commodity.kg').toUpperCase(),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${tr('commodity.rice')}: ${riceRemaining.toStringAsFixed(1)} ${tr('commodity.kg')}  •  ${tr('commodity.wheat')}: ${wheatRemaining.toStringAsFixed(1)} ${tr('commodity.kg')}',
+                    style: const TextStyle(fontSize: 12, color: Colors.white),
+                  ),
+                ],
+              );
+
+              final rightPill = Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Column(
+                  crossAxisAlignment: isNarrow ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+                  children: [
+                    Text(tr('entitlement.monthly_quota'), style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${totalEntitlementKg.toStringAsFixed(1)} ${tr('commodity.kg')}',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${tr('entitlement.consumed')}: ${totalConsumedKg.toStringAsFixed(1)} ${tr('commodity.kg')}',
+                      style: const TextStyle(fontSize: 10.5, color: Color(0xFFFDE68A)),
+                    ),
+                  ],
+                ),
+              );
+
+              return Container(
+                padding: const EdgeInsets.all(AppConstants.space16),
+                decoration: BoxDecoration(
+                  color: AppConstants.primaryNavy,
+                  borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+                ),
+                child: isNarrow
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            remainingBalanceKg.toStringAsFixed(1),
-                            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            tr('commodity.kg').toUpperCase(),
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white70),
-                          ),
+                          leftCol,
+                          const SizedBox(height: 12),
+                          rightPill,
+                        ],
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: leftCol),
+                          const SizedBox(width: 12),
+                          rightPill,
                         ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${tr('commodity.rice')}: ${riceRemaining.toStringAsFixed(1)} ${tr('commodity.kg')}  •  ${tr('commodity.wheat')}: ${wheatRemaining.toStringAsFixed(1)} ${tr('commodity.kg')}',
-                        style: const TextStyle(fontSize: 12, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(tr('entitlement.monthly_quota'), style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${totalEntitlementKg.toStringAsFixed(1)} ${tr('commodity.kg')}',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${tr('entitlement.consumed')}: ${totalConsumedKg.toStringAsFixed(1)} ${tr('commodity.kg')}',
-                        style: const TextStyle(fontSize: 10.5, color: Color(0xFFFDE68A)),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
           const SizedBox(height: AppConstants.space16),
 

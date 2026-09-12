@@ -117,11 +117,14 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
   Widget build(BuildContext context) {
     final isHome = widget.deliveryMode == 'HOME_DELIVERY';
 
+    final screenW = MediaQuery.of(context).size.width;
+    final isMobile = screenW < 600;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16, vertical: isMobile ? 12 : 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 580),
+        constraints: BoxConstraints(maxWidth: isMobile ? screenW * 0.96 : 580),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -350,48 +353,64 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
                         style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppConstants.textSecondary, letterSpacing: 0.5),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              key: const ValueKey('btn_simulate_success'),
-                              onPressed: _state == BiometricVerificationState.scanning
-                                  ? null
-                                  : () => _simulateScan(shouldSucceed: true),
-                              icon: const Icon(Icons.check_circle_outline, size: 16),
-                              label: const Text(
-                                'Simulate Match (✓)',
-                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF15803D),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isNarrow = constraints.maxWidth < 420;
+                          final btnSuccess = ElevatedButton.icon(
+                            key: const ValueKey('btn_simulate_success'),
+                            onPressed: _state == BiometricVerificationState.scanning
+                                ? null
+                                : () => _simulateScan(shouldSucceed: true),
+                            icon: const Icon(Icons.check_circle_outline, size: 16),
+                            label: const Text(
+                              'Simulate Match (✓)',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              key: const ValueKey('btn_simulate_failure'),
-                              onPressed: _state == BiometricVerificationState.scanning
-                                  ? null
-                                  : () => _simulateScan(shouldSucceed: false),
-                              icon: const Icon(Icons.cancel_outlined, size: 16),
-                              label: const Text(
-                                'Simulate Mismatch (✕)',
-                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppConstants.dangerRed,
-                                side: const BorderSide(color: Color(0xFFFECACA), width: 1.5),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF15803D),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                          ),
-                        ],
+                          );
+
+                          final btnFailure = OutlinedButton.icon(
+                            key: const ValueKey('btn_simulate_failure'),
+                            onPressed: _state == BiometricVerificationState.scanning
+                                ? null
+                                : () => _simulateScan(shouldSucceed: false),
+                            icon: const Icon(Icons.cancel_outlined, size: 16),
+                            label: const Text(
+                              'Simulate Mismatch (✕)',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppConstants.dangerRed,
+                              side: const BorderSide(color: Color(0xFFFECACA), width: 1.5),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          );
+
+                          if (isNarrow) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                btnSuccess,
+                                const SizedBox(height: 8),
+                                btnFailure,
+                              ],
+                            );
+                          } else {
+                            return Row(
+                              children: [
+                                Expanded(child: btnSuccess),
+                                const SizedBox(width: 10),
+                                Expanded(child: btnFailure),
+                              ],
+                            );
+                          }
+                        },
                       ),
                     ],
 

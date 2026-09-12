@@ -38,15 +38,19 @@ class EnterpriseDialogScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
-    final effectiveMaxWidth = maxWidth.clamp(320.0, screenSize.width * 0.94);
-    final effectiveMaxHeight = maxHeight.clamp(300.0, screenSize.height * 0.92);
+    final isMobile = screenSize.width < 600;
+    final effectiveMaxWidth = maxWidth.clamp(280.0, screenSize.width * (isMobile ? 0.98 : 0.94));
+    final effectiveMaxHeight = maxHeight.clamp(280.0, screenSize.height * (isMobile ? 0.96 : 0.92));
 
     final iconColor = headerIconColor ?? Colors.white;
     final iconBg = headerIconBg ?? Colors.white.withValues(alpha: 0.15);
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 6 : 16,
+        vertical: isMobile ? 10 : 24,
+      ),
       child: Center(
         child: Container(
           width: effectiveMaxWidth,

@@ -326,15 +326,19 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
           ),
         ],
       ),
-      child: Row(
-        children: steps.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final step = entry.value;
-          final isFirst = idx == 0;
-          final isSecond = idx == 1;
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: steps.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final step = entry.value;
+            final isFirst = idx == 0;
+            final isSecond = idx == 1;
 
-          return Expanded(
-            child: Row(
+            return Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   width: 22,
@@ -355,31 +359,26 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    step['title'] as String,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: isFirst || isSecond ? FontWeight.w800 : FontWeight.w500,
-                      color: isFirst || isSecond ? AppConstants.primaryNavy : AppConstants.textSecondary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  step['title'] as String,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isFirst || isSecond ? FontWeight.w800 : FontWeight.w500,
+                    color: isFirst || isSecond ? AppConstants.primaryNavy : AppConstants.textSecondary,
                   ),
                 ),
                 if (idx < steps.length - 1) ...[
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Container(
-                      height: 1.5,
-                      color: isFirst ? AppConstants.primaryNavy : const Color(0xFFE2E8F0),
-                    ),
+                  Container(
+                    width: 16,
+                    height: 1.5,
+                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                    color: isFirst ? AppConstants.primaryNavy : const Color(0xFFE2E8F0),
                   ),
-                  const SizedBox(width: 6),
                 ],
               ],
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -903,24 +902,36 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
           ),
           const SizedBox(height: 12),
 
-          Row(
-            children: [
-              Expanded(
-                child: _buildEntitlementBox(tr('entitlement.monthly_quota'), '${monthly.toStringAsFixed(1)} ${tr('commodity.kg')}', '${tr('commodity.rice')} + ${tr('commodity.wheat')}'),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildEntitlementBox(tr('entitlement.consumed'), '${consumed.toStringAsFixed(1)} ${tr('commodity.kg')}', 'This Month'),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildEntitlementBox(tr('entitlement.remaining_balance'), '${remaining.toStringAsFixed(1)} ${tr('commodity.kg')}', 'Available to Lift', isHighlight: true),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildEntitlementBox('Planning Cycle', 'Cycle 7', 'Sep 2026'),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 520;
+              final b1 = _buildEntitlementBox(tr('entitlement.monthly_quota'), '${monthly.toStringAsFixed(1)} ${tr('commodity.kg')}', '${tr('commodity.rice')} + ${tr('commodity.wheat')}');
+              final b2 = _buildEntitlementBox(tr('entitlement.consumed'), '${consumed.toStringAsFixed(1)} ${tr('commodity.kg')}', 'This Month');
+              final b3 = _buildEntitlementBox(tr('entitlement.remaining_balance'), '${remaining.toStringAsFixed(1)} ${tr('commodity.kg')}', 'Available to Lift', isHighlight: true);
+              final b4 = _buildEntitlementBox('Planning Cycle', 'Cycle 7', 'Sep 2026');
+
+              if (isNarrow) {
+                return Column(
+                  children: [
+                    Row(children: [Expanded(child: b1), const SizedBox(width: 8), Expanded(child: b2)]),
+                    const SizedBox(height: 8),
+                    Row(children: [Expanded(child: b3), const SizedBox(width: 8), Expanded(child: b4)]),
+                  ],
+                );
+              } else {
+                return Row(
+                  children: [
+                    Expanded(child: b1),
+                    const SizedBox(width: 8),
+                    Expanded(child: b2),
+                    const SizedBox(width: 8),
+                    Expanded(child: b3),
+                    const SizedBox(width: 8),
+                    Expanded(child: b4),
+                  ],
+                );
+              }
+            },
           ),
         ],
       ),

@@ -31,12 +31,13 @@ class FpsDetailDrawer extends StatefulWidget {
       barrierColor: Colors.black.withValues(alpha: 0.35),
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (context, anim1, anim2) {
+        final screenW = MediaQuery.of(context).size.width;
         return Align(
           alignment: Alignment.centerRight,
           child: Material(
             color: Colors.transparent,
             child: SizedBox(
-              width: 520,
+              width: screenW > 600 ? 520.0 : screenW * 0.92,
               height: double.infinity,
               child: FpsDetailDrawer(
                 item: item,
@@ -394,16 +395,22 @@ class _FpsDetailDrawerState extends State<FpsDetailDrawer> with SingleTickerProv
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+            ),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
-              color: highlightColor ?? (isBold ? AppConstants.textPrimary : AppConstants.textPrimary),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+                color: highlightColor ?? (isBold ? AppConstants.textPrimary : AppConstants.textPrimary),
+              ),
             ),
           ),
         ],
