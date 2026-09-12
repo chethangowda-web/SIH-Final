@@ -1,6 +1,14 @@
 # PDS DemandSync
-> **Forward-Looking Beneficiary Intent for Pre-Dispatch PDS Demand Forecasting**
+> **Forward-Looking Beneficiary Intent for Pre-Dispatch PDS Demand Forecasting**  
 > *Smart India Hackathon (SIH) 2026 Prototype — Demo V1*
+
+---
+
+### 🌐 Live Running Application Endpoints
+
+- **Live Web Application**: [https://sih-final-production-d29c.up.railway.app/app/](https://sih-final-production-d29c.up.railway.app/app/)
+- **FastAPI Interactive Specs**: [https://sih-final-production-d29c.up.railway.app/docs](https://sih-final-production-d29c.up.railway.app/docs)
+- **Live System Health Diagnostic**: [https://sih-final-production-d29c.up.railway.app/api/health](https://sih-final-production-d29c.up.railway.app/api/health)
 
 ---
 
