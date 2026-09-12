@@ -526,13 +526,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             }
 
             final eval = snapshot.data!;
+            final screenW = MediaQuery.of(context).size.width;
+            final screenH = MediaQuery.of(context).size.height;
+            final isMobile = screenW < 700;
+
             return Dialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 20, vertical: isMobile ? 10 : 16),
               child: Container(
-                width: 1140,
-                height: 840,
-                padding: const EdgeInsets.all(22),
+                width: isMobile ? screenW * 0.98 : 1140,
+                height: isMobile ? screenH * 0.94 : 840,
+                padding: EdgeInsets.all(isMobile ? 14 : 22),
                 decoration: BoxDecoration(
                   color: AppConstants.backgroundLight,
                   borderRadius: BorderRadius.circular(16),
@@ -544,36 +548,38 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: AppConstants.accentBlue.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: AppConstants.accentBlue.withValues(alpha: 0.3)),
                           ),
-                          child: const Icon(Icons.analytics_outlined, color: AppConstants.accentBlue, size: 22),
+                          child: const Icon(Icons.analytics_outlined, color: AppConstants.accentBlue, size: 20),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 2,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  const Text('Forecast vs Actual ePoS Evaluation', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
-                                  const SizedBox(width: 8),
+                                  Text('Forecast vs Actual ePoS Evaluation', style: TextStyle(fontSize: isMobile ? 13.5 : 16, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFF0FDF4),
                                       borderRadius: BorderRadius.circular(4),
                                       border: Border.all(color: const Color(0xFF86EFAC)),
                                     ),
-                                    child: const Text('CLOSED-LOOP VERIFIED', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF15803D))),
+                                    child: const Text('CLOSED-LOOP VERIFIED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF15803D))),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 2),
-                              Text('Cycle ${eval.cycleId} • Post-Distribution Accuracy & ML Calibration', style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
+                              Text('Cycle ${eval.cycleId} • Post-Distribution Accuracy & ML Calibration', style: const TextStyle(fontSize: 10.5, color: AppConstants.textSecondary)),
                             ],
                           ),
                         ),
@@ -584,7 +590,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
 
                     // BODY (Internal Scrollable)
                     Expanded(
@@ -594,116 +600,48 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           children: [
                             // 1. Top 5 Metrics Row
                             Container(
-                              padding: const EdgeInsets.all(14),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: AppConstants.cardSurface,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: AppConstants.cardBorder),
                               ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                children: [
-                                  _buildEvaluationHeaderStat('OVERALL ACCURACY', '${eval.overallAccuracyPct.toStringAsFixed(1)}%', const Color(0xFF15803D)),
-                                  _buildEvaluationHeaderStat('MAPE (ERROR)', '${eval.mapePct.toStringAsFixed(2)}%', const Color(0xFFB45309)),
-                                  _buildEvaluationHeaderStat('MEAN ABS ERROR', '${eval.maeKg.toStringAsFixed(1)} kg', AppConstants.primaryNavy),
-                                  _buildEvaluationHeaderStat('TOTAL FORECAST (D̂)', '${(eval.totalForecastQuantityKg / 1000).toStringAsFixed(1)} MT', AppConstants.accentBlue),
-                                  _buildEvaluationHeaderStat('TOTAL ACTUAL (ePoS)', '${(eval.totalActualQuantityKg / 1000).toStringAsFixed(1)} MT', AppConstants.primaryNavy),
-                                ],
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    _buildEvaluationHeaderStat('OVERALL ACCURACY', '${eval.overallAccuracyPct.toStringAsFixed(1)}%', const Color(0xFF15803D)),
+                                    const SizedBox(width: 20),
+                                    _buildEvaluationHeaderStat('MAPE (ERROR)', '${eval.mapePct.toStringAsFixed(2)}%', const Color(0xFFB45309)),
+                                    const SizedBox(width: 20),
+                                    _buildEvaluationHeaderStat('MEAN ABS ERROR', '${eval.maeKg.toStringAsFixed(1)} kg', AppConstants.primaryNavy),
+                                    const SizedBox(width: 20),
+                                    _buildEvaluationHeaderStat('TOTAL FORECAST (D̂)', '${(eval.totalForecastQuantityKg / 1000).toStringAsFixed(1)} MT', AppConstants.accentBlue),
+                                    const SizedBox(width: 20),
+                                    _buildEvaluationHeaderStat('TOTAL ACTUAL (ePoS)', '${(eval.totalActualQuantityKg / 1000).toStringAsFixed(1)} MT', AppConstants.primaryNavy),
+                                  ],
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 12),
 
                             // 2. Commodity Breakdown Cards (Rice & Wheat)
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: AppConstants.cardSurface,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: AppConstants.cardBorder),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Row(
-                                          children: [
-                                            Icon(Icons.grain, color: AppConstants.primaryNavy, size: 16),
-                                            SizedBox(width: 6),
-                                            Text('Fortified Rice Accuracy', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text('Error Metric', style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
-                                            Text('MAPE: ${eval.riceMapePct.toStringAsFixed(2)}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(4),
-                                          child: LinearProgressIndicator(
-                                            value: (1.0 - (eval.riceMapePct / 100)).clamp(0.0, 1.0),
-                                            minHeight: 6,
-                                            backgroundColor: const Color(0xFFE2E8F0),
-                                            valueColor: const AlwaysStoppedAnimation(Color(0xFF15803D)),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text('Accuracy: ${(100.0 - eval.riceMapePct).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
-                                      ],
-                                    ),
+                            isMobile
+                                ? Column(
+                                    children: [
+                                      _buildRiceAccuracyCard(eval),
+                                      const SizedBox(height: 10),
+                                      _buildWheatAccuracyCard(eval),
+                                    ],
+                                  )
+                                : Row(
+                                    children: [
+                                      Expanded(child: _buildRiceAccuracyCard(eval)),
+                                      const SizedBox(width: 12),
+                                      Expanded(child: _buildWheatAccuracyCard(eval)),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: AppConstants.cardSurface,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: AppConstants.cardBorder),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Row(
-                                          children: [
-                                            Icon(Icons.bakery_dining, color: AppConstants.accentAmber, size: 16),
-                                            SizedBox(width: 6),
-                                            Text('Whole Wheat Accuracy', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text('Error Metric', style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
-                                            Text('MAPE: ${eval.wheatMapePct.toStringAsFixed(2)}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(4),
-                                          child: LinearProgressIndicator(
-                                            value: (1.0 - (eval.wheatMapePct / 100)).clamp(0.0, 1.0),
-                                            minHeight: 6,
-                                            backgroundColor: const Color(0xFFE2E8F0),
-                                            valueColor: const AlwaysStoppedAnimation(Color(0xFF15803D)),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text('Accuracy: ${(100.0 - eval.wheatMapePct).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 12),
 
                             // 3. Closed-Loop Machine Learning Weights Calibration Card
                             Container(
@@ -720,54 +658,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   const SizedBox(height: 4),
                                   const Text('Evaluation errors automatically update feature weight coefficients for Cycle 8 demand projections.', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
                                   const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(color: AppConstants.backgroundLight, borderRadius: BorderRadius.circular(6)),
-                                          child: const Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text('HISTORICAL WEIGHT (α)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppConstants.textSecondary)),
-                                              SizedBox(height: 2),
-                                              Text('0.42 → 0.38 (-9.5%)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy)),
-                                            ],
-                                          ),
+                                  isMobile
+                                      ? Column(
+                                          children: [
+                                            _buildWeightBox('HISTORICAL WEIGHT (α)', '0.42 → 0.38 (-9.5%)', AppConstants.primaryNavy),
+                                            const SizedBox(height: 6),
+                                            _buildWeightBox('INTENT WEIGHT (β)', '0.38 → 0.44 (+15.8%)', const Color(0xFF15803D)),
+                                            const SizedBox(height: 6),
+                                            _buildWeightBox('MIGRATION INFLUX (γ)', '0.20 → 0.18 (-10.0%)', AppConstants.accentAmber),
+                                          ],
+                                        )
+                                      : Row(
+                                          children: [
+                                            Expanded(child: _buildWeightBox('HISTORICAL WEIGHT (α)', '0.42 → 0.38 (-9.5%)', AppConstants.primaryNavy)),
+                                            const SizedBox(width: 8),
+                                            Expanded(child: _buildWeightBox('INTENT WEIGHT (β)', '0.38 → 0.44 (+15.8%)', const Color(0xFF15803D))),
+                                            const SizedBox(width: 8),
+                                            Expanded(child: _buildWeightBox('MIGRATION INFLUX (γ)', '0.20 → 0.18 (-10.0%)', AppConstants.accentAmber)),
+                                          ],
                                         ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(color: AppConstants.backgroundLight, borderRadius: BorderRadius.circular(6)),
-                                          child: const Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text('INTENT WEIGHT (β)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppConstants.textSecondary)),
-                                              SizedBox(height: 2),
-                                              Text('0.38 → 0.44 (+15.8%)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(color: AppConstants.backgroundLight, borderRadius: BorderRadius.circular(6)),
-                                          child: const Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text('MIGRATION INFLUX (γ)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppConstants.textSecondary)),
-                                              SizedBox(height: 2),
-                                              Text('0.20 → 0.18 (-10.0%)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppConstants.accentAmber)),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                                 ],
                               ),
                             ),
@@ -775,26 +684,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
 
                     // STICKY FOOTER
                     Container(
-                      padding: const EdgeInsets.only(top: 10),
+                      padding: const EdgeInsets.only(top: 8),
                       decoration: const BoxDecoration(
                         border: Border(top: BorderSide(color: AppConstants.cardBorder)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Closed-loop calibration results logged into district audit ledger.', style: TextStyle(fontSize: 10.5, color: AppConstants.textSecondary)),
+                          const Expanded(
+                            child: Text('Closed-loop calibration results logged into audit ledger.', style: TextStyle(fontSize: 10, color: AppConstants.textSecondary), overflow: TextOverflow.ellipsis),
+                          ),
+                          const SizedBox(width: 8),
                           ElevatedButton(
                             onPressed: () => Navigator.of(context).pop(),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppConstants.primaryNavy,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                             ),
-                            child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
+                            child: const Text('Close', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
@@ -806,6 +718,108 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildRiceAccuracyCard(ForecastEvaluationData eval) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppConstants.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.grain, color: AppConstants.primaryNavy, size: 16),
+              SizedBox(width: 6),
+              Text('Fortified Rice Accuracy', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Error Metric', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
+              Text('MAPE: ${eval.riceMapePct.toStringAsFixed(2)}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (1.0 - (eval.riceMapePct / 100)).clamp(0.0, 1.0),
+              minHeight: 6,
+              backgroundColor: const Color(0xFFE2E8F0),
+              valueColor: const AlwaysStoppedAnimation(Color(0xFF15803D)),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text('Accuracy: ${(100.0 - eval.riceMapePct).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWheatAccuracyCard(ForecastEvaluationData eval) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppConstants.cardSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppConstants.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.bakery_dining, color: AppConstants.accentAmber, size: 16),
+              SizedBox(width: 6),
+              Text('Whole Wheat Accuracy', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Error Metric', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
+              Text('MAPE: ${eval.wheatMapePct.toStringAsFixed(2)}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (1.0 - (eval.wheatMapePct / 100)).clamp(0.0, 1.0),
+              minHeight: 6,
+              backgroundColor: const Color(0xFFE2E8F0),
+              valueColor: const AlwaysStoppedAnimation(Color(0xFF15803D)),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text('Accuracy: ${(100.0 - eval.wheatMapePct).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeightBox(String label, String value, Color color) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: AppConstants.backgroundLight, borderRadius: BorderRadius.circular(6)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppConstants.textSecondary)),
+          const SizedBox(height: 2),
+          Text(value, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: color)),
+        ],
+      ),
     );
   }
 
@@ -991,8 +1005,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       ),
                     ),
 
-                    // Slide-over FPS detail drawer
-                    if (_selectedDrawerFps != null)
+                    // Slide-over FPS detail drawer with dismissible backdrop
+                    if (_selectedDrawerFps != null) ...[
+                      Positioned.fill(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _selectedDrawerFps = null),
+                          child: Container(
+                            color: Colors.black.withValues(alpha: 0.35),
+                          ),
+                        ),
+                      ),
                       Positioned(
                         top: 0,
                         right: 0,
@@ -1000,14 +1022,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         child: Material(
                           elevation: 16,
                           child: SizedBox(
-                            width: MediaQuery.of(context).size.width > 600 ? 520.0 : MediaQuery.of(context).size.width * 0.92,
+                            width: MediaQuery.of(context).size.width > 600 ? 520.0 : MediaQuery.of(context).size.width * 0.94,
                             child: Stack(
                               children: [
                                 FpsDetailDrawer(
                                   item: _selectedDrawerFps!,
-                                  onOpenForecast: () => _showForecastWhatIfDialog(_selectedDrawerFps!.fpsId),
-                                  onOpenDecision: () => _showDispatchDecisionDialog(_selectedDrawerFps!.fpsId),
-                                  onOpenInspector: () => _inspectFps(_selectedDrawerFps!.fpsId),
+                                  onOpenForecast: () {
+                                    final id = _selectedDrawerFps!.fpsId;
+                                    setState(() => _selectedDrawerFps = null);
+                                    _showForecastWhatIfDialog(id);
+                                  },
+                                  onOpenDecision: () {
+                                    final id = _selectedDrawerFps!.fpsId;
+                                    setState(() => _selectedDrawerFps = null);
+                                    _showDispatchDecisionDialog(id);
+                                  },
+                                  onOpenInspector: () {
+                                    final id = _selectedDrawerFps!.fpsId;
+                                    setState(() => _selectedDrawerFps = null);
+                                    _inspectFps(id);
+                                  },
                                 ),
                                 Positioned(
                                   top: 12,
@@ -1022,6 +1056,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           ),
                         ),
                       ),
+                    ],
                   ],
                 ),
     );
@@ -1029,6 +1064,206 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   // TOP NAVIGATION BAR
   PreferredSizeWidget _buildTopNavigationBar() {
+    final screenW = MediaQuery.of(context).size.width;
+    final isMobile = screenW < 720;
+
+    if (isMobile) {
+      return AppBar(
+        backgroundColor: AppConstants.primaryNavy,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        titleSpacing: 12,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(Icons.shield_outlined, size: 16, color: Colors.white),
+            ),
+            const SizedBox(width: 8),
+            const Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'PDS DemandSync',
+                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'District Supply Operations',
+                    style: TextStyle(fontSize: 10, color: Colors.white70),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          // Refresh Telemetry
+          IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh, size: 20),
+            onPressed: _loadDashboardData,
+          ),
+
+          // Switch to Citizen Portal
+          IconButton(
+            tooltip: 'Citizen Portal',
+            icon: const Icon(Icons.people_alt_outlined, size: 20),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const DemoLoginScreen()),
+              );
+            },
+          ),
+
+          // Unified Operations & Demo Menu
+          PopupMenuButton<String>(
+            tooltip: 'Menu & Operations',
+            icon: const Icon(Icons.more_vert_rounded, size: 20, color: Colors.white),
+            onSelected: (value) {
+              if (value == 'WHAT_IF') _showForecastWhatIfDialog('FPS-KA-BLR-001');
+              if (value == 'CITIZEN_QUEUE') _showCitizenRequestQueueDialog();
+              if (value == 'SCARCITY') _showScarcityDialog();
+              if (value == 'EVALUATION') _showEvaluationModal();
+              if (value == 'GATEPASS') _showGatepassDialog();
+              if (value == 'LOCK_FORECAST') _lockForecast();
+              if (value == 'JUDGE_DEFENSE') _showJudgeViewDialog();
+              if (value == 'SCENARIO_RUNNER') _showSihDemoModeDialog();
+              if (value == 'RESET') _resetDemoWorkflow();
+              if (value == 'LOGOUT') {
+                _apiService.logout();
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const DemoLoginScreen()),
+                  (route) => false,
+                );
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                enabled: false,
+                child: Text('DISTRICT OPERATIONS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppConstants.textSecondary, letterSpacing: 0.5)),
+              ),
+              const PopupMenuItem(
+                value: 'WHAT_IF',
+                child: Row(
+                  children: [
+                    Icon(Icons.science_outlined, color: AppConstants.accentBlue, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('What-If Sensitivity Sandbox', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'CITIZEN_QUEUE',
+                child: Row(
+                  children: [
+                    Icon(Icons.inbox_outlined, color: AppConstants.accentBlue, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('Citizen Request Queue', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'SCARCITY',
+                child: Row(
+                  children: [
+                    Icon(Icons.balance_outlined, color: AppConstants.accentAmber, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('Scarcity & Fair-Share', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'EVALUATION',
+                child: Row(
+                  children: [
+                    Icon(Icons.query_stats_rounded, color: AppConstants.successGreen, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('Forecast vs Actual Evaluation', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'GATEPASS',
+                child: Row(
+                  children: [
+                    Icon(Icons.qr_code_2_rounded, color: AppConstants.primaryNavy, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('Digital QR Gatepass Clearance', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'LOCK_FORECAST',
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_clock_outlined, color: AppConstants.primaryNavy, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('Lock Aggregated Demand', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                enabled: false,
+                child: Text('SIH JURY & EVALUATION', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppConstants.textSecondary, letterSpacing: 0.5)),
+              ),
+              const PopupMenuItem(
+                value: 'JUDGE_DEFENSE',
+                child: Row(
+                  children: [
+                    Icon(Icons.gavel_rounded, color: AppConstants.primaryNavy, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('SIH Judge Defense Matrix', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'SCENARIO_RUNNER',
+                child: Row(
+                  children: [
+                    Icon(Icons.play_circle_fill_rounded, color: AppConstants.accentBlue, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('14-Step SIH Simulation', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'RESET',
+                child: Row(
+                  children: [
+                    Icon(Icons.restart_alt_rounded, color: AppConstants.dangerRed, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('Reset Demo Workflow', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppConstants.dangerRed))),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'LOGOUT',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout_rounded, color: AppConstants.dangerRed, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('Logout Session', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppConstants.dangerRed))),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
+        ],
+      );
+    }
+
     return AppBar(
       backgroundColor: AppConstants.primaryNavy,
       foregroundColor: Colors.white,
@@ -1854,138 +2089,175 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final isLocked = _dashboardData?.isDemandLocked ?? false;
     final snapshotHash = planningState?['snapshot_hash'] as String?;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: isLocked ? const Color(0xFFF8FAFC) : const Color(0xFFF0FDF4),
-        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-        border: Border.all(
-          color: isLocked ? const Color(0xFFCBD5E1) : const Color(0xFF86EFAC),
-          width: 1.2,
-        ),
-      ),
-      child: Row(
-        children: [
-          // Icon badge
-          Container(
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: isLocked ? const Color(0xFFE2E8F0) : const Color(0xFFDCFCE7),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(
-              isLocked ? Icons.lock_rounded : Icons.schedule_rounded,
-              size: 18,
-              color: isLocked ? AppConstants.primaryNavy : const Color(0xFF15803D),
-            ),
-          ),
-          const SizedBox(width: 12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 720;
 
-          // Title & Lifecycle Stepper
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'PDS PLANNING CYCLE: DAY $planningDay OF 30',
+        Widget headerBadge = Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: isLocked ? const Color(0xFFE2E8F0) : const Color(0xFFDCFCE7),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                isLocked ? Icons.lock_rounded : Icons.schedule_rounded,
+                size: 18,
+                color: isLocked ? AppConstants.primaryNavy : const Color(0xFF15803D),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'PDS PLANNING CYCLE: DAY $planningDay OF 30',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w900,
+                      color: isLocked ? AppConstants.primaryNavy : const Color(0xFF15803D),
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isLocked ? const Color(0xFFEFF6FF) : const Color(0xFFDCFCE7),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: isLocked ? const Color(0xFF93C5FD) : const Color(0xFF86EFAC)),
+                    ),
+                    child: Text(
+                      isLocked ? '🔒 DEMAND BASELINE LOCKED' : 'CHOICE WINDOW OPEN (DAY 21–24)',
                       style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w900,
-                        color: isLocked ? AppConstants.primaryNavy : const Color(0xFF15803D),
-                        letterSpacing: 0.4,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: isLocked ? const Color(0xFF1D4ED8) : const Color(0xFF15803D),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: isLocked ? const Color(0xFFEFF6FF) : const Color(0xFFDCFCE7),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: isLocked ? const Color(0xFF93C5FD) : const Color(0xFF86EFAC)),
-                      ),
+                  ),
+                  if (snapshotHash != null)
+                    InkWell(
+                      onTap: _viewDemandSnapshotDetails,
                       child: Text(
-                        isLocked ? '🔒 DEMAND BASELINE LOCKED' : 'CHOICE WINDOW OPEN (DAY 21–24)',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: isLocked ? const Color(0xFF1D4ED8) : const Color(0xFF15803D),
+                        'SHA-256: ${snapshotHash.substring(0, 10)}...',
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: AppConstants.accentBlue,
+                          decoration: TextDecoration.underline,
                         ),
                       ),
                     ),
-                    if (snapshotHash != null) ...[
-                      const SizedBox(width: 8),
-                      InkWell(
-                        onTap: _viewDemandSnapshotDetails,
-                        child: Text(
-                          'SHA-256: ${snapshotHash.substring(0, 10)}...',
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: AppConstants.accentBlue,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  isLocked
-                      ? 'Demand baseline D_hat is frozen (Day 25). 7-stage Pre-Dispatch engine consumes this immutable snapshot without mutating beneficiary signals.'
-                      : 'Beneficiaries are submitting preferred FPS / doorstep requests. District Supply Officer locks demand on Day 25 to initiate pre-dispatch allocation.',
-                  style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Quick Action: Advance Day (Demo) or Lock Demand
-          if (!isLocked) ...[
-            OutlinedButton.icon(
-              onPressed: _isActionExecuting ? null : () => _simulateAdvancePlanningDay(25),
-              icon: const Icon(Icons.fast_forward_rounded, size: 14),
-              label: const Text('Simulate Day 25', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                side: const BorderSide(color: Color(0xFF86EFAC)),
-                foregroundColor: const Color(0xFF15803D),
+                ],
               ),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: _isActionExecuting ? null : _lockForecast,
-              icon: const Icon(Icons.lock_outline_rounded, size: 14),
-              label: const Text('Lock Demand', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppConstants.primaryNavy,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-            ),
-          ] else ...[
-            OutlinedButton.icon(
-              onPressed: _viewDemandSnapshotDetails,
-              icon: const Icon(Icons.verified_outlined, size: 14, color: Color(0xFF15803D)),
-              label: const Text('View Sealed Snapshot', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                side: const BorderSide(color: Color(0xFF86EFAC)),
-              ),
-            ),
-            const SizedBox(width: 6),
-            TextButton(
-              onPressed: _isActionExecuting ? null : () => _simulateAdvancePlanningDay(22),
-              child: const Text('Re-open (Demo Day 22)', style: TextStyle(fontSize: 10.5, color: AppConstants.textSecondary)),
             ),
           ],
-        ],
-      ),
+        );
+
+        Widget descriptionText = Text(
+          isLocked
+              ? 'Demand baseline D_hat is frozen (Day 25). 7-stage Pre-Dispatch engine consumes this immutable snapshot without mutating beneficiary signals.'
+              : 'Beneficiaries are submitting preferred FPS / doorstep requests. District Supply Officer locks demand on Day 25 to initiate pre-dispatch allocation.',
+          style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary),
+        );
+
+        Widget actionsWidget;
+        if (!isLocked) {
+          actionsWidget = Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _isActionExecuting ? null : () => _simulateAdvancePlanningDay(25),
+                icon: const Icon(Icons.fast_forward_rounded, size: 14),
+                label: const Text('Simulate Day 25', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  side: const BorderSide(color: Color(0xFF86EFAC)),
+                  foregroundColor: const Color(0xFF15803D),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _isActionExecuting ? null : _lockForecast,
+                icon: const Icon(Icons.lock_outline_rounded, size: 14),
+                label: const Text('Lock Demand', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppConstants.primaryNavy,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+            ],
+          );
+        } else {
+          actionsWidget = Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _viewDemandSnapshotDetails,
+                icon: const Icon(Icons.verified_outlined, size: 14, color: Color(0xFF15803D)),
+                label: const Text('View Sealed Snapshot', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  side: const BorderSide(color: Color(0xFF86EFAC)),
+                ),
+              ),
+              TextButton(
+                onPressed: _isActionExecuting ? null : () => _simulateAdvancePlanningDay(22),
+                child: const Text('Re-open (Demo Day 22)', style: TextStyle(fontSize: 10.5, color: AppConstants.textSecondary)),
+              ),
+            ],
+          );
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isLocked ? const Color(0xFFF8FAFC) : const Color(0xFFF0FDF4),
+            borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+            border: Border.all(
+              color: isLocked ? const Color(0xFFCBD5E1) : const Color(0xFF86EFAC),
+              width: 1.2,
+            ),
+          ),
+          child: isCompact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    headerBadge,
+                    const SizedBox(height: 6),
+                    descriptionText,
+                    const SizedBox(height: 8),
+                    actionsWidget,
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          headerBadge,
+                          const SizedBox(height: 4),
+                          descriptionText,
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    actionsWidget,
+                  ],
+                ),
+        );
+      },
     );
   }
 
@@ -2303,62 +2575,94 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         const SizedBox(height: 14),
 
         // WHAT NEEDS ATTENTION? Compact Alert Strip
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppConstants.cardSurface,
-            borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
-            border: Border.all(color: AppConstants.cardBorder, width: 1),
-          ),
-          child: Row(
-            children: [
-              const Row(
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 680;
+
+            final alertItems = SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 18),
-                  SizedBox(width: 8),
-                  Text(
-                    'OPERATIONAL ATTENTION ITEMS',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
+                  _buildAlertItem(
+                    badge: 'HIGH RISK FPS',
+                    color: AppConstants.dangerRed,
+                    desc: '2 shops exceed 75% stockout threshold',
+                    onTap: () => setState(() => _selectedFilter = 'HIGH_RISK'),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildAlertItem(
+                    badge: 'LOW INVENTORY',
+                    color: const Color(0xFFB45309),
+                    desc: 'Bellandur Outer Ring Road below 25% buffer',
+                    onTap: () => setState(() => _selectedFilter = 'LOW_INVENTORY'),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildAlertItem(
+                    badge: 'MIGRANT SURGE',
+                    color: AppConstants.accentBlue,
+                    desc: 'ONORC portability influx +180 kg detected',
+                    onTap: () => setState(() => _selectedFilter = 'PORTABILITY'),
                   ),
                 ],
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildAlertItem(
-                        badge: 'HIGH RISK FPS',
-                        color: AppConstants.dangerRed,
-                        desc: '2 shops exceed 75% stockout threshold',
-                        onTap: () => setState(() => _selectedFilter = 'HIGH_RISK'),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildAlertItem(
-                        badge: 'LOW INVENTORY',
-                        color: const Color(0xFFB45309),
-                        desc: 'Bellandur Outer Ring Road below 25% buffer',
-                        onTap: () => setState(() => _selectedFilter = 'LOW_INVENTORY'),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildAlertItem(
-                        badge: 'MIGRANT SURGE',
-                        color: AppConstants.accentBlue,
-                        desc: 'ONORC portability influx +180 kg detected',
-                        onTap: () => setState(() => _selectedFilter = 'PORTABILITY'),
-                      ),
-                    ],
-                  ),
-                ),
+            );
+
+            final viewAllBtn = TextButton(
+              onPressed: _showAlertsDialog,
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 24)),
+              child: const Text('View All →', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            );
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppConstants.cardSurface,
+                borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+                border: Border.all(color: AppConstants.cardBorder, width: 1),
               ),
-              TextButton(
-                onPressed: _showAlertsDialog,
-                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 24)),
-                child: const Text('View All →', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
+              child: isCompact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 16),
+                                SizedBox(width: 6),
+                                Text(
+                                  'OPERATIONAL ATTENTION ITEMS',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
+                                ),
+                              ],
+                            ),
+                            viewAllBtn,
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        alertItems,
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 18),
+                            SizedBox(width: 8),
+                            Text(
+                              'OPERATIONAL ATTENTION ITEMS',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(child: alertItems),
+                        viewAllBtn,
+                      ],
+                    ),
+            );
+          },
         ),
         const SizedBox(height: 14),
 
@@ -2454,42 +2758,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD97706).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 20),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'PRE-DISPATCH OPERATIONAL INCIDENTS — PREPARE BEFORE TRUCK DEPARTS',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF92400E),
-                        letterSpacing: 0.5,
-                      ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isCompact = constraints.maxWidth < 650;
+
+              final titleCol = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'PRE-DISPATCH OPERATIONAL INCIDENTS',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF92400E),
+                      letterSpacing: 0.5,
                     ),
-                    Text(
-                      '"Don\'t reroute the truck after it leaves. Prepare the demand before it leaves."',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontStyle: FontStyle.italic,
-                        color: Color(0xFFB45309),
-                      ),
+                  ),
+                  Text(
+                    '"Don\'t reroute the truck after it leaves. Prepare the demand before it leaves."',
+                    style: TextStyle(
+                      fontSize: isCompact ? 10.5 : 11.5,
+                      fontStyle: FontStyle.italic,
+                      color: const Color(0xFFB45309),
                     ),
-                  ],
-                ),
-              ),
-              Container(
+                  ),
+                ],
+              );
+
+              final alertBadge = Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: _activeDashboardIncidentsCount > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
@@ -2501,13 +2797,53 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       ? '$_activeDashboardIncidentsCount LIVE PRE-DISPATCH ALERTS'
                       : 'ALL ALERTS RESOLVED ✓',
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 10,
                     fontWeight: FontWeight.w800,
                     color: _activeDashboardIncidentsCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF15803D),
                   ),
                 ),
-              ),
-            ],
+              );
+
+              if (isCompact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 18),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: titleCol),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    alertBadge,
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: titleCol),
+                  alertBadge,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 14),
 

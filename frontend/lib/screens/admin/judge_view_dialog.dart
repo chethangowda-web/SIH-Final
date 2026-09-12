@@ -65,13 +65,14 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
+    final isMobile = size.width < 700;
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 24, vertical: isMobile ? 10 : 20),
       child: Container(
-        width: size.width > 1200 ? 1150 : size.width * 0.95,
-        height: size.height * 0.90,
+        width: isMobile ? size.width * 0.98 : (size.width > 1200 ? 1150 : size.width * 0.95),
+        height: size.height * 0.92,
         decoration: BoxDecoration(
           color: const Color(0xFF0F172A),
           borderRadius: BorderRadius.circular(20),
@@ -91,7 +92,7 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
         ),
         child: Column(
           children: [
-            _buildHeader(theme),
+            _buildHeader(theme, isMobile),
             _buildTabBar(),
             Expanded(
               child: _isLoading
@@ -120,9 +121,9 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
     );
   }
 
-  Widget _buildHeader(ThemeData theme) {
+  Widget _buildHeader(ThemeData theme, bool isMobile) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: isMobile ? 12 : 16),
       decoration: const BoxDecoration(
         color: Color(0xFF1E293B),
         borderRadius: BorderRadius.vertical(top: Radius.circular(19)),
@@ -131,7 +132,7 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
@@ -146,27 +147,29 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
                 )
               ],
             ),
-            child: const Icon(Icons.gavel_rounded, color: Colors.white, size: 24),
+            child: const Icon(Icons.gavel_rounded, color: Colors.white, size: 20),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const Text(
-                      'SIH 2026 Jury Technical Defense & Architecture Audit',
+                    Text(
+                      'SIH 2026 Jury Defense',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 18,
+                        fontSize: isMobile ? 14.5 : 18,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.3,
                       ),
                     ),
-                    const SizedBox(width: 10),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(6),
@@ -176,7 +179,7 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
                         'JUDGE VIEW',
                         style: TextStyle(
                           color: Color(0xFFF59E0B),
-                          fontSize: 11,
+                          fontSize: 9.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -188,15 +191,17 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
                   _defenseData?.projectPositioning ?? 'Interoperable Pre-Dispatch Decision Intelligence Layer for Targeted PDS',
                   style: TextStyle(
                     color: Colors.blueGrey[300],
-                    fontSize: 13,
+                    fontSize: isMobile ? 11 : 13,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close, color: Colors.grey),
+            icon: const Icon(Icons.close, color: Colors.grey, size: 20),
             tooltip: 'Close Defense View',
           ),
         ],
@@ -209,11 +214,13 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
       color: const Color(0xFF1E293B).withValues(alpha: 0.6),
       child: TabBar(
         controller: _tabController,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
         indicatorColor: const Color(0xFFF59E0B),
         indicatorWeight: 3,
         labelColor: const Color(0xFFF59E0B),
         unselectedLabelColor: Colors.blueGrey[300],
-        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
         tabs: const [
           Tab(
             icon: Icon(Icons.account_tree_outlined, size: 18),
