@@ -18,9 +18,9 @@ class DemoLoginScreen extends StatefulWidget {
   State<DemoLoginScreen> createState() => _DemoLoginScreenState();
 }
 
-class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProviderStateMixin {
+class _DemoLoginScreenState extends State<DemoLoginScreen> {
   late final ApiService _apiService;
-  late final TabController _tabController;
+  int _selectedTabIndex = 0; // 0: Citizen OTP, 1: Department, 2: Demo Personas
 
   // Controllers for Custom Citizen OTP Login
   final TextEditingController _citizenCardController = TextEditingController(text: 'BEN-KA-0001');
@@ -75,7 +75,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
-    _tabController = TabController(length: 3, vsync: this);
     _selectedBeneficiary = _beneficiaries.first;
   }
 
@@ -86,7 +85,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
     _citizenOtpController.dispose();
     _adminUsernameController.dispose();
     _adminPasswordController.dispose();
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -300,87 +298,38 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
 
                         const SizedBox(height: 22),
 
-                        // Enhanced Segmented Tab Control (UX optimized)
+                        // Enhanced Segmented Custom Capsule Buttons (UX-optimized, never clipped)
                         Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE2E8F0),
+                            color: const Color(0xFFF1F5F9),
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
                           ),
-                          child: TabBar(
-                            controller: _tabController,
-                            indicatorSize: TabBarIndicatorSize.tab,
-                            dividerColor: Colors.transparent,
-                            indicator: BoxDecoration(
-                              color: AppConstants.primaryNavy,
-                              borderRadius: BorderRadius.circular(9),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
-                              ],
-                            ),
-                            labelColor: Colors.white,
-                            unselectedLabelColor: const Color(0xFF475569),
-                            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
-                            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5),
-                            tabs: const [
-                              Tab(
-                                height: 38,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.phone_android_rounded, size: 15),
-                                    SizedBox(width: 6),
-                                    Text('Citizen OTP'),
-                                  ],
-                                ),
-                              ),
-                              Tab(
-                                height: 38,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.admin_panel_settings_rounded, size: 15),
-                                    SizedBox(width: 6),
-                                    Text('Department'),
-                                  ],
-                                ),
-                              ),
-                              Tab(
-                                height: 38,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.group_rounded, size: 15),
-                                    SizedBox(width: 6),
-                                    Text('Demo Personas'),
-                                  ],
-                                ),
-                              ),
+                          child: Row(
+                            children: [
+                              _buildSegmentTab(0, Icons.phone_android_rounded, 'Citizen OTP'),
+                              const SizedBox(width: 4),
+                              _buildSegmentTab(1, Icons.admin_panel_settings_rounded, 'Department'),
+                              const SizedBox(width: 4),
+                              _buildSegmentTab(2, Icons.group_rounded, 'Demo Personas'),
                             ],
                           ),
                         ),
 
                         const SizedBox(height: 20),
 
-                        // Tab Views
-                        SizedBox(
-                          height: 380,
-                          child: TabBarView(
-                            controller: _tabController,
-                            children: [
-                              // TAB 1: Citizen OTP Login
-                              _buildCitizenOtpTab(),
-
-                              // TAB 2: Department Password Login
-                              _buildDepartmentLoginTab(),
-
-                              // TAB 3: Quick Demo Personas
-                              _buildDemoPersonasTab(),
-                            ],
-                          ),
+                        // Active Tab Body
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: _selectedTabIndex == 0
+                              ? _buildCitizenOtpTab()
+                              : (_selectedTabIndex == 1
+                                  ? _buildDepartmentLoginTab()
+                                  : _buildDemoPersonasTab()),
                         ),
 
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 14),
 
                         // Bottom Diagnostics Link
                         Center(
@@ -411,9 +360,50 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
     );
   }
 
+  Widget _buildSegmentTab(int index, IconData icon, String label) {
+    final isSelected = _selectedTabIndex == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _selectedTabIndex = index),
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          decoration: BoxDecoration(
+            color: isSelected ? AppConstants.primaryNavy : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: isSelected
+                ? const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: isSelected ? Colors.white : const Color(0xFF475569),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? Colors.white : const Color(0xFF475569),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // Widget: Citizen OTP Tab
   Widget _buildCitizenOtpTab() {
     return Column(
+      key: const ValueKey('citizen_tab'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
@@ -606,6 +596,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
   // Widget: Department Password Login Tab
   Widget _buildDepartmentLoginTab() {
     return Column(
+      key: const ValueKey('department_tab'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
@@ -710,6 +701,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> with SingleTickerProv
   // Widget: Demo Personas Tab
   Widget _buildDemoPersonasTab() {
     return Column(
+      key: const ValueKey('demo_tab'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
