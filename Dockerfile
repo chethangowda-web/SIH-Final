@@ -21,7 +21,9 @@ ENV PYTHONUNBUFFERED=1
 
 # Install backend dependencies
 COPY backend/requirements.txt ./backend/
+RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r backend/requirements.txt
+RUN pip install --no-cache-dir python-multipart
 
 # Copy backend source code
 COPY backend/ ./backend/
