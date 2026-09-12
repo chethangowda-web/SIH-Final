@@ -4,11 +4,34 @@
 
 ---
 
-### 🌐 Live Running Application Endpoints
+### 🌐 Live Running Application & Interactive Links
 
-- **Live Web Application**: [https://sih-final-production-d29c.up.railway.app/app/](https://sih-final-production-d29c.up.railway.app/app/)
-- **FastAPI Interactive Specs**: [https://sih-final-production-d29c.up.railway.app/docs](https://sih-final-production-d29c.up.railway.app/docs)
-- **Live System Health Diagnostic**: [https://sih-final-production-d29c.up.railway.app/api/health](https://sih-final-production-d29c.up.railway.app/api/health)
+- 🚀 **Live Web Application**: [https://sih-final-production-d29c.up.railway.app/app/](https://sih-final-production-d29c.up.railway.app/app/)
+- 📖 **FastAPI Interactive Swagger Specs**: [https://sih-final-production-d29c.up.railway.app/docs](https://sih-final-production-d29c.up.railway.app/docs)
+- 🩺 **Live System Health Diagnostic**: [https://sih-final-production-d29c.up.railway.app/api/health](https://sih-final-production-d29c.up.railway.app/api/health)
+
+---
+
+### 🔑 Demo Credentials for Live Evaluation
+
+| Portal / Persona | Access Path | Credentials |
+|---|---|---|
+| **District Supply Officer (DSO)** | Department Login Tab | Username: `admin_user`<br>Password: `admin_pass` |
+| **Field Supply Officer** | Department Login Tab | Username: `dso_user`<br>Password: `dso_pass` |
+| **Citizen / Beneficiary OTP** | Citizen OTP Tab | Ration Card ID: `BEN-KA-0001`<br>Demo OTP: `123456` |
+| **1-Click Demo Personas** | Demo Personas Tab | Resident / Migrant Worker Personas |
+
+---
+
+### 🌟 Key Features & SIH Capabilities
+
+1. **Feedback & Dispute Triage Queue**: Bi-directional resolution mechanism between District Supply Officers, Fair Price Shop dealers, and Beneficiaries.
+2. **Citizen $\leftrightarrow$ Officer Link**: Direct case routing and transparent grievance tracking numbers (`TKT-XXXXX`).
+3. **AI Anomaly & Fraud Shield**: Real-time heuristic and ML anomaly detection against ghost intent spikes and diversion risks.
+4. **VRP Route & Truck GPS Verification**: Corridor logistics optimization from Central FCI Godown (Hebbal) with geofence verification.
+5. **Officer Editable Overrides**: District administrators have full authority to adjust AI quotas and buffer levels prior to dispatch.
+6. **Stock Headroom & Scarcity Intelligence**: Proactive warehouse capacity checks and fair-share allocation under stock deficit constraints.
+7. **Role-Based Secure Authentication**: Cryptographic HMAC-SHA256 tokens and citizen OTP verification.
 
 ---
 
