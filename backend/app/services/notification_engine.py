@@ -22,8 +22,14 @@ DEMO_NOTICE = "DEMO DATA — NOT GOVERNMENT DATA (SIMULATED PRE-DISPATCH ALERTS)
 
 
 import logging
-from twilio.rest import Client
-from twilio.base.exceptions import TwilioRestException
+try:
+    from twilio.rest import Client
+    from twilio.base.exceptions import TwilioRestException
+    HAS_TWILIO = True
+except ImportError:
+    Client = None
+    TwilioRestException = Exception
+    HAS_TWILIO = False
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +42,12 @@ class NotificationService:
         self.twilio_phone_number = settings.TWILIO_PHONE_NUMBER
         
         self.client = None
-        if self.account_sid and self.account_sid != "dummy" and self.auth_token and self.auth_token != "dummy":
+        if HAS_TWILIO and self.account_sid and self.account_sid != "dummy" and self.auth_token and self.auth_token != "dummy":
             try:
                 self.client = Client(self.account_sid, self.auth_token)
             except Exception as e:
                 logger.error(f"Failed to initialize Twilio Client: {e}")
+
 
     def send_whatsapp(self, recipient_phone: str, recipient_name: str, message: str, ref_id: str = "") -> Dict[str, Any]:
         """Send WhatsApp message using Twilio API (Fallback to simulation if credentials absent)."""
