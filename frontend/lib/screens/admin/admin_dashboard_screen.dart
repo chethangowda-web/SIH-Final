@@ -1240,40 +1240,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(
-                enabled: false,
-                child: Text('SIH JURY & EVALUATION', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppConstants.textSecondary, letterSpacing: 0.5)),
-              ),
-              const PopupMenuItem(
-                value: 'JUDGE_DEFENSE',
-                child: Row(
-                  children: [
-                    Icon(Icons.gavel_rounded, color: AppConstants.primaryNavy, size: 18),
-                    SizedBox(width: 10),
-                    Expanded(child: Text('SIH Judge Defense Matrix', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'SCENARIO_RUNNER',
-                child: Row(
-                  children: [
-                    Icon(Icons.play_circle_fill_rounded, color: AppConstants.accentBlue, size: 18),
-                    SizedBox(width: 10),
-                    Expanded(child: Text('14-Step SIH Simulation', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
                 value: 'RESET',
                 child: Row(
                   children: [
                     Icon(Icons.restart_alt_rounded, color: AppConstants.dangerRed, size: 18),
                     SizedBox(width: 10),
-                    Expanded(child: Text('Reset Demo Workflow', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppConstants.dangerRed))),
+                    Expanded(child: Text('Reset Operational Workflow', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppConstants.dangerRed))),
                   ],
                 ),
               ),
+
               const PopupMenuItem(
                 value: 'LOGOUT',
                 child: Row(
@@ -1547,58 +1523,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 children: [
                   Icon(Icons.restart_alt_rounded, color: AppConstants.dangerRed, size: 18),
                   SizedBox(width: 10),
-                  Expanded(child: Text('Reset Demo Workflow', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppConstants.dangerRed))),
+                  Expanded(child: Text('Reset Operational Workflow', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppConstants.dangerRed))),
                 ],
               ),
             ),
           ],
         ),
 
-        // Dedicated "Demo & Evaluation" Menu
-        PopupMenuButton<String>(
-          tooltip: 'Demo & Evaluation',
-          onSelected: (value) {
-            if (value == 'JUDGE_DEFENSE') _showJudgeViewDialog();
-            if (value == 'SCENARIO_RUNNER') _showSihDemoModeDialog();
-          },
-          icon: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.smart_toy_outlined, size: 15, color: Colors.white),
-                SizedBox(width: 4),
-                Text('Demo ▾', style: TextStyle(fontSize: 11.5, color: Colors.white, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'JUDGE_DEFENSE',
-              child: Row(
-                children: [
-                  Icon(Icons.gavel_rounded, color: AppConstants.primaryNavy, size: 18),
-                  SizedBox(width: 10),
-                  Expanded(child: Text('SIH Judge Defense Matrix', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'SCENARIO_RUNNER',
-              child: Row(
-                children: [
-                  Icon(Icons.play_circle_fill_rounded, color: AppConstants.accentBlue, size: 18),
-                  SizedBox(width: 10),
-                  Expanded(child: Text('14-Step SIH Demo Simulation', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
-                ],
-              ),
-            ),
-          ],
-        ),
 
         // Profile Avatar
         const Padding(
