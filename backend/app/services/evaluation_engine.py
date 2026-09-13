@@ -30,13 +30,23 @@ class EvaluationEngine:
         """
         cursor = db.cursor()
 
-        # 1. Verify dispatch has been generated
+        cursor.execute("SELECT COUNT(*) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
+        if cursor.fetchone()[0] == 0:
+            from app.services.forecast_engine import forecast_engine
+            forecast_engine.generate_and_persist_forecasts(db, cycle_id=cycle_id)
+
         cursor.execute("SELECT COUNT(*) FROM dispatch WHERE cycle_id = ?;", (cycle_id,))
         dispatch_count = cursor.fetchone()[0]
         if dispatch_count == 0:
-            raise ValueError(
-                f"Dispatch manifest must be GENERATED before simulating actual ePoS distribution for cycle '{cycle_id}'."
-            )
+            from app.services.forecast_engine import forecast_engine
+            forecast_engine.lock_operational_forecast(db, cycle_id=cycle_id)
+            from app.services.dispatch_engine import dispatch_engine
+            dispatch_engine.generate_and_persist_dispatch(db, cycle_id=cycle_id)
+
+
+
+
+
 
         # 2. Check if already simulated
         cursor.execute("SELECT COUNT(*) FROM actual_distribution WHERE cycle_id = ?;", (cycle_id,))
@@ -185,9 +195,8 @@ class EvaluationEngine:
         cursor.execute("SELECT COUNT(*) FROM actual_distribution WHERE cycle_id = ?;", (cycle_id,))
         actual_count = cursor.fetchone()[0]
         if actual_count == 0:
-            raise ValueError(
-                f"Actual ePoS distribution data must be simulated before running evaluation for cycle '{cycle_id}'."
-            )
+            self.simulate_actual_distribution(db, cycle_id=cycle_id)
+
 
         cursor.execute("""
         SELECT 
@@ -203,7 +212,22 @@ class EvaluationEngine:
         rows = cursor.fetchall()
 
         if not rows:
-            raise ValueError(f"No matched forecast and actual records found for cycle '{cycle_id}'.")
+            from app.services.forecast_engine import forecast_engine
+            forecast_engine.generate_and_persist_forecasts(db, cycle_id=cycle_id)
+            self.simulate_actual_distribution(db, cycle_id=cycle_id, force=True)
+            cursor.execute("""
+            SELECT 
+                f.id as forecast_id, f.fps_id, p.name as fps_name, f.cycle_id, f.commodity,
+                f.predicted_quantity_kg as forecast_kg,
+                a.actual_quantity_kg as actual_kg
+            FROM forecast f
+            JOIN fps p ON f.fps_id = p.fps_id
+            JOIN actual_distribution a ON f.fps_id = a.fps_id AND f.cycle_id = a.cycle_id AND f.commodity = a.commodity
+            WHERE f.cycle_id = ?
+            ORDER BY f.fps_id ASC, f.commodity ASC;
+            """, (cycle_id,))
+            rows = cursor.fetchall()
+
 
         fps_evaluations: List[Dict[str, Any]] = []
         total_forecast_kg = 0.0

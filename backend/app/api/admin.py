@@ -919,11 +919,12 @@ def get_forecast_vs_actual_evaluation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception:
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Evaluation failed due to an internal server error."
+            detail=f"Evaluation failed due to an internal server error: {e}"
         )
+
 
 
 @router.get("/admin/evaluation/cycle/{cycle_id}")
