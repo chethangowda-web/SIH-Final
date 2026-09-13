@@ -121,7 +121,7 @@ class ApiService {
         'username': username,
         'password': password,
       }),
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -154,7 +154,7 @@ class ApiService {
       Uri.parse('${AppConstants.apiBaseUrl}/auth/citizen/send-otp'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({'card_id': cardId.trim()}),
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -173,7 +173,7 @@ class ApiService {
         'card_id': cardId.trim(),
         'otp_code': otpCode.trim(),
       }),
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -203,7 +203,7 @@ class ApiService {
     try {
       final response = await client
           .get(url, headers: {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 8));
+          .timeout(AppConstants.apiTimeout);
 
       stopwatch.stop();
       final latency = stopwatch.elapsedMilliseconds;
@@ -231,7 +231,7 @@ class ApiService {
 
     final response = await client
         .get(Uri.parse(endpoint), headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -247,7 +247,7 @@ class ApiService {
     final response = await client
         .get(Uri.parse('${AppConstants.apiBaseUrl}/beneficiaries/$id'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -262,7 +262,7 @@ class ApiService {
     final response = await client
         .get(Uri.parse('${AppConstants.apiBaseUrl}/fps'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
@@ -315,7 +315,7 @@ class ApiService {
           },
           body: json.encode(payload),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 201 || response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -383,7 +383,7 @@ class ApiService {
     final response = await client.get(
       Uri.parse(url),
       headers: {'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -404,7 +404,7 @@ class ApiService {
     final response = await client.get(
       Uri.parse(url),
       headers: {'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -442,7 +442,7 @@ class ApiService {
         'Accept': 'application/json',
       },
       body: json.encode(payload),
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -467,7 +467,7 @@ class ApiService {
     final response = await client.get(
       Uri.parse(url),
       headers: {'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final list = json.decode(response.body) as List<dynamic>;
@@ -502,7 +502,7 @@ class ApiService {
         'Accept': 'application/json',
       },
       body: json.encode(payload),
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -524,7 +524,7 @@ class ApiService {
 
     final response = await client
         .get(Uri.parse(endpoint), headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
@@ -549,7 +549,7 @@ class ApiService {
     final response = await client
         .get(Uri.parse('${AppConstants.apiBaseUrl}/admin/dashboard'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -565,7 +565,7 @@ class ApiService {
     final response = await client
         .get(Uri.parse('${AppConstants.apiBaseUrl}/admin/fps/$fpsId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -581,7 +581,7 @@ class ApiService {
     final response = await client
         .post(Uri.parse('${AppConstants.apiBaseUrl}/admin/forecast/generate'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -596,7 +596,7 @@ class ApiService {
     final response = await client
         .post(Uri.parse('${AppConstants.apiBaseUrl}/admin/forecast/lock'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -610,7 +610,7 @@ class ApiService {
     final response = await client
         .get(Uri.parse('${AppConstants.apiBaseUrl}/choice-window/status?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -624,7 +624,7 @@ class ApiService {
     final response = await client
         .post(Uri.parse('${AppConstants.apiBaseUrl}/admin/choice-window/close?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -639,7 +639,7 @@ class ApiService {
     final response = await client
         .get(Uri.parse('${AppConstants.apiBaseUrl}/admin/planning-cycle/demand-snapshot?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -654,7 +654,7 @@ class ApiService {
     final response = await client
         .post(Uri.parse('${AppConstants.apiBaseUrl}/admin/planning-cycle/set-day?day=$day&cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -672,7 +672,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/dispatch/generate?cycle_id=$cycleId&force=$force'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -692,7 +692,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/dispatch/manifest?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -711,7 +711,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/demo/reset?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -728,7 +728,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/workflow/status?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -765,7 +765,7 @@ class ApiService {
           },
           body: json.encode(payload),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -784,7 +784,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/distribution/simulate?cycle_id=$cycleId&force=$force'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -826,7 +826,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/evaluation?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -846,7 +846,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/calibrate?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -868,7 +868,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/constraints/validate?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -888,7 +888,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/constraints/fps/$fpsId?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -908,7 +908,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/optimization/run?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -928,7 +928,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/gatepasses?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -949,7 +949,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/gatepass/$truckId?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -969,7 +969,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/gatepass/$gatepassId/advance?target_status=$targetStatus'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -989,7 +989,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/notifications/dispatch?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1012,7 +1012,7 @@ class ApiService {
 
     final response = await client
         .get(Uri.parse(url), headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1043,7 +1043,7 @@ class ApiService {
 
     final response = await client
         .get(Uri.parse(url), headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1063,7 +1063,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/fps/$fpsId/analytics?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1080,7 +1080,7 @@ class ApiService {
     final response = await client
         .get(Uri.parse('${AppConstants.apiBaseUrl}/admin/routes'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1106,7 +1106,7 @@ class ApiService {
 
     final response = await client
         .post(Uri.parse(url), headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 10));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1225,7 +1225,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/fps/$fpsId/forecast?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1262,7 +1262,7 @@ class ApiService {
               'Accept': 'application/json'
             },
             body: body)
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1282,7 +1282,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/forecast/district-summary?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -1303,7 +1303,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/fps/$fpsId/dispatch-decision?scenario=$scenario&cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1338,7 +1338,7 @@ class ApiService {
               'Accept': 'application/json'
             },
             body: body)
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1372,7 +1372,7 @@ class ApiService {
               'Accept': 'application/json'
             },
             body: body)
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -1391,7 +1391,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/dispatch-decisions/district-summary?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -1412,7 +1412,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/constraints/validate?cycle_id=$cycleId&scenario=$scenario'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1434,7 +1434,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/fps/$fpsId/constraints?cycle_id=$cycleId&scenario=$scenario'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1467,7 +1467,7 @@ class ApiService {
               'Accept': 'application/json'
             },
             body: body)
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1487,7 +1487,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/constraints/revalidate?cycle_id=$cycleId&scenario=$scenario'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1509,7 +1509,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/optimization/run?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1529,7 +1529,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/optimization/corridor/$truckId?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1567,7 +1567,7 @@ class ApiService {
               'Accept': 'application/json'
             },
             body: body)
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1589,7 +1589,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/manifests?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1609,7 +1609,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/manifests/$manifestId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1631,7 +1631,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/manifests/generate?truck_id=$truckId&cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1674,7 +1674,7 @@ class ApiService {
               'Accept': 'application/json'
             },
             body: body)
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1708,7 +1708,7 @@ class ApiService {
               'Accept': 'application/json'
             },
             body: body)
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1742,7 +1742,7 @@ class ApiService {
               'Accept': 'application/json'
             },
             body: body)
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1761,7 +1761,7 @@ class ApiService {
     final response = await client
         .get(Uri.parse('${AppConstants.apiBaseUrl}/admin/demo/scenarios'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1797,7 +1797,7 @@ class ApiService {
               'Accept': 'application/json'
             },
             body: body)
-        .timeout(const Duration(seconds: 15));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1832,7 +1832,7 @@ class ApiService {
               'Accept': 'application/json'
             },
             body: body)
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1852,7 +1852,7 @@ class ApiService {
             Uri.parse(
                 '${AppConstants.apiBaseUrl}/admin/system-impact?cycle_id=$cycleId'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1872,7 +1872,7 @@ class ApiService {
         .get(
             Uri.parse('${AppConstants.apiBaseUrl}/admin/judge-view'),
             headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1896,7 +1896,7 @@ class ApiService {
         '${AppConstants.apiBaseUrl}/admin/scarcity/depot-balance?cycle_id=$cycleId&depot_id=$depotId&commodity=$commodity');
     final response = await client
         .get(uri, headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1937,7 +1937,7 @@ class ApiService {
           },
           body: json.encode(payload),
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -1982,7 +1982,7 @@ class ApiService {
           },
           body: json.encode(payload),
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -2019,7 +2019,7 @@ class ApiService {
           },
           body: json.encode(payload),
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -2037,7 +2037,7 @@ class ApiService {
         '${AppConstants.apiBaseUrl}/admin/scarcity/audit-trail/$planId');
     final response = await client
         .get(uri, headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -2071,7 +2071,7 @@ class ApiService {
 
     final response = await client
         .get(Uri.parse(url), headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -2106,7 +2106,7 @@ class ApiService {
             'officer_justification': officerJustification,
           }),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -2127,7 +2127,7 @@ class ApiService {
         '${AppConstants.apiBaseUrl}/admin/causal-trace?cycle_id=$cycleId&fps_id=$fpsId');
     final response = await client
         .get(uri, headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 10));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -2148,7 +2148,7 @@ class ApiService {
         '${AppConstants.apiBaseUrl}/admin/causal-trace/run?cycle_id=$cycleId&fps_id=$fpsId');
     final response = await client
         .post(uri, headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 10));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -2183,7 +2183,7 @@ class ApiService {
             'beneficiary_id': beneficiaryId,
           }),
         )
-        .timeout(const Duration(seconds: 12));
+        .timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;

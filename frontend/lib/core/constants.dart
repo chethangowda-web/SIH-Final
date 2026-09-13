@@ -32,6 +32,10 @@ class AppConstants {
   }
   static String get healthEndpoint => '$apiBaseUrl/health';
 
+  // Centralized Request Timeout for Cloud API Requests (prevents premature TimeoutException)
+  static const Duration apiTimeout = Duration(seconds: 45);
+
+
   // Modern Government Digital Infrastructure Color Palette
   static const Color primaryNavy = Color(0xFF0B2942); // Deep Government Navy
   static const Color secondaryNavy = Color(0xFF1E3A8A); // Royal PDS Blue
