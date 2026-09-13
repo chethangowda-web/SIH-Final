@@ -281,6 +281,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _lockForecast() async {
+    if (_apiService.authSession.role == 'FIELD_OFFICER') {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Row(
+            children: [
+              Icon(Icons.shield_outlined, color: Colors.orange, size: 22),
+              SizedBox(width: 8),
+              Text('Access Restricted (RBAC)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: const Text(
+            'Separation of Duties Enforced:\n\nField Officers are limited to physical loading bay & gatepass clearance operations. Policy decisions like Locking Aggregated Demand or Overriding Quotas require District Supply Officer (DSO) or Admin credentials.',
+            style: TextStyle(fontSize: 13, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Understood', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     setState(() => _isActionExecuting = true);
     try {
       final res = await _apiService.closeChoiceWindow();
@@ -1334,6 +1361,77 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
         const SizedBox(width: 8),
+
+        // Official Role Badge (DSO, Field Officer, Auditor)
+        Builder(
+          builder: (context) {
+            final role = _apiService.authSession.role;
+            if (role == 'FIELD_OFFICER') {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFFF59E0B)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.local_shipping_outlined, size: 12, color: Color(0xFFB45309)),
+                    SizedBox(width: 4),
+                    Text(
+                      'FIELD OFFICER (LOADING BAY)',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF92400E)),
+                    ),
+                  ],
+                ),
+              );
+            } else if (role == 'DSO') {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF22C55E)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.admin_panel_settings_outlined, size: 12, color: Color(0xFF15803D)),
+                    SizedBox(width: 4),
+                    Text(
+                      'DSO (DISTRICT COMMAND)',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF166534)),
+                    ),
+                  ],
+                ),
+              );
+            } else if (role == 'AUDITOR') {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3E8FF),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFFA855F7)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.verified_user_outlined, size: 12, color: Color(0xFF7E22CE)),
+                    SizedBox(width: 4),
+                    Text(
+                      'STATE VIGILANCE AUDITOR',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF6B21A8)),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+        const SizedBox(width: 8),
+
 
         // Refresh
         IconButton(

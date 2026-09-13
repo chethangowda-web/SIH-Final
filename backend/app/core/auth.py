@@ -173,22 +173,39 @@ def check_admin_access(request: Request, current_user: dict = Depends(get_curren
                 detail="System reset is restricted to ADMIN role."
             )
             
-    # 2. Mutation requests (POST, PUT, DELETE) require DSO or ADMIN
+    # 2. Gatepass physical stage advancement & verification allows FIELD_OFFICER, DSO, and ADMIN
+    elif "/admin/gatepass" in path:
+        if method in ["POST", "PUT", "DELETE"]:
+            if current_user["role"] not in ["FIELD_OFFICER", "DSO", "ADMIN"]:
+                logger.warning("Access Forbidden: user '%s' attempted %s %s without FIELD_OFFICER/DSO/ADMIN role", current_user.get("username"), method, path)
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Gatepass operations are restricted to FIELD_OFFICER, DSO, or ADMIN roles. Current: {current_user['role']}."
+                )
+        else:
+            if current_user["role"] not in ["FIELD_OFFICER", "DSO", "ADMIN", "AUDITOR"]:
+                logger.warning("Access Forbidden: user '%s' attempted GET %s without FIELD_OFFICER/DSO/ADMIN/AUDITOR role", current_user.get("username"), path)
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Access restricted to FIELD_OFFICER, DSO, ADMIN, or AUDITOR roles. Current: {current_user['role']}."
+                )
+
+    # 3. Policy / Forecast / Quota Mutation requests (POST, PUT, DELETE) require DSO or ADMIN (FIELD_OFFICER is blocked)
     elif method in ["POST", "PUT", "DELETE"]:
         if current_user["role"] not in ["DSO", "ADMIN"]:
-            logger.warning("Access Forbidden: user '%s' attempted %s %s without DSO/ADMIN role", current_user.get("username"), method, path)
+            logger.warning("Access Forbidden: user '%s' (role '%s') attempted administrative mutation %s %s", current_user.get("username"), current_user["role"], method, path)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Mutation actions are restricted to DSO or ADMIN roles. Current: {current_user['role']}."
+                detail=f"District forecast and policy mutations are restricted to DSO or ADMIN roles. Field Officers have physical gatepass scope only (Current: {current_user['role']})."
             )
             
-    # 3. Read requests (GET) require DSO, ADMIN, or AUDITOR
+    # 4. Read requests (GET) require DSO, ADMIN, AUDITOR, or FIELD_OFFICER
     else:
-        if current_user["role"] not in ["DSO", "ADMIN", "AUDITOR"]:
-            logger.warning("Access Forbidden: user '%s' attempted GET %s without DSO/ADMIN/AUDITOR role", current_user.get("username"), path)
+        if current_user["role"] not in ["DSO", "ADMIN", "AUDITOR", "FIELD_OFFICER"]:
+            logger.warning("Access Forbidden: user '%s' attempted GET %s without authorized role", current_user.get("username"), path)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access restricted to DSO, ADMIN, or AUDITOR roles. Current: {current_user['role']}."
+                detail=f"Access restricted to authorized departmental roles. Current: {current_user['role']}."
             )
     return current_user
 

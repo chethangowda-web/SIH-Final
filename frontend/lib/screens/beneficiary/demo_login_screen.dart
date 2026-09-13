@@ -769,7 +769,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           controller: _adminUsernameController,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'admin_user',
+            hintText: 'dso_user / field_officer_user',
             prefixIcon: Icon(Icons.person_outline_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
@@ -806,6 +806,23 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ),
         ),
 
+        const SizedBox(height: 10),
+        Text(
+          'Quick Role Preset (One-Click Fill):',
+          style: TextStyle(fontSize: isSmall ? 10.5 : 11.5, fontWeight: FontWeight.w700, color: _slate500),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _buildRolePresetChip('DSO Officer', 'dso_user', 'dso_pass', Icons.admin_panel_settings_outlined, isSmall),
+            _buildRolePresetChip('Field Loading Officer', 'field_officer_user', 'field_pass', Icons.local_shipping_outlined, isSmall),
+            _buildRolePresetChip('State Auditor', 'auditor_user', 'auditor_pass', Icons.verified_user_outlined, isSmall),
+            _buildRolePresetChip('Super Admin', 'admin_user', 'admin_pass', Icons.security_rounded, isSmall),
+          ],
+        ),
+
         SizedBox(height: isSmall ? 12 : 16),
 
         ElevatedButton(
@@ -824,6 +841,43 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       ],
     );
   }
+
+  Widget _buildRolePresetChip(String label, String username, String password, IconData icon, bool isSmall) {
+    final isCurrent = _adminUsernameController.text.trim() == username;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _adminUsernameController.text = username;
+          _adminPasswordController.text = password;
+        });
+      },
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isCurrent ? _govNavy.withValues(alpha: 0.1) : _slate100,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isCurrent ? _govNavy : _slate200, width: isCurrent ? 1.2 : 0.8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: isSmall ? 12 : 13, color: isCurrent ? _govNavy : _slate700),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: isSmall ? 10.5 : 11.5,
+                fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w600,
+                color: isCurrent ? _govNavy : _slate700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   // ════════════════════════════════════════════════════════════════
   // DEMO PERSONAS TAB (Responsive)

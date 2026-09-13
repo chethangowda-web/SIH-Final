@@ -421,6 +421,7 @@ def seed_all_data(recreate=False):
     users_data = [
         ("admin_user", hash_password("admin_pass"), "ADMIN", None),
         ("dso_user", hash_password("dso_pass"), "DSO", None),
+        ("field_officer_user", hash_password("field_pass"), "FIELD_OFFICER", None),
         ("auditor_user", hash_password("auditor_pass"), "AUDITOR", None)
     ]
     

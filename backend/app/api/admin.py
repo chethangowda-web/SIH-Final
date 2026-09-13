@@ -1429,7 +1429,8 @@ def get_or_create_truck_gatepass(
 def advance_gatepass_stage(
     gatepass_id: str,
     target_status: str = Query(..., description="Target stage (MANIFEST_LOCKED, GATEPASS_ISSUED, WAREHOUSE_VERIFIED, VEHICLE_LOADED, DISPATCH_CONFIRMED)"),
-    db: sqlite3.Connection = Depends(get_db)
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Advance gatepass through the 5-stage pre-dispatch physical handshake pipeline."""
     try:
@@ -1440,17 +1441,20 @@ def advance_gatepass_stage(
 
         res = gatepass_engine.advance_gatepass_status(db, gatepass_id, target_status)
 
+        actor_name = current_user.get("username", "field_officer_user")
+        actor_role = current_user.get("role", "FIELD_OFFICER")
+
         if target_status == "DISPATCH_CONFIRMED":
             workflow_manager.transition_state(
                 db, cycle_id, WorkflowState.DISPATCHED,
-                "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
-                f"Gatepass {gatepass_id} advanced to DISPATCH_CONFIRMED. Truck dispatched.", force=True
+                actor_name, actor_role,
+                f"Gatepass {gatepass_id} advanced to DISPATCH_CONFIRMED by {actor_name} ({actor_role}). Truck dispatched.", force=True
             )
         else:
             workflow_manager.transition_state(
                 db, cycle_id, WorkflowState.GATEPASS_READY,
-                "District Supply Officer (Demo Admin)", "DISTRICT_SUPPLY_OFFICER",
-                f"Gatepass {gatepass_id} advanced to {target_status}.", force=True
+                actor_name, actor_role,
+                f"Gatepass {gatepass_id} advanced to {target_status} by {actor_name} ({actor_role}).", force=True
             )
         return res
     except ValueError as e:

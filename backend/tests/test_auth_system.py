@@ -85,3 +85,65 @@ def test_authenticated_me_endpoint():
     data = response.json()
     assert data["username"] == "admin_user"
     assert data["role"] == "ADMIN"
+
+def test_role_based_least_privilege_field_officer():
+    """Verify Field Officer has gatepass rights but is blocked from forecast/policy overrides."""
+    # 1. Login as Field Officer
+    login_res = client.post(
+        "/api/auth/login",
+        json={"username": "field_officer_user", "password": "field_pass"}
+    )
+    assert login_res.status_code == 200
+    fo_token = login_res.json()["access_token"]
+    assert login_res.json()["role"] == "FIELD_OFFICER"
+
+    headers = {"Authorization": f"Bearer {fo_token}"}
+
+    # 2. Field Officer CAN read gatepasses
+    gp_res = client.get("/api/admin/gatepasses?cycle_id=2026-09", headers=headers)
+    assert gp_res.status_code == 200
+
+    # 3. Field Officer CANNOT lock forecast (Least privilege -> 403 Forbidden)
+    lock_res = client.post(
+        "/api/admin/forecast/lock",
+        json={"cycle_id": "2026-09", "reason": "Attempt by field officer"},
+        headers=headers
+    )
+    assert lock_res.status_code == 403
+    assert "restricted to DSO or ADMIN" in lock_res.json()["detail"]
+
+    # 4. Field Officer CANNOT override quotas (Least privilege -> 403 Forbidden)
+    override_res = client.post(
+        "/api/admin/fps/FPS-KA-BLR-001/override",
+        json={"override_rice_kg": 9999.0, "reason": "Unauthorized"},
+        headers=headers
+    )
+    assert override_res.status_code == 403
+
+def test_role_based_dso_and_auditor_permissions():
+    """Verify DSO can lock forecasts and Auditor has read-only access."""
+    # DSO login
+    dso_login = client.post(
+        "/api/auth/login",
+        json={"username": "dso_user", "password": "dso_pass"}
+    )
+    assert dso_login.status_code == 200
+    dso_token = dso_login.json()["access_token"]
+    assert dso_login.json()["role"] == "DSO"
+
+    # Auditor login
+    aud_login = client.post(
+        "/api/auth/login",
+        json={"username": "auditor_user", "password": "auditor_pass"}
+    )
+    assert aud_login.status_code == 200
+    aud_token = aud_login.json()["access_token"]
+    assert aud_login.json()["role"] == "AUDITOR"
+
+    # Auditor CANNOT advance gatepass (Read-only -> 403)
+    aud_advance = client.post(
+        "/api/admin/gatepass/GP-2026-09-001/advance?target_status=WAREHOUSE_VERIFIED",
+        headers={"Authorization": f"Bearer {aud_token}"}
+    )
+    assert aud_advance.status_code == 403
+

@@ -533,6 +533,19 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
     );
     """)
 
+    # Seed core system roles if not present
+    from app.core.auth import hash_password
+    default_system_users = [
+        ("admin_user", hash_password("admin_pass"), "ADMIN", None),
+        ("dso_user", hash_password("dso_pass"), "DSO", None),
+        ("field_officer_user", hash_password("field_pass"), "FIELD_OFFICER", None),
+        ("auditor_user", hash_password("auditor_pass"), "AUDITOR", None),
+    ]
+    cursor.executemany("""
+    INSERT OR IGNORE INTO users (username, password_hash, role, beneficiary_id)
+    VALUES (?, ?, ?, ?);
+    """, default_system_users)
+
 
 def _migration_002_scarcity_allocation(cursor: sqlite3.Cursor) -> None:
     """002: AI Stockout Prediction & Fair-Share Scarcity Allocation Engine."""
