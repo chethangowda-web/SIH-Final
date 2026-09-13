@@ -638,6 +638,16 @@ def simulate_channel_intent(
     """, (payload.beneficiary_card_id.strip(), payload.cycle_id.strip(), intended_fps, commodity, qty))
     db.commit()
 
+    # Trigger real Twilio notification if configured
+    from app.services.notification_engine import notification_engine
+    trail_phone = settings.TWILIO_PHONE_NUMBER or "+918050442666"
+    msg_body = f"PDS DemandSync Intent Confirmed: Card {payload.beneficiary_card_id} declared {qty}kg {commodity} for FPS {intended_fps} (Cycle {payload.cycle_id})."
+    
+    if payload.channel.upper() == "WHATSAPP":
+        notification_engine.service.send_whatsapp(trail_phone, "Beneficiary", msg_body)
+    else:
+        notification_engine.service.send_sms(trail_phone, "Beneficiary", msg_body)
+
     return {
         "status": "success",
         "channel": payload.channel,
@@ -648,7 +658,8 @@ def simulate_channel_intent(
             "declared_quantity_kg": qty,
             "confidence_score": 0.95
         },
-        "response_message": f"[{payload.channel} GATEWAY] Intent registered successfully! Confirmation SMS sent to beneficiary."
+        "response_message": f"[{payload.channel} GATEWAY] Intent registered successfully! Real notification dispatched via Twilio to {trail_phone}."
     }
+
 
 
