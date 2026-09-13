@@ -21,7 +21,7 @@ class WhatsappUssdSimulatorDialog extends StatefulWidget {
 class _WhatsappUssdSimulatorDialogState extends State<WhatsappUssdSimulatorDialog> {
   String _selectedChannel = 'WHATSAPP';
   final TextEditingController _cardIdController = TextEditingController(text: 'RC-KA-000002');
-  final TextEditingController _messageController = TextEditingController(text: 'RICE 20KG FPS-KA-BLR-013');
+  final TextEditingController _messageController = TextEditingController(text: 'RICE 20KG FPS-KA-BAG-0001');
   bool _isSending = false;
   String? _responseLog;
 
@@ -40,7 +40,7 @@ class _WhatsappUssdSimulatorDialogState extends State<WhatsappUssdSimulatorDialo
           'channel': _selectedChannel,
           'beneficiary_card_id': _cardIdController.text.trim(),
           'raw_message_text': _messageController.text.trim(),
-          'cycle_id': '2026-09',
+          'cycle_id': '2026-10',
         }),
       );
 
@@ -167,7 +167,7 @@ class _WhatsappUssdSimulatorDialogState extends State<WhatsappUssdSimulatorDialo
                   onPressed: () {
                     setState(() {
                       _selectedChannel = 'WHATSAPP';
-                      _messageController.text = 'RICE 20KG FPS-KA-BLR-013';
+                      _messageController.text = 'RICE 20KG FPS-KA-BAG-0001';
                     });
                   },
                 ),
@@ -241,7 +241,7 @@ class _WhatsappUssdSimulatorDialogState extends State<WhatsappUssdSimulatorDialo
             if (channel == 'USSD') {
               _messageController.text = '*99*14#';
             } else if (channel == 'WHATSAPP') {
-              _messageController.text = 'RICE 20KG FPS-KA-BLR-013';
+              _messageController.text = 'RICE 20KG FPS-KA-BAG-0001';
             }
           });
         }
