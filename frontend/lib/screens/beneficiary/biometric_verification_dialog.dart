@@ -91,7 +91,7 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
     } else {
       setState(() {
         _state = BiometricVerificationState.failed;
-        _failureReason = 'Biometric biometric-minutiae mismatch (Confidence 38% < 85% threshold) or quota lock. Please re-authenticate or report to District Supply Office.';
+        _failureReason = 'Security token authentication mismatch or quota lock. Please re-authenticate or report to District Supply Office.';
       });
     }
   }
@@ -145,7 +145,7 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
                         color: Colors.white.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.fingerprint_rounded, color: Colors.white, size: 24),
+                      child: const Icon(Icons.security_rounded, color: Colors.white, size: 24),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -163,7 +163,7 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            isHome ? 'Doorstep Assisted Handover Verification' : 'Fair Price Shop ePoS Terminal Verification',
+                            isHome ? 'Doorstep Digital Handover Verification' : 'Fair Price Shop ePoS Terminal Verification',
                             style: const TextStyle(fontSize: 11, color: Colors.white70),
                           ),
                         ],
@@ -251,7 +251,7 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
                     ),
                     const SizedBox(height: 20),
 
-                    // Biometric Scanner Visualizer
+                    // Security Handover Visualizer
                     Center(
                       child: ScaleTransition(
                         scale: _state == BiometricVerificationState.scanning ? _pulseAnimation : const AlwaysStoppedAnimation(1.0),
@@ -272,7 +272,7 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
                           ),
                           child: Icon(
                             _getScannerIcon(),
-                            size: 52,
+                            size: 48,
                             color: _getScannerIconColor(),
                           ),
                         ),
@@ -313,7 +313,7 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
                       child: Column(
                         children: [
                           _buildDiagnosticRow(
-                            '1. Citizen Identity & Aadhaar Demographic Match',
+                            '1. Citizen Identity & ePoS Token Authentication',
                             _state == BiometricVerificationState.verified || _state == BiometricVerificationState.distributed
                                 ? 'VERIFIED ✓'
                                 : (_state == BiometricVerificationState.failed ? 'MISMATCH ✕' : 'PENDING'),
@@ -346,7 +346,7 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
                     ),
                     const SizedBox(height: 20),
 
-                    // Interactive Simulation Triggers (Allows testing both Success and Failure)
+                    // Interactive Simulation Triggers
                     if (_state == BiometricVerificationState.initial || _state == BiometricVerificationState.failed || _state == BiometricVerificationState.scanning) ...[
                       const Text(
                         'DEMO VERIFICATION CONTROLS',
@@ -363,7 +363,7 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
                                 : () => _simulateScan(shouldSucceed: true),
                             icon: const Icon(Icons.check_circle_outline, size: 16),
                             label: const Text(
-                              'Simulate Match (✓)',
+                              'Simulate Token Match (✓)',
                               style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
                             ),
                             style: ElevatedButton.styleFrom(
@@ -381,7 +381,7 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
                                 : () => _simulateScan(shouldSucceed: false),
                             icon: const Icon(Icons.cancel_outlined, size: 16),
                             label: const Text(
-                              'Simulate Mismatch (✕)',
+                              'Simulate Token Mismatch (✕)',
                               style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
                             ),
                             style: OutlinedButton.styleFrom(
@@ -514,8 +514,9 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
   IconData _getScannerIcon() {
     switch (_state) {
       case BiometricVerificationState.initial:
+        return Icons.security_rounded;
       case BiometricVerificationState.scanning:
-        return Icons.fingerprint_rounded;
+        return Icons.sync_lock_rounded;
       case BiometricVerificationState.verified:
       case BiometricVerificationState.distributed:
         return Icons.verified_user_rounded;
@@ -541,30 +542,30 @@ class _BiometricVerificationDialogState extends State<BiometricVerificationDialo
   String _getStatusHeading() {
     switch (_state) {
       case BiometricVerificationState.initial:
-        return 'Ready for Biometric Thumb Scan';
+        return tr('biometric.status_initial');
       case BiometricVerificationState.scanning:
-        return 'Scanning & Verifying Demographics...';
+        return tr('biometric.status_scanning');
       case BiometricVerificationState.verified:
-        return '✓ Beneficiary Verified & Entitlement Available';
+        return tr('biometric.status_verified');
       case BiometricVerificationState.failed:
-        return '✕ Verification Failed — Distribution Locked';
+        return tr('biometric.status_failed');
       case BiometricVerificationState.distributed:
-        return '✓ Ration Handover Authorized & Recorded';
+        return tr('biometric.status_distributed');
     }
   }
 
   String _getStatusSubheading() {
     switch (_state) {
       case BiometricVerificationState.initial:
-        return tr('biometric.scan_instruction');
+        return tr('biometric.desc_initial');
       case BiometricVerificationState.scanning:
-        return 'Querying state biometric ePoS authentication service...';
+        return tr('biometric.desc_scanning');
       case BiometricVerificationState.verified:
-        return 'Identity matches registered household. Foodgrain distribution is unlocked.';
+        return tr('biometric.desc_verified');
       case BiometricVerificationState.failed:
-        return _failureReason ?? tr('biometric.failure_reason');
+        return _failureReason ?? tr('biometric.desc_failed');
       case BiometricVerificationState.distributed:
-        return 'Foodgrain inventory depleted from active quota and recorded in institutional ledger.';
+        return tr('biometric.desc_distributed');
     }
   }
 

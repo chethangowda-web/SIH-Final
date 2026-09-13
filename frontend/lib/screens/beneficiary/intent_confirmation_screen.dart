@@ -392,13 +392,13 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
               const Divider(height: 20),
 
               _buildReviewRow(
-                label: 'BIOMETRIC HANDOVER REQUIREMENT',
+                label: 'DIGITAL HANDOVER REQUIREMENT',
                 value: isHomeDelivery
-                    ? 'Beneficiary thumb verification required on arrival before doorstep distribution'
-                    : 'Biometric thumb verification required at FPS counter ePoS terminal before handover',
+                    ? 'Digital handover token authentication required on arrival before doorstep distribution'
+                    : 'Digital handover token authentication required at FPS counter ePoS terminal before handover',
                 badgeText: 'MANDATORY',
                 badgeColor: const Color(0xFFB45309),
-                icon: Icons.fingerprint_rounded,
+                icon: Icons.security_rounded,
               ),
               const Divider(height: 20),
 
@@ -782,7 +782,7 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
               _buildReceiptRow('Fortified Rice', '${(widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0)).toStringAsFixed(1)} ${tr('commodity.kg')} (₹0.00 Free)'),
               _buildReceiptRow('Whole Wheat', '${(widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0)).toStringAsFixed(1)} ${tr('commodity.kg')} (₹0.00 Free)'),
               _buildReceiptRow('Total Delivery Weight', '${((widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0)) + (widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0))).toStringAsFixed(1)} ${tr('commodity.kg')}'),
-              _buildReceiptRow('Biometric Verification', 'REQUIRED AT HANDOVER (ePoS / Mobile)', isHighlight: true),
+              _buildReceiptRow('Handover Verification', 'REQUIRED AT HANDOVER (ePoS / Token)', isHighlight: true),
 
               if (isHomeDelivery)
                 _buildReceiptRow('Doorstep Logistics Fee', '₹${widget.transportFeeInr.toStringAsFixed(2)}', isHighlight: true),

@@ -298,8 +298,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify Dialog Elements
-      expect(find.text('FPS COUNTER BIOMETRIC VERIFICATION'), findsOneWidget);
-      expect(find.text('1. Citizen Identity & Aadhaar Demographic Match'), findsOneWidget);
+      expect(find.text('FPS COUNTER DIGITAL HANDOVER VERIFICATION'), findsOneWidget);
+      expect(find.text('1. Citizen Identity & ePoS Token Authentication'), findsOneWidget);
       expect(find.text('2. Ration Card Active & Non-Suspended'), findsOneWidget);
       expect(find.text('3. Available Household Quota Ceiling'), findsOneWidget);
 
@@ -308,14 +308,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 700));
       await tester.pumpAndSettle();
 
-      expect(find.text('✕ Verification Failed — Distribution Locked'), findsOneWidget);
+      expect(find.text('AUTHENTICATION FAILED • DISTRIBUTION LOCKED'), findsOneWidget);
 
       // 2. Test Success / Verified Match Simulation
       await tester.tap(find.byKey(const ValueKey('btn_simulate_success')));
       await tester.pump(const Duration(milliseconds: 700));
       await tester.pumpAndSettle();
 
-      expect(find.text('✓ Beneficiary Verified & Entitlement Available'), findsOneWidget);
+      expect(find.text('AUTHENTICATION SUCCESSFUL • AUTHORIZED'), findsOneWidget);
       expect(find.byKey(const ValueKey('btn_distribute_foodgrain')), findsOneWidget);
 
       // 3. Confirm Distribution Handover

@@ -2227,7 +2227,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
               Row(
                 children: [
                   Icon(
-                    _isBiometricVerified ? Icons.verified_user_rounded : Icons.fingerprint_rounded,
+                    _isBiometricVerified ? Icons.verified_user_rounded : Icons.security_rounded,
                     color: _isBiometricVerified ? const Color(0xFF15803D) : AppConstants.accentBlue,
                     size: 18,
                   ),
@@ -2235,7 +2235,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                   Text(
                     _isBiometricVerified
                         ? tr('biometric.distributed_badge')
-                        : (isHome ? 'DOORSTEP BIOMETRIC VERIFICATION' : 'FPS COUNTER BIOMETRIC VERIFICATION'),
+                        : (isHome ? 'DOORSTEP DIGITAL HANDOVER VERIFICATION' : 'FPS COUNTER DIGITAL HANDOVER VERIFICATION'),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
@@ -2265,7 +2265,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           const SizedBox(height: 6),
           Text(
             _isBiometricVerified
-                ? 'Identity verified via simulated biometric ePoS terminal. Foodgrain successfully handed over and quota deducted.'
+                ? 'Identity verified via digital ePoS token verification. Foodgrain successfully handed over and quota deducted.'
                 : (isHome ? tr('biometric.doorstep_banner') : tr('biometric.fps_banner')),
             style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary, height: 1.3),
           ),
@@ -2277,7 +2277,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
               child: ElevatedButton.icon(
                 key: const ValueKey('btn_start_biometric_verification'),
                 onPressed: () => _openBiometricVerificationDialog(order),
-                icon: const Icon(Icons.fingerprint_rounded, size: 16),
+                icon: const Icon(Icons.security_rounded, size: 16),
                 label: Text(
                   isHome ? tr('biometric.btn_verify_home') : tr('biometric.btn_verify_fps'),
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
