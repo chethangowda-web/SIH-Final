@@ -63,7 +63,7 @@ def run_all_tests():
 
     # 5. Citizen OTP Send
     total_count += 1
-    r_otp = client.post("/api/auth/citizen/send-otp", json={"card_id": "BEN-KA-0005"})
+    r_otp = client.post("/api/auth/citizen/send-otp", json={"card_id": "RC-KA-000001"})
     if r_otp.status_code == 200 and "demo_otp_code" in r_otp.json():
         passed_count += 1
         log_test("POST /api/auth/citizen/send-otp", True, f"otp={r_otp.json().get('demo_otp_code')}")
@@ -72,7 +72,7 @@ def run_all_tests():
 
     # 6. Citizen OTP Verify
     total_count += 1
-    r_verify = client.post("/api/auth/citizen/verify-otp", json={"card_id": "BEN-KA-0005", "otp_code": "123456"})
+    r_verify = client.post("/api/auth/citizen/verify-otp", json={"card_id": "RC-KA-000001", "otp_code": "123456"})
     citizen_token = ""
     if r_verify.status_code == 200 and "access_token" in r_verify.json():
         passed_count += 1
@@ -94,27 +94,29 @@ def run_all_tests():
     # 8. FPS Master List (Authenticated)
     total_count += 1
     r_fps = client.get("/api/fps", headers={"Authorization": f"Bearer {admin_token}"})
+    first_fps_id = "FPS-KA-BAG-0001"
     if r_fps.status_code == 200 and len(r_fps.json()) > 0:
         passed_count += 1
+        first_fps_id = r_fps.json()[0]["fps_id"]
         log_test("GET /api/fps", True, f"count={len(r_fps.json())} shops")
     else:
         log_test("GET /api/fps", False, f"status={r_fps.status_code}")
 
     # 9. Beneficiary Master Search
     total_count += 1
-    r_ben = client.get("/api/beneficiaries/BEN-KA-0005", headers={"Authorization": f"Bearer {citizen_token}"})
+    r_ben = client.get("/api/beneficiaries/RC-KA-000001", headers={"Authorization": f"Bearer {citizen_token}"})
     if r_ben.status_code == 200:
         passed_count += 1
-        log_test("GET /api/beneficiaries/BEN-KA-0005", True, f"name={r_ben.json().get('name_for_demo')}")
+        log_test("GET /api/beneficiaries/RC-KA-000001", True, f"name={r_ben.json().get('name_for_demo')}")
     else:
-        log_test("GET /api/beneficiaries/BEN-KA-0005", False, f"status={r_ben.status_code}")
+        log_test("GET /api/beneficiaries/RC-KA-000001", False, f"status={r_ben.status_code}")
 
     # 10. Intent Signal Submission (Portability intent)
     total_count += 1
     intent_payload = {
-        "beneficiary_id": "BEN-KA-0005",
-        "cycle_id": "2026-09",
-        "intended_fps_id": "FPS-KA-BLR-013",
+        "beneficiary_id": "RC-KA-000001",
+        "cycle_id": "2026-10",
+        "intended_fps_id": first_fps_id,
         "commodity": "Rice",
         "declared_quantity_kg": 20.0,
         "delivery_mode": "FPS_COLLECTION"
@@ -125,7 +127,7 @@ def run_all_tests():
         log_test("POST /api/intent", True, f"status={r_int.status_code}, fps={r_int.json().get('intended_fps_id')}")
     else:
         # Check if already submitted
-        r_get_int = client.get("/api/intents?beneficiary_id=BEN-KA-0005&cycle_id=2026-09", headers={"Authorization": f"Bearer {citizen_token}"})
+        r_get_int = client.get(f"/api/intents?beneficiary_id=RC-KA-000001&cycle_id=2026-10", headers={"Authorization": f"Bearer {citizen_token}"})
         if r_get_int.status_code == 200:
             passed_count += 1
             log_test("POST /api/intent (Already Registered)", True, f"intents_verified={len(r_get_int.json())}")
@@ -134,7 +136,7 @@ def run_all_tests():
 
     # 11. AI Anomaly & Fraud Scan
     total_count += 1
-    r_anom = client.get("/api/anomaly/scan?cycle_id=2026-09")
+    r_anom = client.get("/api/anomaly/scan?cycle_id=2026-10")
     if r_anom.status_code == 200:
         passed_count += 1
         log_test("GET /api/anomaly/scan", True, f"status={r_anom.json().get('status')}, anomalies={r_anom.json().get('anomalies_detected')}")
@@ -153,7 +155,7 @@ def run_all_tests():
 
     # 13. GIS District Heatmap
     total_count += 1
-    r_map = client.get("/api/routing/gis-heatmap?cycle_id=2026-09")
+    r_map = client.get("/api/routing/gis-heatmap?cycle_id=2026-10")
     if r_map.status_code == 200 and "points" in r_map.json():
         passed_count += 1
         log_test("GET /api/routing/gis-heatmap", True, f"points={r_map.json().get('total_fps_nodes')}, high_risk={r_map.json().get('high_risk_nodes')}")
@@ -162,7 +164,7 @@ def run_all_tests():
 
     # 14. Printable Allocation Order Report
     total_count += 1
-    r_rep = client.get("/api/reports/allocation-order?cycle_id=2026-09")
+    r_rep = client.get("/api/reports/allocation-order?cycle_id=2026-10")
     if r_rep.status_code == 200 and "GOVERNMENT OF KARNATAKA" in r_rep.text:
         passed_count += 1
         log_test("GET /api/reports/allocation-order", True, f"HTML size={len(r_rep.text)} bytes")
@@ -184,9 +186,9 @@ def run_all_tests():
         "/api/intent/simulate-channel",
         json={
             "channel": "WHATSAPP",
-            "beneficiary_card_id": "BEN-KA-0005",
-            "raw_message_text": "RICE 20KG FPS-KA-BLR-013",
-            "cycle_id": "2026-09"
+            "beneficiary_card_id": "RC-KA-000001",
+            "raw_message_text": f"RICE 20KG {first_fps_id}",
+            "cycle_id": "2026-10"
         },
         headers={"Authorization": f"Bearer {citizen_token}"}
     )
@@ -202,8 +204,8 @@ def run_all_tests():
         "/api/feedback/submit",
         json={
             "sender_type": "BENEFICIARY",
-            "sender_id": "BEN-KA-0005",
-            "target_fps_id": "FPS-KA-BLR-001",
+            "sender_id": "RC-KA-000001",
+            "target_fps_id": first_fps_id,
             "category": "SHORT_WEIGHT",
             "subject": "Delivery Quantity Discrepancy",
             "message": "Received 18 kg instead of 20 kg."
@@ -221,10 +223,10 @@ def run_all_tests():
     r_gps = client.post(
         "/api/routing/verify-arrival",
         json={
-            "truck_id": "DEMO-KA-04-E-1021",
-            "target_fps_id": "FPS-KA-BLR-001",
-            "current_lat": 13.0031,
-            "current_lon": 77.5643
+            "truck_id": "TRK-KA-BAG-001",
+            "target_fps_id": first_fps_id,
+            "current_lat": 16.18,
+            "current_lon": 75.70
         }
     )
     if r_gps.status_code == 200 and r_gps.json().get("geofence_arrival_verified") is True:
@@ -236,32 +238,29 @@ def run_all_tests():
     # 19. Officer Manual Override
     total_count += 1
     r_ovr = client.post(
-        "/api/admin/fps/FPS-KA-BLR-001/override",
+        f"/api/admin/fps/{first_fps_id}/override",
         json={
-            "override_rice_kg": 4600.0,
-            "override_wheat_kg": 1500.0,
-            "safety_buffer_pct": 15.0,
-            "emergency_priority": False
+            "cycle_id": "2026-10",
+            "override_reason": "Flood warning buffer allocation (+250 kg)",
+            "manual_dispatch_kg": 1500.0,
+            "commodity": "Rice"
         },
         headers={"Authorization": f"Bearer {admin_token}"}
     )
     if r_ovr.status_code == 200 and r_ovr.json().get("status") == "success":
         passed_count += 1
-        log_test("POST /api/admin/fps/{id}/override", True, f"fps={r_ovr.json().get('fps_id')}")
+        log_test(f"POST /api/admin/fps/{first_fps_id}/override", True, f"adjusted_kg={r_ovr.json().get('adjusted_dispatch_kg')}")
     else:
-        log_test("POST /api/admin/fps/{id}/override", False, f"status={r_ovr.status_code}")
+        log_test(f"POST /api/admin/fps/{first_fps_id}/override", False, f"status={r_ovr.status_code}")
 
-    # 20. AI Pre-Dispatch Stock Headroom Check
+    # 20. Evaluation & Bias Metrics
     total_count += 1
-    r_stock = client.get("/api/admin/stock-headroom-check?cycle_id=2026-09", headers={"Authorization": f"Bearer {admin_token}"})
-    if r_stock.status_code == 200 and "ai_status" in r_stock.json():
+    r_eval = client.get("/api/admin/evaluation", headers={"Authorization": f"Bearer {admin_token}"})
+    if r_eval.status_code == 200 and "model_wape" in r_eval.json():
         passed_count += 1
-        log_test("GET /api/admin/stock-headroom-check", True, f"ai_status={r_stock.json().get('ai_status')}")
+        log_test("GET /api/admin/evaluation", True, f"wape={r_eval.json().get('model_wape')}%, rmse={r_eval.json().get('model_rmse')}")
     else:
-        log_test("GET /api/admin/stock-headroom-check", False, f"status={r_stock.status_code}")
-
-
-
+        log_test("GET /api/admin/evaluation", False, f"status={r_eval.status_code}")
 
     print("=" * 80)
     print(f"SUMMARY: {passed_count}/{total_count} API Endpoint Tests PASSED ({passed_count/total_count*100:.1f}%)")
