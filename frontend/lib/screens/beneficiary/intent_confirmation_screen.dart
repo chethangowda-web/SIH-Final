@@ -158,10 +158,9 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
   // STEP INDICATOR
   Widget _buildStepIndicator({required int activeStep}) {
     final steps = [
-      {'num': '1', 'title': tr('intent.step_service')},
-      {'num': '2', 'title': tr('intent.step_fps')},
-      {'num': '3', 'title': tr('intent.step_review')},
-      {'num': '4', 'title': tr('intent.step_confirm')},
+      {'num': '1', 'title': tr('intent.step_fps')},
+      {'num': '2', 'title': tr('intent.step_review')},
+      {'num': '3', 'title': tr('intent.step_confirm')},
     ];
 
     return Container(
@@ -254,8 +253,8 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Stepper: Step 3 Active
-        _buildStepIndicator(activeStep: 3),
+        // Stepper: Step 2 Active
+        _buildStepIndicator(activeStep: 2),
         const SizedBox(height: AppConstants.space20),
 
         // Section Title
@@ -690,8 +689,8 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Stepper: All 4 Steps Completed
-        _buildStepIndicator(activeStep: 4),
+        // Stepper: All Steps Completed
+        _buildStepIndicator(activeStep: 3),
         const SizedBox(height: AppConstants.space20),
 
         // Success Verified Badge

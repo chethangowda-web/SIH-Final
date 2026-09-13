@@ -1189,126 +1189,43 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Stepper & Live Formula Row
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 420;
-              final stepper = Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppConstants.cardBorder),
+          // Read-only entitlement formula card (Government Statutory Quota - Fixed)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFBBF7D0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr('members.formula', params: {
+                    'count': '$_eligibleMembersCount',
+                    'max': maxEntitlement.toStringAsFixed(1),
+                  }),
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
                 ),
-                child: Row(
-                  mainAxisSize: isNarrow ? MainAxisSize.max : MainAxisSize.min,
-                  mainAxisAlignment: isNarrow ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
-                  children: [
-                    IconButton(
-                      key: const ValueKey('btn_decrement_members'),
-                      icon: const Icon(Icons.remove_rounded, size: 18),
-                      onPressed: _eligibleMembersCount > 1
-                          ? () {
-                              setState(() {
-                                _eligibleMembersCount--;
-                                _remainingBalanceKg = (_eligibleMembersCount * 5.0 - _distributedQuantityKg).clamp(0.0, _eligibleMembersCount * 5.0);
-                              });
-                            }
-                          : null,
-                      tooltip: 'Decrease eligible members',
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      child: Text(
-                        '$_eligibleMembersCount',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy),
-                      ),
-                    ),
-                    IconButton(
-                      key: const ValueKey('btn_increment_members'),
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      onPressed: _eligibleMembersCount < 8
-                          ? () {
-                              setState(() {
-                                _eligibleMembersCount++;
-                                _remainingBalanceKg = (_eligibleMembersCount * 5.0 - _distributedQuantityKg).clamp(0.0, _eligibleMembersCount * 5.0);
-                              });
-                            }
-                          : null,
-                      tooltip: 'Increase eligible members',
-                    ),
-                  ],
+                const SizedBox(height: 3),
+                Text(
+                  'Combined Quota: ${(maxEntitlement * 0.8).toStringAsFixed(1)} kg Rice + ${(maxEntitlement * 0.2).toStringAsFixed(1)} kg Wheat',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF166534), fontWeight: FontWeight.w600),
                 ),
-              );
-
-              final calcPill = Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFBBF7D0)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tr('members.formula', params: {
-                        'count': '$_eligibleMembersCount',
-                        'max': maxEntitlement.toStringAsFixed(1),
-                      }),
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Combined Quota: ${(maxEntitlement * 0.8).toStringAsFixed(1)} kg Rice + ${(maxEntitlement * 0.2).toStringAsFixed(1)} kg Wheat',
-                      style: const TextStyle(fontSize: 10.5, color: Color(0xFF166534)),
-                    ),
-                  ],
-                ),
-              );
-
-              if (isNarrow) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    stepper,
-                    const SizedBox(height: 10),
-                    calcPill,
-                  ],
-                );
-              } else {
-                return Row(
-                  children: [
-                    stepper,
-                    const SizedBox(width: 14),
-                    Expanded(child: calcPill),
-                  ],
-                );
-              }
-            },
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  // 2. HERO: YOUR RATION ENTITLEMENT CARD
+  // 2. HERO: YOUR RATION ENTITLEMENT CARD (Monthly Quota Only)
   Widget _buildHeroRationEntitlementCard() {
     final totalEntitlementKg = _eligibleMembersCount * 5.0;
     final riceTotal = _eligibleMembersCount * 4.0;
     final wheatTotal = _eligibleMembersCount * 1.0;
-
-    final totalConsumedKg = _distributedQuantityKg;
-    final riceConsumed = (_distributedQuantityKg * 0.8).clamp(0.0, riceTotal);
-    final wheatConsumed = (_distributedQuantityKg * 0.2).clamp(0.0, wheatTotal);
-
-    final riceRemaining = (riceTotal - riceConsumed).clamp(0.0, riceTotal);
-    final wheatRemaining = (wheatTotal - wheatConsumed).clamp(0.0, wheatTotal);
-    final remainingBalanceKg = _remainingBalanceKg;
-
-    final double progressFraction = totalEntitlementKg > 0
-        ? (totalConsumedKg / totalEntitlementKg).clamp(0.0, 1.0)
-        : 0.0;
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.space20),
@@ -1362,16 +1279,16 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           ),
           const SizedBox(height: AppConstants.space16),
 
-          // Main Hero Highlight: Remaining Entitlement (Visually Dominant)
+          // Main Hero Highlight: Statutory Monthly Quota (Clean & Direct)
           LayoutBuilder(
             builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 440;
               final leftCol = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    tr('entitlement.remaining_balance').toUpperCase(),
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70, letterSpacing: 0.5),
+                  const Text(
+                    'STATUTORY MONTHLY RATION QUOTA',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70, letterSpacing: 0.5),
                   ),
                   const SizedBox(height: 4),
                   Row(
@@ -1379,7 +1296,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        remainingBalanceKg.toStringAsFixed(1),
+                        totalEntitlementKg.toStringAsFixed(1),
                         style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
                       ),
                       const SizedBox(width: 6),
@@ -1391,7 +1308,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${tr('commodity.rice')}: ${riceRemaining.toStringAsFixed(1)} ${tr('commodity.kg')}  •  ${tr('commodity.wheat')}: ${wheatRemaining.toStringAsFixed(1)} ${tr('commodity.kg')}',
+                    '${tr('commodity.rice')}: ${riceTotal.toStringAsFixed(1)} ${tr('commodity.kg')}  •  ${tr('commodity.wheat')}: ${wheatTotal.toStringAsFixed(1)} ${tr('commodity.kg')}',
                     style: const TextStyle(fontSize: 12, color: Colors.white),
                   ),
                 ],
@@ -1407,16 +1324,16 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                 child: Column(
                   crossAxisAlignment: isNarrow ? CrossAxisAlignment.start : CrossAxisAlignment.end,
                   children: [
-                    Text(tr('entitlement.monthly_quota'), style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
+                    const Text('Government Subsidy', style: TextStyle(fontSize: 10.5, color: Colors.white70)),
+                    const SizedBox(height: 2),
+                    const Text(
+                      '100% FREE',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF86EFAC)),
+                    ),
                     const SizedBox(height: 2),
                     Text(
-                      '${totalEntitlementKg.toStringAsFixed(1)} ${tr('commodity.kg')}',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${tr('entitlement.consumed')}: ${totalConsumedKg.toStringAsFixed(1)} ${tr('commodity.kg')}',
-                      style: const TextStyle(fontSize: 10.5, color: Color(0xFFFDE68A)),
+                      '${_eligibleMembersCount} Eligible Members',
+                      style: const TextStyle(fontSize: 10.5, color: Colors.white70),
                     ),
                   ],
                 ),
@@ -1448,74 +1365,39 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
               );
             },
           ),
-          const SizedBox(height: AppConstants.space16),
+          const SizedBox(height: 12),
 
-          // Progress Bar Visualization
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // Monthly Entitlement Summary Box
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   Text(
-                    '${(progressFraction * 100).toStringAsFixed(0)}% Lifted',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppConstants.textPrimary),
+                    'Monthly Quota: ${totalEntitlementKg.toStringAsFixed(1)} kg',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
                   ),
+                  Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 12, color: Colors.grey.shade300),
                   Text(
-                    '${remainingBalanceKg.toStringAsFixed(1)} ${tr('commodity.kg')} remaining',
-                    style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
+                    'Rice: ${riceTotal.toStringAsFixed(1)} kg',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
+                  ),
+                  Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 12, color: Colors.grey.shade300),
+                  Text(
+                    'Wheat: ${wheatTotal.toStringAsFixed(1)} kg',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progressFraction,
-                  minHeight: 8,
-                  backgroundColor: AppConstants.primaryNavy.withValues(alpha: 0.08),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    progressFraction > 0.8
-                        ? AppConstants.successGreen
-                        : (progressFraction > 0.4 ? AppConstants.accentAmber : AppConstants.accentBlue),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Dynamic Lifecycle Status Summary
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Text(
-                        tr('biometric.summary_entitlement', params: {'max': totalEntitlementKg.toStringAsFixed(1)}),
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
-                      ),
-                      Container(margin: const EdgeInsets.symmetric(horizontal: 8), width: 1, height: 12, color: Colors.grey.shade300),
-                      Text(
-                        tr('biometric.summary_distributed', params: {'dist': totalConsumedKg.toStringAsFixed(1)}),
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
-                      ),
-                      Container(margin: const EdgeInsets.symmetric(horizontal: 8), width: 1, height: 12, color: Colors.grey.shade300),
-                      Text(
-                        tr('biometric.summary_remaining', params: {'rem': remainingBalanceKg.toStringAsFixed(1)}),
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
 

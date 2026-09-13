@@ -239,14 +239,8 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                         children: [
                           _buildCitizenStepper(),
                           const SizedBox(height: AppConstants.space20),
-                          _buildSection1ServicePreference(),
-                          const SizedBox(height: AppConstants.space20),
                           _buildSection2FpsSelection(),
                           const SizedBox(height: AppConstants.space20),
-                          if (_deliveryMode == 'HOME_DELIVERY') ...[
-                            _buildSection3HomeDeliveryLogistics(selectedDist, transportFee),
-                            const SizedBox(height: AppConstants.space20),
-                          ],
                           _buildSectionHouseholdMembersAndAllocation(),
                           const SizedBox(height: AppConstants.space20),
                           _buildSection4EntitlementSummary(totalMonthly, totalConsumed, remainingBalance),
@@ -317,10 +311,9 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
 
   Widget _buildCitizenStepper() {
     final steps = [
-      {'num': '1', 'title': tr('intent.step_service'), 'active': true},
-      {'num': '2', 'title': tr('intent.step_fps'), 'active': true},
-      {'num': '3', 'title': tr('intent.step_review'), 'active': false},
-      {'num': '4', 'title': tr('intent.step_confirm'), 'active': false},
+      {'num': '1', 'title': tr('intent.step_fps'), 'active': true},
+      {'num': '2', 'title': tr('intent.step_review'), 'active': true},
+      {'num': '3', 'title': tr('intent.step_confirm'), 'active': false},
     ];
 
     return Container(

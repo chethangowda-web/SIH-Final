@@ -21,8 +21,10 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   late final ApiService _apiService;
   int _selectedTabIndex = 0; // 0: Citizen OTP, 1: Department, 2: Demo Personas
 
-  // Controllers for Custom Citizen OTP Login
+  // Controllers for Custom Citizen OTP Login (Ration Card + Aadhaar + Phone Number)
   final TextEditingController _citizenCardController = TextEditingController(text: 'BEN-KA-0001');
+  final TextEditingController _citizenAadhaarController = TextEditingController(text: '5489 1234 5678');
+  final TextEditingController _citizenPhoneController = TextEditingController(text: '98765 43210');
   final TextEditingController _citizenOtpController = TextEditingController();
   bool _otpSent = false;
   String? _generatedOtpForDemo;
@@ -109,6 +111,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   void dispose() {
     _countdownTimer?.cancel();
     _citizenCardController.dispose();
+    _citizenAadhaarController.dispose();
+    _citizenPhoneController.dispose();
     _citizenOtpController.dispose();
     _adminUsernameController.dispose();
     _adminPasswordController.dispose();
@@ -133,12 +137,27 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     return '$m:$s';
   }
 
-  // Action: Send OTP to Citizen
+  // Action: Send OTP to Citizen (Requires Ration Card + Aadhaar + Phone Number)
   Future<void> _handleSendOtp() async {
     final cardId = _citizenCardController.text.trim();
+    final aadhaar = _citizenAadhaarController.text.trim();
+    final phone = _citizenPhoneController.text.trim();
+
     if (cardId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('login.enter_valid_card'))),
+        const SnackBar(content: Text('Please enter a valid Ration Card Number.')),
+      );
+      return;
+    }
+    if (aadhaar.isEmpty || aadhaar.replaceAll(' ', '').length < 12) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid 12-digit Aadhaar Number.')),
+      );
+      return;
+    }
+    if (phone.isEmpty || phone.replaceAll(RegExp(r'\D'), '').length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid 10-digit Registered Mobile Number.')),
       );
       return;
     }
@@ -574,9 +593,26 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       key: const ValueKey('citizen_otp'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Ration Card Number',
-          style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Citizen Portal Access Credentials',
+              style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: _govGreenBg,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: _govGreenBorder),
+              ),
+              child: const Text(
+                '3-FACTOR CITIZEN AUTH',
+                style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: _govGreen),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 6),
 
@@ -585,13 +621,16 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           spacing: 6,
           runSpacing: 4,
           children: [
-            _buildQuickChip('BEN-KA-0001', 'Swathi', isSmall),
-            _buildQuickChip('BEN-KA-0005', 'Sunita', isSmall),
-            _buildQuickChip('BEN-KA-0015', 'Ramesh', isSmall),
+            _buildQuickChip('BEN-KA-0001', '5489 1234 5678', '98765 43210', 'Swathi', isSmall),
+            _buildQuickChip('BEN-KA-0005', '9123 4567 8901', '98123 45678', 'Sunita', isSmall),
+            _buildQuickChip('BEN-KA-0015', '7890 1234 5678', '97654 32109', 'Ramesh', isSmall),
           ],
         ),
         const SizedBox(height: 10),
 
+        // Field 1: Ration Card Number
+        Text('Ration Card Number', style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
+        const SizedBox(height: 4),
         TextField(
           controller: _citizenCardController,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
@@ -603,7 +642,49 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.5)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 10 : 12),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // Field 2: Aadhaar Number
+        Text('Aadhaar Number (12 Digits)', style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: _citizenAadhaarController,
+          keyboardType: TextInputType.number,
+          style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: 'e.g. 5489 1234 5678',
+            prefixIcon: Icon(Icons.fingerprint_rounded, size: isSmall ? 16 : 18, color: _slate500),
+            filled: true,
+            fillColor: _slate50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.5)),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // Field 3: Registered Phone / Mobile Number
+        Text('Registered Phone Number (10 Digits)', style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: _citizenPhoneController,
+          keyboardType: TextInputType.phone,
+          style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: 'e.g. 98765 43210',
+            prefixIcon: Icon(Icons.phone_android_rounded, size: isSmall ? 16 : 18, color: _slate500),
+            filled: true,
+            fillColor: _slate50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.5)),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
           ),
         ),
 
@@ -724,12 +805,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     );
   }
 
-  Widget _buildQuickChip(String cardId, String name, bool isSmall) {
+  Widget _buildQuickChip(String cardId, String aadhaar, String phone, String name, bool isSmall) {
     final isSelected = _citizenCardController.text == cardId;
     return InkWell(
       onTap: () {
         setState(() {
           _citizenCardController.text = cardId;
+          _citizenAadhaarController.text = aadhaar;
+          _citizenPhoneController.text = phone;
           _otpSent = false;
         });
       },
