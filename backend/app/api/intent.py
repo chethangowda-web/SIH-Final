@@ -639,8 +639,10 @@ def simulate_channel_intent(
     db.commit()
 
     # Trigger real Twilio notification if configured
+    from app.core.config import settings
     from app.services.notification_engine import notification_engine
     trail_phone = settings.TWILIO_PHONE_NUMBER or "+918050442666"
+
     msg_body = f"PDS DemandSync Intent Confirmed: Card {payload.beneficiary_card_id} declared {qty}kg {commodity} for FPS {intended_fps} (Cycle {payload.cycle_id})."
     
     if payload.channel.upper() == "WHATSAPP":
