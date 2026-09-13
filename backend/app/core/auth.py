@@ -205,7 +205,7 @@ def check_admin_access(request: Request, current_user: dict = Depends(get_curren
             logger.warning("Access Forbidden: user '%s' attempted GET %s without authorized role", current_user.get("username"), path)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access restricted to authorized departmental roles. Current: {current_user['role']}."
+                detail=f"Access restricted to DSO, ADMIN, or AUDITOR (Current: {current_user['role']})."
             )
     return current_user
 

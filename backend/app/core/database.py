@@ -540,6 +540,8 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
         ("dso_user", hash_password("dso_pass"), "DSO", None),
         ("field_officer_user", hash_password("field_pass"), "FIELD_OFFICER", None),
         ("auditor_user", hash_password("auditor_pass"), "AUDITOR", None),
+        ("BEN-KA-0001", hash_password("citizen_pass"), "BENEFICIARY", "BEN-KA-0001"),
+        ("RC-KA-000001", hash_password("citizen_pass"), "BENEFICIARY", "RC-KA-000001"),
     ]
     cursor.executemany("""
     INSERT OR IGNORE INTO users (username, password_hash, role, beneficiary_id)

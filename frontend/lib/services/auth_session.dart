@@ -76,11 +76,13 @@ class AuthSession {
       (_role == 'ADMIN' ||
           _role == 'DSO' ||
           _role == 'AUDITOR' ||
+          _role == 'FIELD_OFFICER' ||
+          _role == 'STATE_NODAL_OFFICER' ||
           _role == 'DISTRICT_SUPPLY_OFFICER' ||
           _role == 'DEPOT_MANAGER' ||
           _role == 'SUPER_ADMIN');
 
-  bool get isBeneficiary => isAuthenticated && (_role == 'BENEFICIARY' || _beneficiaryId != null);
+  bool get isBeneficiary => isAuthenticated && (_role == 'BENEFICIARY');
 
   /// Establish an active authenticated session.
   void setSession({

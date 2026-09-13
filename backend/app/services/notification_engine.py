@@ -54,9 +54,15 @@ class NotificationService:
         message_id = f"WA-MSG-{random.randint(100000, 999999)}"
         status = "DELIVERED"
         
-        target_phone = self.twilio_phone_number or "+918050442666"
-        if recipient_phone.startswith("+91") and len(recipient_phone.replace("-", "").strip()) == 13:
-            target_phone = recipient_phone.replace("-", "").strip()
+        clean_phone = recipient_phone.replace(" ", "").replace("-", "").strip()
+        if len(clean_phone) == 10 and clean_phone.isdigit():
+            target_phone = f"+91{clean_phone}"
+        elif clean_phone.startswith("+91") and len(clean_phone) == 13:
+            target_phone = clean_phone
+        elif clean_phone.startswith("91") and len(clean_phone) == 12:
+            target_phone = f"+{clean_phone}"
+        else:
+            target_phone = self.twilio_phone_number or "+918050442666"
 
         if self.client:
             try:
@@ -89,9 +95,15 @@ class NotificationService:
         message_id = f"SMS-GW-{random.randint(100000, 999999)}"
         status = "DELIVERED"
         
-        target_phone = self.twilio_phone_number or "+918050442666"
-        if recipient_phone.startswith("+91") and len(recipient_phone.replace("-", "").strip()) == 13:
-            target_phone = recipient_phone.replace("-", "").strip()
+        clean_phone = recipient_phone.replace(" ", "").replace("-", "").strip()
+        if len(clean_phone) == 10 and clean_phone.isdigit():
+            target_phone = f"+91{clean_phone}"
+        elif clean_phone.startswith("+91") and len(clean_phone) == 13:
+            target_phone = clean_phone
+        elif clean_phone.startswith("91") and len(clean_phone) == 12:
+            target_phone = f"+{clean_phone}"
+        else:
+            target_phone = self.twilio_phone_number or "+918050442666"
 
         if self.client:
             try:

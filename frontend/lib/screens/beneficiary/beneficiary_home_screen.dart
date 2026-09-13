@@ -698,10 +698,6 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // 0. Prominent Language Selector Bar
-                                _buildLanguageSelectorQuickBar(),
-                                const SizedBox(height: AppConstants.space16),
-
                                 // 0b. Authoritative Planning Cycle & Choice Window Visualizer
                                 _buildPlanningCycleBanner(),
                                 const SizedBox(height: AppConstants.space16),
@@ -755,52 +751,6 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                     ),
         );
       },
-    );
-  }
-
-  // LANGUAGE SELECTOR QUICK BAR
-  Widget _buildLanguageSelectorQuickBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-        border: Border.all(color: AppConstants.cardBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 8,
-        runSpacing: 6,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.language_rounded, size: 18, color: AppConstants.primaryNavy),
-              const SizedBox(width: 8),
-              Text(
-                tr('lang.selector_title'),
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppConstants.primaryNavy,
-                ),
-              ),
-            ],
-          ),
-          const LanguageSelectorWidget(
-            isCompact: false,
-            backgroundColor: Color(0xFFF1F5F9),
-          ),
-        ],
-      ),
     );
   }
 

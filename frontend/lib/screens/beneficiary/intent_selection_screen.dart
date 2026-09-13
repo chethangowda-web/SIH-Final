@@ -716,9 +716,49 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            '${fps.fpsId} • Distance: ${dist.toStringAsFixed(1)} km • Storage Capacity: ${(fps.capacityKg / 1000).toStringAsFixed(0)} MT',
+                            '${fps.fpsId} • Distance: ${dist.toStringAsFixed(1)} km • Storage: ${(fps.capacityKg / 1000).toStringAsFixed(0)} MT',
                             style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary),
                           ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              const Icon(Icons.location_on_outlined, size: 12, color: AppConstants.accentBlue),
+                              const SizedBox(width: 3),
+                              Expanded(
+                                child: Text(
+                                  '${fps.district} • GPS: ${fps.latitude.toStringAsFixed(4)}° N, ${fps.longitude.toStringAsFixed(4)}° E',
+                                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppConstants.accentBlue),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (isSelected) ...[
+                            const SizedBox(height: 6),
+                            InkWell(
+                              onTap: () => _showFpsMapLocationModal(fps, dist),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppConstants.accentBlue.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: AppConstants.accentBlue.withValues(alpha: 0.3)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.map_rounded, size: 13, color: AppConstants.accentBlue),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Track & View Exact Location Details',
+                                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppConstants.accentBlue),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -730,6 +770,97 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
           }),
         ],
       ),
+    );
+  }
+
+  void _showFpsMapLocationModal(FpsShop fps, double distanceKm) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(8)),
+                      child: const Icon(Icons.pin_drop_rounded, color: AppConstants.accentBlue, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(fps.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
+                        Text('Center Code: ${fps.fpsId}', style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary)),
+                      ],
+                    ),
+                  ],
+                ),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const Divider(height: 24),
+            _buildLocationDetailRow(Icons.place_rounded, 'District & Area', '${fps.district}, Karnataka'),
+            const SizedBox(height: 8),
+            _buildLocationDetailRow(Icons.gps_fixed_rounded, 'Precise GPS Coordinates', '${fps.latitude.toStringAsFixed(6)}° N, ${fps.longitude.toStringAsFixed(6)}° E'),
+            const SizedBox(height: 8),
+            _buildLocationDetailRow(Icons.directions_walk_rounded, 'Distance from Household', '${distanceKm.toStringAsFixed(1)} km (approx. ${(distanceKm * 15).toStringAsFixed(0)} mins travel)'),
+            const SizedBox(height: 8),
+            _buildLocationDetailRow(Icons.warehouse_rounded, 'Storage Capacity & Stock', '${(fps.capacityKg / 1000).toStringAsFixed(0)} MT (${fps.currentInventoryTotalKg.toStringAsFixed(0)} kg currently stored)'),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('📍 Navigation route to ${fps.name} (${fps.latitude.toStringAsFixed(4)}, ${fps.longitude.toStringAsFixed(4)}) mapped.'),
+                    backgroundColor: AppConstants.accentBlue,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.navigation_rounded, size: 16),
+              label: const Text('Navigate to Center / Take Ration'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppConstants.primaryNavy,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 44),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocationDetailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppConstants.textSecondary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppConstants.textSecondary)),
+              Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

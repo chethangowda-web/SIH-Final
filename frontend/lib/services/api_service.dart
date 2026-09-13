@@ -148,12 +148,24 @@ class ApiService {
     authSession.clear();
   }
 
-  /// Request a 6-digit OTP for a citizen Ration Card Number.
-  Future<Map<String, dynamic>> sendCitizenOtp(String cardId) async {
+  /// Request a 6-digit OTP for a citizen Ration Card Number with real phone dispatch.
+  Future<Map<String, dynamic>> sendCitizenOtp(
+    String cardId, {
+    String? phoneNumber,
+    String? aadhaarNumber,
+  }) async {
+    final Map<String, dynamic> body = {'card_id': cardId.trim()};
+    if (phoneNumber != null && phoneNumber.trim().isNotEmpty) {
+      body['phone_number'] = phoneNumber.trim();
+    }
+    if (aadhaarNumber != null && aadhaarNumber.trim().isNotEmpty) {
+      body['aadhaar_number'] = aadhaarNumber.trim();
+    }
+
     final response = await client.post(
       Uri.parse('${AppConstants.apiBaseUrl}/auth/citizen/send-otp'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'card_id': cardId.trim()}),
+      body: json.encode(body),
     ).timeout(AppConstants.apiTimeout);
 
     if (response.statusCode == 200) {
