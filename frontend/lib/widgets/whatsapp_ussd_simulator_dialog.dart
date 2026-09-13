@@ -20,7 +20,7 @@ class WhatsappUssdSimulatorDialog extends StatefulWidget {
 
 class _WhatsappUssdSimulatorDialogState extends State<WhatsappUssdSimulatorDialog> {
   String _selectedChannel = 'WHATSAPP';
-  final TextEditingController _cardIdController = TextEditingController(text: 'BEN-KA-0005');
+  final TextEditingController _cardIdController = TextEditingController(text: 'RC-KA-000002');
   final TextEditingController _messageController = TextEditingController(text: 'RICE 20KG FPS-KA-BLR-013');
   bool _isSending = false;
   String? _responseLog;

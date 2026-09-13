@@ -121,19 +121,22 @@ def citizen_send_otp(
     (For demonstration, returns the generated OTP code in response payload).
     """
     cursor = db.cursor()
+    card_clean = payload.card_id.strip()
     cursor.execute(
         "SELECT pseudonymous_beneficiary_id, name_for_demo FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;",
-        (payload.card_id.strip(),)
+        (card_clean,)
     )
     ben = cursor.fetchone()
     if not ben:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Beneficiary Ration Card '{payload.card_id}' not found."
+        # Automatically register new beneficiary if not found (Ration Card + Aadhaar + Phone login)
+        cursor.execute(
+            "INSERT INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status) VALUES (?, ?, 'FPS-KA-BAG-0001', 'kn', 'ACTIVE');",
+            (card_clean, f"Citizen ({card_clean})")
         )
+        db.commit()
 
     # Generate 6-digit OTP
-    demo_otp = "123456" if payload.card_id.startswith("BEN-KA") else str(random.randint(100000, 999999))
+    demo_otp = "123456" if (card_clean.startswith("BEN-KA") or card_clean.startswith("RC-KA")) else str(random.randint(100000, 999999))
 
     # Persist in DB if otp table exists or return response
     cursor.execute("""
@@ -146,15 +149,15 @@ def citizen_send_otp(
     """)
     cursor.execute(
         "INSERT INTO otp_verifications (identifier, otp_code) VALUES (?, ?);",
-        (payload.card_id.strip(), demo_otp)
+        (card_clean, demo_otp)
     )
     db.commit()
 
-    logger.info("OTP generated for citizen '%s': %s", payload.card_id, demo_otp)
+    logger.info("OTP generated for citizen '%s': %s", card_clean, demo_otp)
 
     return {
         "status": "success",
-        "card_id": payload.card_id,
+        "card_id": card_clean,
         "message": f"OTP sent to Aadhaar/Ration-card linked mobile ending in ******9841",
         "demo_otp_code": demo_otp,
         "expires_in_seconds": 300
@@ -168,16 +171,18 @@ def citizen_verify_otp(
 ):
     """Verifies citizen OTP and issues Bearer access token."""
     cursor = db.cursor()
+    card_clean = payload.card_id.strip()
     cursor.execute(
         "SELECT pseudonymous_beneficiary_id, name_for_demo FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;",
-        (payload.card_id.strip(),)
+        (card_clean,)
     )
     ben = cursor.fetchone()
     if not ben:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Beneficiary Ration Card '{payload.card_id}' not found."
+        cursor.execute(
+            "INSERT INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status) VALUES (?, ?, 'FPS-KA-BAG-0001', 'kn', 'ACTIVE');",
+            (card_clean, f"Citizen ({card_clean})")
         )
+        db.commit()
 
     # Validate OTP (Accept 123456 or last generated OTP)
     if payload.otp_code.strip() != "123456":

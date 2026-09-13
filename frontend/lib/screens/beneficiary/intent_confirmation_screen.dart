@@ -391,8 +391,8 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
               const Divider(height: 20),
 
               _buildReviewRow(
-                label: 'REMAINING ENTITLEMENT',
-                value: '${remainingKg.toStringAsFixed(1)} ${tr('commodity.kg')} ${tr('entitlement.remaining_balance')}',
+                label: 'STATUTORY QUOTA STATUS',
+                value: '${(riceKg + wheatKg).toStringAsFixed(1)} ${tr('commodity.kg')} (100% Subsidized)',
                 icon: Icons.verified_outlined,
                 isDominantGreen: true,
               ),
@@ -405,10 +405,10 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
         Container(
           padding: const EdgeInsets.all(AppConstants.space16),
           decoration: BoxDecoration(
-            color: isHomeDelivery ? const Color(0xFFFEF3C7).withValues(alpha: 0.3) : const Color(0xFFF0FDF4),
+            color: const Color(0xFFF0FDF4),
             borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
             border: Border.all(
-              color: isHomeDelivery ? const Color(0xFFFDE68A) : const Color(0xFFBBF7D0),
+              color: const Color(0xFFBBF7D0),
               width: 1.2,
             ),
           ),
@@ -424,19 +424,6 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
                   Text('₹0.00 (${tr('commodity.free_tag')})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
                 ],
               ),
-              if (isHomeDelivery) ...[
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Flexible(
-                      child: Text('Doorstep Logistics & Conveyance Fee', style: TextStyle(fontSize: 12, color: AppConstants.textSecondary)),
-                    ),
-                    const SizedBox(width: 8),
-                    Text('₹${widget.transportFeeInr.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
-                  ],
-                ),
-              ],
               const Divider(height: 18),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -451,12 +438,12 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: isHomeDelivery ? AppConstants.primaryNavy : const Color(0xFF15803D),
+                      color: const Color(0xFF15803D),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Text(
-                      isHomeDelivery ? '₹${widget.transportFeeInr.toStringAsFixed(2)}' : '₹0.00 (FREE)',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.white),
+                    child: const Text(
+                      '₹0.00 (FREE)',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.white),
                     ),
                   ),
                 ],

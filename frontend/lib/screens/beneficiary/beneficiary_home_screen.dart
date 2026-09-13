@@ -1544,62 +1544,21 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         ),
         const SizedBox(height: AppConstants.space12),
 
-        // Two Large Service Cards
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth > 580;
-
-            final card1 = _buildServiceChoiceCard(
-              title: tr('service.fps_choice_title'),
-              icon: Icons.storefront_outlined,
-              iconColor: AppConstants.primaryNavy,
-              iconBg: const Color(0xFFEFF6FF),
-              badgeText: tr('service.fps_choice_badge'),
-              badgeColor: AppConstants.accentBlue,
-              description: tr('service.fps_choice_desc'),
-              contextDetail: tr('service.fps_choice_detail', params: {'fpsName': homeFpsName}),
-              priceTag: tr('service.fps_choice_price'),
-              buttonLabel: tr('service.fps_choice_btn'),
-              buttonIcon: Icons.store_rounded,
-              isPrimary: true,
-              onTap: () => _navigateToIntentSelection(initialMode: 'FPS_COLLECTION'),
-            );
-
-            final card2 = _buildServiceChoiceCard(
-              title: tr('service.home_choice_title'),
-              icon: Icons.local_shipping_outlined,
-              iconColor: const Color(0xFFD97706),
-              iconBg: const Color(0xFFFEF3C7),
-              badgeText: tr('service.home_choice_badge'),
-              badgeColor: const Color(0xFFD97706),
-              description: tr('service.home_choice_desc'),
-              contextDetail: tr('service.home_choice_detail'),
-              priceTag: tr('service.home_choice_price'),
-              buttonLabel: tr('service.home_choice_btn'),
-              buttonIcon: Icons.electric_moped_outlined,
-              isPrimary: false,
-              onTap: () => _navigateToIntentSelection(initialMode: 'HOME_DELIVERY'),
-            );
-
-            if (isWide) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: card1),
-                  const SizedBox(width: 14),
-                  Expanded(child: card2),
-                ],
-              );
-            } else {
-              return Column(
-                children: [
-                  card1,
-                  const SizedBox(height: 12),
-                  card2,
-                ],
-              );
-            }
-          },
+        // Official Fair Price Shop Collection Card
+        _buildServiceChoiceCard(
+          title: tr('service.fps_choice_title'),
+          icon: Icons.storefront_outlined,
+          iconColor: AppConstants.primaryNavy,
+          iconBg: const Color(0xFFEFF6FF),
+          badgeText: tr('service.fps_choice_badge'),
+          badgeColor: AppConstants.accentBlue,
+          description: tr('service.fps_choice_desc'),
+          contextDetail: tr('service.fps_choice_detail', params: {'fpsName': homeFpsName}),
+          priceTag: tr('service.fps_choice_price'),
+          buttonLabel: tr('service.fps_choice_btn'),
+          buttonIcon: Icons.store_rounded,
+          isPrimary: true,
+          onTap: () => _navigateToIntentSelection(initialMode: 'FPS_COLLECTION'),
         ),
       ],
     );

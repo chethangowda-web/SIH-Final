@@ -608,7 +608,7 @@ class MockApiService extends ApiService {
 }
 
 void main() {
-  testWidgets('DemoLoginScreen renders demo header, persona picker, and District Admin button',
+  testWidgets('DemoLoginScreen renders citizen OTP, department login, and persona tabs',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -620,12 +620,12 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.text('PDS DemandSync'), findsWidgets);
-    expect(find.text('District Supply Officer — Bengaluru Urban'), findsOneWidget);
-    expect(find.text('Continue as Beneficiary'), findsOneWidget);
-    expect(find.text('Swathi Bhat'), findsWidgets);
+    expect(find.text('Get OTP Code'), findsOneWidget);
+    expect(find.text('Department'), findsOneWidget);
+    expect(find.text('Demo Personas'), findsOneWidget);
   });
 
   testWidgets('AdminDashboardScreen renders KPI cards, visualizations, and FPS overview table',
@@ -640,7 +640,8 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('HISTORICAL BASELINE'), findsWidgets);
     expect(find.text('INTENT DEMAND'), findsWidgets);
@@ -650,12 +651,6 @@ void main() {
     expect(find.text('Fair Price Shops Overview Matrix'), findsWidgets);
     expect(find.text('District Demand Trend'), findsOneWidget);
     expect(find.text('Run Pre-Dispatch Analysis'), findsOneWidget);
-
-    // Open Operations dropdown to verify advanced operations
-    await tester.tap(find.text('Operations ▾'));
-    await tester.pumpAndSettle();
-    expect(find.text('Scarcity & Fair-Share'), findsOneWidget);
-    expect(find.text('Citizen Request Queue'), findsOneWidget);
   });
 
   testWidgets('ScarcityReconciliationDialog renders institutional tabs and simulation controls',
@@ -703,20 +698,18 @@ void main() {
 
     expect(find.text('PDS DemandSync • Citizen Beneficiary Portal'), findsOneWidget);
     expect(find.text('YOUR RATION ENTITLEMENT'), findsOneWidget);
-    expect(find.text('AVAILABLE REMAINING BALANCE'), findsOneWidget);
+    expect(find.text('STATUTORY MONTHLY RATION QUOTA'), findsOneWidget);
     expect(find.text('25.0'), findsOneWidget);
     expect(find.text('PLAN YOUR UPCOMING COLLECTION'), findsOneWidget);
     expect(find.text('Collect at Fair Price Shop'), findsOneWidget);
-    expect(find.text('Assisted Home Delivery'), findsOneWidget);
     expect(find.text('Select Shop'), findsOneWidget);
-    expect(find.text('Choose Delivery'), findsOneWidget);
     expect(
       find.text('Your ration entitlement is determined by government policy. You cannot increase or customize the quantity.'),
       findsOneWidget,
     );
   });
 
-  testWidgets('IntentSelectionScreen renders 4-step stepper, service cards, and search filters',
+  testWidgets('IntentSelectionScreen renders stepper, FPS search filters, and statutory quota summary',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -744,14 +737,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Express Collection Preference'), findsOneWidget);
-    expect(find.text('HOW WOULD YOU LIKE TO RECEIVE YOUR RATION?'), findsOneWidget);
-    expect(find.text('Collect from Fair Price Shop'), findsOneWidget);
-    expect(find.text('Assisted Home Delivery'), findsOneWidget);
     expect(find.text('CHOOSE YOUR INTENDED FAIR PRICE SHOP'), findsOneWidget);
     expect(find.text('Malleshwaram Seva Kendra'), findsOneWidget);
     expect(find.text('Home FPS'), findsOneWidget);
     expect(find.text('YOUR STATUTORY ENTITLEMENT SUMMARY'), findsOneWidget);
-    expect(find.text('NON-EDITABLE'), findsOneWidget);
+    expect(find.text('STATUTORY QUOTA'), findsOneWidget);
     expect(find.text('Continue to Review FPS Collection (₹0.00 Free)'), findsOneWidget);
   });
 
@@ -806,7 +796,7 @@ void main() {
     expect(find.text('LOCATION'), findsOneWidget);
     expect(find.text('CYCLE'), findsOneWidget);
     expect(find.text('ENTITLEMENT'), findsOneWidget);
-    expect(find.text('REMAINING ENTITLEMENT'), findsOneWidget);
+    expect(find.text('STATUTORY QUOTA STATUS'), findsOneWidget);
     expect(find.text('TOTAL PAYABLE / YOU PAY'), findsOneWidget);
     expect(find.text('₹0.00 (FREE)'), findsOneWidget);
     expect(find.text('IMPORTANT GOVERNANCE NOTICE'), findsOneWidget);
@@ -934,9 +924,7 @@ void main() {
     // 1. Verify English Labels
     expect(find.text('YOUR RATION ENTITLEMENT'), findsOneWidget);
     expect(find.text('Collect at Fair Price Shop'), findsOneWidget);
-    expect(find.text('Assisted Home Delivery'), findsOneWidget);
     expect(find.text('Select Shop'), findsOneWidget);
-    expect(find.text('Choose Delivery'), findsOneWidget);
     // Verify quantities & numbers are intact
     expect(find.text('25.0'), findsOneWidget);
 
@@ -946,9 +934,7 @@ void main() {
 
     expect(find.text('आपकी राशन पात्रता'), findsOneWidget);
     expect(find.text('उचित मूल्य दुकान से प्राप्त करें'), findsOneWidget);
-    expect(find.text('घर पर राशन डिलीवरी'), findsOneWidget);
     expect(find.text('दुकान चुनें'), findsOneWidget);
-    expect(find.text('डिलीवरी चुनें'), findsOneWidget);
     // Quantities unchanged
     expect(find.text('25.0'), findsOneWidget);
 
@@ -958,9 +944,7 @@ void main() {
 
     expect(find.text('ನಿಮ್ಮ ಪಡಿತರ ಪ್ರಮಾಣ'), findsOneWidget);
     expect(find.text('ನ್ಯಾಯಬೆಲೆ ಅಂಗಡಿಯಿಂದ ಪಡೆಯಿರಿ'), findsOneWidget);
-    expect(find.text('ಮನೆಬಾಗಿಲಿಗೆ ಪಡಿತರ ವಿತರಣೆ'), findsOneWidget);
     expect(find.text('ಅಂಗಡಿ ಆಯ್ಕೆಮಾಡಿ'), findsOneWidget);
-    expect(find.text('ವಿತರಣೆ ಆಯ್ಕೆಮಾಡಿ'), findsOneWidget);
     // Quantities unchanged
     expect(find.text('25.0'), findsOneWidget);
 

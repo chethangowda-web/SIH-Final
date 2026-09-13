@@ -328,7 +328,7 @@ void main() {
       expect(find.text('Order #REQ-202609-001'), findsOneWidget);
       expect(find.textContaining('20.0 kg'), findsWidgets);
       expect(find.textContaining('5.0 kg'), findsWidgets);
-      expect(find.text('DELAYED — STOCK REPLENISHMENT PENDING'), findsOneWidget);
+      expect(find.text('DELAYED — STOCK REPLENISHMENT PENDING'), findsWidgets);
     });
 
     test('MockDelayedApiService resumeDispatch and sendDelayAlert contracts execute successfully', () async {

@@ -22,7 +22,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   int _selectedTabIndex = 0; // 0: Citizen OTP, 1: Department, 2: Demo Personas
 
   // Controllers for Custom Citizen OTP Login (Ration Card + Aadhaar + Phone Number)
-  final TextEditingController _citizenCardController = TextEditingController(text: 'BEN-KA-0001');
+  final TextEditingController _citizenCardController = TextEditingController(text: 'RC-KA-000001');
   final TextEditingController _citizenAadhaarController = TextEditingController(text: '5489 1234 5678');
   final TextEditingController _citizenPhoneController = TextEditingController(text: '98765 43210');
   final TextEditingController _citizenOtpController = TextEditingController();
@@ -42,28 +42,28 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   final List<Beneficiary> _beneficiaries = [
     Beneficiary(
       id: 1,
-      pseudonymousBeneficiaryId: 'BEN-KA-0001',
-      nameForDemo: 'Swathi Bhat',
-      registeredFpsId: 'FPS-KA-BLR-001',
-      registeredFpsName: 'Malleshwaram Seva Kendra',
-      language: 'kn',
-      status: 'ACTIVE',
-    ),
-    Beneficiary(
-      id: 2,
-      pseudonymousBeneficiaryId: 'BEN-KA-0005',
-      nameForDemo: 'Sunita Devi',
-      registeredFpsId: 'FPS-KA-BLR-005',
-      registeredFpsName: 'Bellandur Outer Ring Road',
+      pseudonymousBeneficiaryId: 'RC-KA-000001',
+      nameForDemo: 'Deepa Reddy',
+      registeredFpsId: 'FPS-KA-BAG-0001',
+      registeredFpsName: 'FPS BAG 0001 (Bagalkot)',
       language: 'hi',
       status: 'ACTIVE',
     ),
     Beneficiary(
+      id: 2,
+      pseudonymousBeneficiaryId: 'RC-KA-000002',
+      nameForDemo: 'Swathi Joshi',
+      registeredFpsId: 'FPS-KA-BAG-0002',
+      registeredFpsName: 'FPS BAG 0002 (Bagalkot)',
+      language: 'kn',
+      status: 'ACTIVE',
+    ),
+    Beneficiary(
       id: 3,
-      pseudonymousBeneficiaryId: 'BEN-KA-0015',
-      nameForDemo: 'Ramesh Kumar',
-      registeredFpsId: 'FPS-KA-BLR-013',
-      registeredFpsName: 'Peenya Industrial Area',
+      pseudonymousBeneficiaryId: 'RC-KA-000003',
+      nameForDemo: 'Aarav Gowda',
+      registeredFpsId: 'FPS-KA-BAG-0003',
+      registeredFpsName: 'FPS BAG 0003 (Bagalkot)',
       language: 'kn',
       status: 'ACTIVE',
     ),
@@ -596,10 +596,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Citizen Portal Access Credentials',
-              style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
+            Expanded(
+              child: Text(
+                'Citizen Portal Access Credentials',
+                style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
@@ -621,9 +625,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           spacing: 6,
           runSpacing: 4,
           children: [
-            _buildQuickChip('BEN-KA-0001', '5489 1234 5678', '98765 43210', 'Swathi', isSmall),
-            _buildQuickChip('BEN-KA-0005', '9123 4567 8901', '98123 45678', 'Sunita', isSmall),
-            _buildQuickChip('BEN-KA-0015', '7890 1234 5678', '97654 32109', 'Ramesh', isSmall),
+            _buildQuickChip('RC-KA-000001', '5489 1234 5678', '98765 43210', 'Deepa', isSmall),
+            _buildQuickChip('RC-KA-000002', '9123 4567 8901', '98123 45678', 'Swathi', isSmall),
+            _buildQuickChip('RC-KA-000003', '7890 1234 5678', '97654 32109', 'Aarav', isSmall),
           ],
         ),
         const SizedBox(height: 10),
@@ -635,7 +639,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           controller: _citizenCardController,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'e.g. BEN-KA-0001',
+            hintText: 'e.g. RC-KA-000001',
             prefixIcon: Icon(Icons.credit_card_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,

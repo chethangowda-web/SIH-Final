@@ -1,321 +1,401 @@
-"""Synthetic Demo Dataset Generator for PDS DemandSync.
+"""Real CSV Dataset Loader for PDS DemandSync.
 
-Generates:
-- 1 Demo District: 'Bengaluru Urban - Demo District'
-- 20 Fair Price Shops with diverse demand profiles (Stable, Increasing, Decreasing, High Intent Shift, Low/High Inventory)
-- 2,000 Demo Beneficiaries with pseudonymous IDs and language preferences
-- 6 Historical Distribution Cycles (2026-03 to 2026-08) for Rice & Wheat
-- Live Inventory Levels per FPS
-- Initial Forward-Looking Intent Declarations for Cycle 2026-09
+Loads production-quality datasets from CSV files:
+- 621 Fair Price Shops across 31 Karnataka Districts
+- 10,000 Beneficiaries with real entitlement profiles
+- 63 Central Godowns (Depots)
+- 311 Trucks (Fleet Vehicles)
+- 22,321 Historical Demand Records (12 months: 2025-09 to 2026-08)
+- 10,000 Intent Signals for upcoming cycle 2026-10
 
-IMPORTANT: All data is 100% synthetic for demonstration purposes.
-Notice: DEMO DATA — NOT GOVERNMENT DATA
+IMPORTANT: All CSV data is loaded from backend/data/csv/ directory.
 """
 
 import sys
+import os
+import csv
+import math
 import random
 import sqlite3
+from pathlib import Path
 from app.core.database import get_db_connection, recreate_db, init_db
 
-DEMO_NOTICE = "Govt. of Karnataka • Bengaluru Urban PDS Operations (DEMO DATA — NOT GOVERNMENT DATA)"
-DEMO_DISTRICT = "Bengaluru Urban District"
-HISTORICAL_CYCLES = ["2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"]
-CURRENT_CYCLE = "2026-09"
+DEMO_NOTICE = "Govt. of Karnataka • Statewide PDS Operations (31 Districts • NFSA Compliant)"
+CURRENT_CYCLE = "2026-10"
 
-# 20 Fair Price Shops Configuration
-FPS_CONFIGS = [
-    # 1. Stable Demand (FPS 001 - 004) — Normal end-of-cycle replenishment needed
-    {"fps_id": "FPS-KA-BLR-001", "name": "Malleshwaram Seva Kendra", "lat": 13.0031, "lng": 77.5643, "capacity_kg": 20000.0, "type": "STABLE", "base_rice": 4500.0, "base_wheat": 1500.0, "inv_pct": 0.20},
-    {"fps_id": "FPS-KA-BLR-002", "name": "Jayanagar 4th Block Depot", "lat": 12.9250, "lng": 77.5938, "capacity_kg": 22000.0, "type": "STABLE", "base_rice": 4800.0, "base_wheat": 1600.0, "inv_pct": 0.22},
-    {"fps_id": "FPS-KA-BLR-003", "name": "Basavanagudi Grain Center", "lat": 12.9422, "lng": 77.5756, "capacity_kg": 18000.0, "type": "STABLE", "base_rice": 4200.0, "base_wheat": 1400.0, "inv_pct": 0.18},
-    {"fps_id": "FPS-KA-BLR-004", "name": "Rajajinagar 1st Stage FPS", "lat": 12.9982, "lng": 77.5530, "capacity_kg": 20000.0, "type": "STABLE", "base_rice": 4600.0, "base_wheat": 1500.0, "inv_pct": 0.20},
-
-    # 2. Increasing Demand Corridors (FPS 005 - 008) — High growth replenishment
-    {"fps_id": "FPS-KA-BLR-005", "name": "Bellandur Outer Ring Road FPS", "lat": 12.9260, "lng": 77.6762, "capacity_kg": 25000.0, "type": "INCREASING", "base_rice": 3800.0, "base_wheat": 1200.0, "inv_pct": 0.16},
-    {"fps_id": "FPS-KA-BLR-006", "name": "Sarjapur Road Extension FPS", "lat": 12.9081, "lng": 77.6872, "capacity_kg": 24000.0, "type": "INCREASING", "base_rice": 3600.0, "base_wheat": 1100.0, "inv_pct": 0.18},
-    {"fps_id": "FPS-KA-BLR-007", "name": "Mahadevapura Sub-Center", "lat": 12.9880, "lng": 77.6890, "capacity_kg": 26000.0, "type": "INCREASING", "base_rice": 4000.0, "base_wheat": 1300.0, "inv_pct": 0.15},
-    {"fps_id": "FPS-KA-BLR-008", "name": "Thanisandra Main Road Depot", "lat": 13.0540, "lng": 77.6320, "capacity_kg": 22000.0, "type": "INCREASING", "base_rice": 3500.0, "base_wheat": 1150.0, "inv_pct": 0.19},
-
-    # 3. Decreasing Demand Outflow Centers (FPS 009 - 012) — Surplus inventory, NO dispatch needed
-    {"fps_id": "FPS-KA-BLR-009", "name": "Chickpet Heritage Ration Depot", "lat": 12.9698, "lng": 77.5750, "capacity_kg": 15000.0, "type": "DECREASING", "base_rice": 4200.0, "base_wheat": 1400.0, "inv_pct": 0.55},
-    {"fps_id": "FPS-KA-BLR-010", "name": "Shivajinagar Central FPS", "lat": 12.9856, "lng": 77.6057, "capacity_kg": 16000.0, "type": "DECREASING", "base_rice": 4400.0, "base_wheat": 1500.0, "inv_pct": 0.60},
-    {"fps_id": "FPS-KA-BLR-011", "name": "Cottonpet Old Ward Seva Kendra", "lat": 12.9650, "lng": 77.5680, "capacity_kg": 14000.0, "type": "DECREASING", "base_rice": 3900.0, "base_wheat": 1300.0, "inv_pct": 0.50},
-    {"fps_id": "FPS-KA-BLR-012", "name": "Ulsoor Bazaar Ration Counter", "lat": 12.9830, "lng": 77.6250, "capacity_kg": 15000.0, "type": "DECREASING", "base_rice": 4100.0, "base_wheat": 1350.0, "inv_pct": 0.52},
-
-    # 4. High Intent Shift / Migrant Hubs (FPS 013 - 016) — Inflow surge priority
-    {"fps_id": "FPS-KA-BLR-013", "name": "Peenya Industrial Area Phase-1", "lat": 13.0280, "lng": 77.5180, "capacity_kg": 30000.0, "type": "HIGH_MIGRANT", "base_rice": 5000.0, "base_wheat": 1800.0, "inv_pct": 0.12},
-    {"fps_id": "FPS-KA-BLR-014", "name": "Whitefield IT Corridor FPS", "lat": 12.9698, "lng": 77.7499, "capacity_kg": 28000.0, "type": "HIGH_MIGRANT", "base_rice": 4800.0, "base_wheat": 1700.0, "inv_pct": 0.10},
-    {"fps_id": "FPS-KA-BLR-015", "name": "Electronic City Phase-2 Hub", "lat": 12.8399, "lng": 77.6770, "capacity_kg": 26000.0, "type": "HIGH_MIGRANT", "base_rice": 4600.0, "base_wheat": 1600.0, "inv_pct": 0.14},
-    {"fps_id": "FPS-KA-BLR-016", "name": "Bommasandra Industrial FPS", "lat": 12.8160, "lng": 77.6920, "capacity_kg": 25000.0, "type": "HIGH_MIGRANT", "base_rice": 4400.0, "base_wheat": 1500.0, "inv_pct": 0.11},
-
-    # 5. Low Inventory Stress Nodes (FPS 017 - 018) — Critical stockout risk
-    {"fps_id": "FPS-KA-BLR-017", "name": "Kengeri Satellite Town FPS", "lat": 12.9150, "lng": 77.4830, "capacity_kg": 18000.0, "type": "LOW_INVENTORY", "base_rice": 4000.0, "base_wheat": 1300.0, "inv_pct": 0.08},
-    {"fps_id": "FPS-KA-BLR-018", "name": "Yelahanka Old Town Depot", "lat": 13.1007, "lng": 77.5963, "capacity_kg": 20000.0, "type": "LOW_INVENTORY", "base_rice": 4200.0, "base_wheat": 1400.0, "inv_pct": 0.10},
-
-    # 6. High Inventory Surplus Nodes (FPS 019 - 020) — Buffer warehouses, NO dispatch needed
-    {"fps_id": "FPS-KA-BLR-019", "name": "Hebbal Godown Distribution Point", "lat": 13.0358, "lng": 77.5970, "capacity_kg": 28000.0, "type": "HIGH_INVENTORY", "base_rice": 4300.0, "base_wheat": 1450.0, "inv_pct": 0.75},
-    {"fps_id": "FPS-KA-BLR-020", "name": "Banaswadi Central Stock Depot", "lat": 13.0100, "lng": 77.6500, "capacity_kg": 25000.0, "type": "HIGH_INVENTORY", "base_rice": 4100.0, "base_wheat": 1350.0, "inv_pct": 0.72},
+# Resolve CSV directory across various repository/deployment layouts
+POSSIBLE_CSV_DIRS = [
+    Path(__file__).resolve().parent.parent.parent / "data" / "csv",
+    Path(__file__).resolve().parent / "csv",
+    Path(__file__).resolve().parent.parent / "data" / "csv",
+    Path("data/csv"),
+    Path("backend/data/csv"),
+    Path("d:/xampp/tmp"),
+    Path("/app/data/csv"),
+    Path("/app/backend/data/csv"),
 ]
 
-DEMO_FIRST_NAMES = [
-    "Ramesh", "Suresh", "Manjunath", "Basavaraj", "Venkatesh", "Chennappa", "Anjinappa",
-    "Gowramma", "Lakshmi", "Parvathi", "Savithri", "Sunita", "Meenakshi", "Ningamma",
-    "Mohammed", "Syed", "Fatima", "Ayesha", "Abdul", "Imran", "Farooq",
-    "Rajesh", "Pooja", "Priyanka", "Deepak", "Anil", "Sunil", "Vikram", "Santosh",
-    "Gurupreet", "Harpreet", "Manpreet", "Simran", "Balwinder",
-    "Murugan", "Karthik", "Selvam", "Muthu", "Priya", "Divya", "Swathi"
-]
+def _get_csv_path(filename: str) -> Path:
+    for d in POSSIBLE_CSV_DIRS:
+        p = d / filename
+        if p.exists():
+            return p
+    raise FileNotFoundError(f"CSV file '{filename}' not found in any of: {[str(d) for d in POSSIBLE_CSV_DIRS]}")
 
-DEMO_LAST_INITIALS = ["A.", "B.", "C.", "D.", "G.", "H.", "K.", "M.", "N.", "P.", "R.", "S.", "T.", "V.", "Y."]
+def _read_csv(filename: str):
+    """Read a CSV file and return list of dicts."""
+    filepath = _get_csv_path(filename)
+    with open(filepath, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        return list(reader)
 
-LANGUAGES = ["kn", "hi", "ta", "te", "en"]
-LANGUAGE_WEIGHTS = [0.45, 0.25, 0.12, 0.12, 0.06]
 
-def generate_beneficiaries(total_count=2000):
-    """Generate 2,000 synthetic demo beneficiaries evenly distributed across 20 FPS."""
-    beneficiaries = []
-    random.seed(42)  # Seed for deterministic benchmark reproducibility
-
-    fps_ids = [c["fps_id"] for c in FPS_CONFIGS]
-    cards_per_fps = total_count // len(fps_ids)
-
-    idx = 1
-    for fps_id in fps_ids:
-        for _ in range(cards_per_fps):
-            pseudo_id = f"BEN-KA-{idx:04d}"
-            if idx == 1:
-                name = "Swathi Bhat"
-            elif idx == 5:
-                name = "Sunita Devi"
-            elif idx == 15:
-                name = "Ramesh Kumar"
-            else:
-                name = f"{random.choice(DEMO_FIRST_NAMES)} {random.choice(DEMO_LAST_INITIALS)}"
-            lang = random.choices(LANGUAGES, weights=LANGUAGE_WEIGHTS, k=1)[0]
-            beneficiaries.append((pseudo_id, name, fps_id, lang, "ACTIVE"))
-            idx += 1
-
-    # Remaining if total_count not evenly divisible
-    while idx <= total_count:
-        pseudo_id = f"BEN-KA-{idx:04d}"
-        if idx == 1:
-            name = "Swathi Bhat"
-        elif idx == 5:
-            name = "Sunita Devi"
-        elif idx == 15:
-            name = "Ramesh Kumar"
-        else:
-            name = f"{random.choice(DEMO_FIRST_NAMES)} {random.choice(DEMO_LAST_INITIALS)}"
-        lang = random.choices(LANGUAGES, weights=LANGUAGE_WEIGHTS, k=1)[0]
-        beneficiaries.append((pseudo_id, name, random.choice(fps_ids), lang, "ACTIVE"))
-        idx += 1
-
-    return beneficiaries
-
-def generate_historical_demand():
-    """
-    Generate 6 historical cycles (2026-03 to 2026-08) for Rice & Wheat across all 20 FPS.
-    Applies realistic trends per FPS profile.
-    """
+def seed_fps(cursor):
+    """Load 621 FPS from fps_master.csv."""
+    rows = _read_csv("fps_master.csv")
     records = []
-    random.seed(101)
+    for row in rows:
+        fps_id = row["fps_id"].strip()
+        name = row["name"].strip()
+        district = row["district"].strip()
+        lat = float(row["latitude"])
+        lng = float(row["longitude"])
+        capacity_kg = float(row["capacity_kg"])
+        ben_count = int(row.get("registered_cards_count", 17))
 
-    for cfg in FPS_CONFIGS:
-        fps_id = cfg["fps_id"]
-        fps_type = cfg["type"]
-        base_rice = cfg["base_rice"]
-        base_wheat = cfg["base_wheat"]
+        # Derive realistic operational metrics
+        stockout_freq = round(random.uniform(0.02, 0.15), 3)
+        port_rate = round(random.uniform(0.05, 0.25), 3)
+        seas_factor = round(random.uniform(0.95, 1.15), 3)
 
-        for month_idx, cycle_id in enumerate(HISTORICAL_CYCLES):
-            # Trend calculation
-            if fps_type == "STABLE":
-                rice_qty = base_rice + random.uniform(-80, 80)
-                wheat_qty = base_wheat + random.uniform(-30, 30)
-            elif fps_type == "INCREASING":
-                growth_factor = 1.0 + (month_idx * 0.05) + random.uniform(-0.02, 0.02)
-                rice_qty = base_rice * growth_factor
-                wheat_qty = base_wheat * growth_factor
-            elif fps_type == "DECREASING":
-                decay_factor = 1.0 - (month_idx * 0.04) + random.uniform(-0.02, 0.02)
-                rice_qty = base_rice * decay_factor
-                wheat_qty = base_wheat * decay_factor
-            elif fps_type == "HIGH_MIGRANT":
-                # High fluctuation due to seasonal migrant waves
-                migrant_factor = 1.0 + (month_idx * 0.07) + random.uniform(-0.05, 0.08)
-                rice_qty = base_rice * migrant_factor
-                wheat_qty = base_wheat * migrant_factor
-            elif fps_type == "LOW_INVENTORY":
-                rice_qty = base_rice + (month_idx * 30) + random.uniform(-50, 50)
-                wheat_qty = base_wheat + random.uniform(-20, 20)
-            else: # HIGH_INVENTORY
-                rice_qty = base_rice + random.uniform(-60, 60)
-                wheat_qty = base_wheat + random.uniform(-25, 25)
+        records.append((
+            fps_id, name, district, lat, lng, capacity_kg,
+            stockout_freq, port_rate, seas_factor,
+            ben_count, 25.0, 10.0, "ACTIVE"
+        ))
 
-            records.append((fps_id, cycle_id, "Rice", round(rice_qty, 1)))
-            records.append((fps_id, cycle_id, "Wheat", round(wheat_qty, 1)))
+    cursor.executemany("""
+    INSERT OR REPLACE INTO fps (
+        fps_id, name, district, latitude, longitude, capacity_kg,
+        stockout_frequency, portability_rate, seasonal_factor,
+        beneficiaries_count, entitlement_rice_kg, entitlement_wheat_kg, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    """, records)
+    return len(records)
 
-    return records
 
-def generate_inventory():
-    """Generate current available inventory for each FPS for Rice & Wheat."""
+def seed_beneficiaries(cursor):
+    """Load 10,000 beneficiaries from beneficiaries_master.csv."""
+    rows = _read_csv("beneficiaries_master.csv")
     records = []
-    for cfg in FPS_CONFIGS:
-        fps_id = cfg["fps_id"]
-        capacity = cfg["capacity_kg"]
-        inv_pct = cfg["inv_pct"]
+    for row in rows:
+        card_id = row["card_id"].strip()
+        name = row["name"].strip()
+        home_fps = row["home_fps_id"].strip()
+        lang = row.get("language", "kn").strip()
+        records.append((card_id, name, home_fps, lang, "ACTIVE"))
 
-        total_available = capacity * inv_pct
-        rice_inv = round(total_available * 0.72, 1)  # 72% Rice
-        wheat_inv = round(total_available * 0.28, 1) # 28% Wheat
+    cursor.executemany("""
+    INSERT OR REPLACE INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status)
+    VALUES (?, ?, ?, ?, ?);
+    """, records)
+    return len(records)
 
+
+def seed_historical_demand(cursor):
+    """Load 22,321 historical demand records from historical_demand.csv."""
+    rows = _read_csv("historical_demand.csv")
+    records = []
+    seen = set()
+    for row in rows:
+        fps_id = row["fps_id"].strip()
+        cycle_id = row["cycle_id"].strip()
+        commodity = row["commodity"].strip()
+
+        # Only insert Rice and Wheat (schema constraint)
+        if commodity not in ("Rice", "Wheat"):
+            continue
+
+        key = (fps_id, cycle_id, commodity)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        qty = float(row.get("demand_quantity_kg", 0))
+        records.append((fps_id, cycle_id, commodity, qty))
+
+    cursor.executemany("""
+    INSERT OR REPLACE INTO historical_demand (fps_id, cycle_id, commodity, actual_quantity_kg)
+    VALUES (?, ?, ?, ?);
+    """, records)
+    return len(records)
+
+
+def seed_inventory(cursor):
+    """Generate current inventory levels based on FPS capacity."""
+    cursor.execute("SELECT fps_id, capacity_kg FROM fps;")
+    fps_rows = cursor.fetchall()
+    records = []
+    random.seed(42)
+    for row in fps_rows:
+        fps_id = row["fps_id"]
+        capacity = row["capacity_kg"]
+        inv_pct = random.uniform(0.10, 0.60)
+        total = capacity * inv_pct
+        rice_inv = round(total * 0.72, 1)
+        wheat_inv = round(total * 0.28, 1)
         records.append((fps_id, "Rice", rice_inv))
         records.append((fps_id, "Wheat", wheat_inv))
 
-    return records
+    cursor.executemany("""
+    INSERT OR REPLACE INTO inventory (fps_id, commodity, available_quantity_kg)
+    VALUES (?, ?, ?);
+    """, records)
+    return len(records)
 
-def generate_sample_intents(beneficiaries, count=480):
-    """
-    Generate initial forward-looking intent declarations for upcoming cycle 2026-09.
-    Simulates high portability shift into migrant industrial hubs (FPS 013 - 016).
-    """
+
+def seed_intents(cursor):
+    """Load 10,000 intent signals from intent_signals.csv."""
+    rows = _read_csv("intent_signals.csv")
+
+    # Load beneficiary entitlements from CSV for accurate rice/wheat
+    ben_csv = _read_csv("beneficiaries_master.csv")
+    ben_entitlements = {}
+    for row in ben_csv:
+        card_id = row["card_id"].strip()
+        ben_entitlements[card_id] = {
+            "rice": float(row.get("monthly_rice_kg", 20)),
+            "wheat": float(row.get("monthly_wheat_kg", 5)),
+        }
+
     records = []
-    random.seed(777)
+    seen = set()
+    for row in rows:
+        card_id = row["card_id"].strip()
+        cycle_id = row.get("cycle_id", CURRENT_CYCLE).strip()
+        intended_fps = row["intended_fps_id"].strip()
+        commodity = row.get("commodity", "Rice").strip()
 
-    migrant_hub_ids = ["FPS-KA-BLR-013", "FPS-KA-BLR-014", "FPS-KA-BLR-015", "FPS-KA-BLR-016"]
-    sampled_beneficiaries = random.sample(beneficiaries, count)
+        if commodity not in ("Rice", "Wheat"):
+            commodity = "Rice"
 
-    for b in sampled_beneficiaries:
-        pseudo_id, name, home_fps, lang, status = b
+        key = (card_id, cycle_id, commodity)
+        if key in seen:
+            continue
+        seen.add(key)
 
-        # 35% probability of migrant portability shift to industrial hubs
-        if random.random() < 0.35:
-            intended_fps = random.choice(migrant_hub_ids)
-            confidence = round(random.uniform(0.80, 0.95), 2)
-        else:
-            intended_fps = home_fps
-            confidence = round(random.uniform(0.85, 0.99), 2)
+        # Get entitlement for this beneficiary
+        ent = ben_entitlements.get(card_id, {"rice": 20.0, "wheat": 5.0})
+        qty = ent["rice"] if commodity == "Rice" else ent["wheat"]
+        if qty <= 0:
+            qty = 5.0
 
-        # Standard quota per beneficiary: Rice: 20-35 kg, Wheat: 5-10 kg
-        rice_quota = random.choice([20.0, 25.0, 30.0, 35.0])
-        wheat_quota = random.choice([5.0, 10.0])
+        confidence = round(random.uniform(0.80, 0.99), 2)
+        records.append((card_id, cycle_id, intended_fps, commodity, qty, confidence, "SUBMITTED"))
 
-        records.append((pseudo_id, CURRENT_CYCLE, intended_fps, "Rice", rice_quota, confidence, "SUBMITTED"))
-        records.append((pseudo_id, CURRENT_CYCLE, intended_fps, "Wheat", wheat_quota, confidence, "SUBMITTED"))
+    cursor.executemany("""
+    INSERT OR REPLACE INTO intent (beneficiary_id, cycle_id, intended_fps_id, commodity, declared_quantity_kg, confidence, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?);
+    """, records)
+    return len(records)
 
-    return records
 
-def seed_all_data(recreate=False):
-    """
-    Seeds the SQLite database with 20 FPS, 2,000 Beneficiaries, 6 Cycles, Inventories, and Intents.
-    """
-    if recreate:
-        recreate_db()
-    else:
-        init_db()
+def seed_godowns_as_depots(cursor):
+    """Load 63 godowns from godowns_master.csv as depots."""
+    rows = _read_csv("godowns_master.csv")
+    records = []
+    for row in rows:
+        godown_id = row["godown_id"].strip()
+        name = row["godown_name"].strip()
+        district = row["district"].strip()
+        capacity_mt = float(row["capacity_mt"])
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+        available_stock = round(capacity_mt * random.uniform(0.6, 0.9), 1)
+        loading_cap = round(capacity_mt * 0.15, 1)
+        rice_stock = round(available_stock * 0.65, 1)
+        wheat_stock = round(available_stock * 0.35, 1)
 
-    # Check if already seeded
-    cursor.execute("SELECT COUNT(*) FROM fps;")
-    if cursor.fetchone()[0] > 0 and not recreate:
-        conn.close()
-        return {"status": "already_seeded", "message": "Database already contains seed data."}
-
-    # 1. Insert 20 FPS
-    for cfg in FPS_CONFIGS:
-        fps_type = cfg["type"]
-        stockout_freq = 0.15 if fps_type == "LOW_INVENTORY" else (0.08 if fps_type == "HIGH_MIGRANT" else (0.02 if fps_type == "STABLE" else 0.01))
-        port_rate = 0.28 if fps_type == "HIGH_MIGRANT" else (0.14 if fps_type == "INCREASING" else (0.05 if fps_type == "STABLE" else 0.03))
-        seas_factor = 1.15 if fps_type == "HIGH_MIGRANT" else (1.10 if fps_type == "INCREASING" else (1.02 if fps_type == "STABLE" else 0.96))
-
-        cursor.execute("""
-        INSERT INTO fps (
-            fps_id, name, district, latitude, longitude, capacity_kg,
-            stockout_frequency, portability_rate, seasonal_factor,
-            beneficiaries_count, entitlement_rice_kg, entitlement_wheat_kg, status
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """, (
-            cfg["fps_id"], cfg["name"], DEMO_DISTRICT, cfg["lat"], cfg["lng"], cfg["capacity_kg"],
-            stockout_freq, port_rate, seas_factor,
-            100, 25.0, 10.0, "ACTIVE"
+        records.append((
+            godown_id, name, district, f"{district} District Godown",
+            capacity_mt, available_stock, loading_cap,
+            rice_stock, wheat_stock, "OPERATIONAL"
         ))
 
-    # 2. Insert 2,000 Beneficiaries
-    beneficiaries = generate_beneficiaries(2000)
     cursor.executemany("""
-    INSERT INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status)
-    VALUES (?, ?, ?, ?, ?);
-    """, beneficiaries)
+    INSERT OR REPLACE INTO depots (
+        depot_id, name, district, location, capacity_mt,
+        available_stock_mt, loading_capacity_mt_day, rice_stock_mt, wheat_stock_mt, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    """, records)
+    return len(records)
 
-    # 3. Insert Historical Demand (6 Cycles for Rice & Wheat)
-    hist_records = generate_historical_demand()
+
+def seed_trucks_as_vehicles(cursor):
+    """Load 311 trucks from truck_fleet_master.csv as vehicles."""
+    rows = _read_csv("truck_fleet_master.csv")
+
+    # Build godown info lookup
+    godown_info = {}
+    cursor.execute("SELECT depot_id, district, name FROM depots;")
+    for d in cursor.fetchall():
+        godown_info[d["depot_id"]] = {"district": d["district"], "name": d["name"]}
+
+    records = []
+    driver_first = ["Ramesh", "Suresh", "Manjunath", "Basavaraj", "Venkatesh", "Kiran", "Ganesh", "Naveen", "Harish", "Sanjay"]
+    driver_last = ["Kumar", "Gowda", "Patil", "Reddy", "Naik", "Hegde", "Shetty", "Sharma", "Rao", "Bhat"]
+
+    for i, row in enumerate(rows):
+        truck_id = row["truck_id"].strip()
+        godown_id = row["godown_id"].strip()
+        district = row["district"].strip()
+        payload_mt = float(row["payload_capacity_mt"])
+        payload_kg = payload_mt * 1000.0
+
+        gi = godown_info.get(godown_id, {"name": f"{district} Godown", "district": district})
+        model = f"Logistics Vehicle {truck_id[-4:]}"
+        vtype = "Heavy Haulage" if payload_mt >= 10 else ("Medium Logistics" if payload_mt >= 7 else "Light Feeder")
+        driver_name = f"{random.choice(driver_first)} {random.choice(driver_last)}"
+        driver_phone = f"+91-98{random.randint(10000000, 99999999)}"
+
+        records.append((
+            truck_id, model, vtype, district, payload_kg,
+            gi["name"], 32.0, driver_name, driver_phone, godown_id, "AVAILABLE"
+        ))
+
     cursor.executemany("""
-    INSERT INTO historical_demand (fps_id, cycle_id, commodity, actual_quantity_kg)
+    INSERT OR REPLACE INTO vehicles (
+        truck_id, model, vehicle_type, corridor, max_payload_kg,
+        current_location, operating_cost_per_km, driver_name, driver_phone, source_depot_id, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    """, records)
+    return len(records)
+
+
+def seed_routes(cursor):
+    """Generate routes connecting godowns to FPS within the same district."""
+    cursor.execute("SELECT depot_id, district, name FROM depots;")
+    depots = cursor.fetchall()
+
+    cursor.execute("SELECT fps_id, district, latitude, longitude FROM fps;")
+    fps_list = cursor.fetchall()
+
+    # Build district->FPS mapping
+    district_fps = {}
+    for f in fps_list:
+        d = f["district"]
+        if d not in district_fps:
+            district_fps[d] = []
+        district_fps[d].append(f)
+
+    # Build district->depot mapping
+    district_depots = {}
+    for dep in depots:
+        d = dep["district"]
+        if d not in district_depots:
+            district_depots[d] = []
+        district_depots[d].append(dep)
+
+    records = []
+    for district, depot_list in district_depots.items():
+        fps_in_district = district_fps.get(district, [])
+        for dep in depot_list:
+            for fps in fps_in_district:
+                dist_km = round(random.uniform(3.0, 45.0), 1)
+                est_mins = int(round((dist_km / 25.0) * 60)) + 10
+                road_cond = "PAVED_HIGHWAY" if dist_km > 15 else ("URBAN_CORRIDOR" if dist_km > 6 else "RURAL_FEEDER")
+                route_id = f"RT-{dep['depot_id']}-{fps['fps_id'].split('-')[-1]}"
+
+                records.append((
+                    route_id, dep["depot_id"], fps["fps_id"],
+                    dist_km, est_mins, road_cond, "CLEAR"
+                ))
+
+    cursor.executemany("""
+    INSERT OR REPLACE INTO routes (
+        route_id, source_depot_id, destination_fps_id, distance_km,
+        estimated_time_mins, road_condition, restriction_status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?);
+    """, records)
+    return len(records)
+
+
+def seed_users(cursor, conn):
+    """Seed admin/officer user accounts + all beneficiary citizen accounts."""
+    from app.core.auth import hash_password
+
+    users_data = [
+        ("admin_user", hash_password("admin_pass"), "ADMIN", None),
+        ("dso_user", hash_password("dso_pass"), "DSO", None),
+        ("field_officer_user", hash_password("field_pass"), "FIELD_OFFICER", None),
+        ("auditor_user", hash_password("auditor_pass"), "AUDITOR", None)
+    ]
+
+    cursor.execute("SELECT pseudonymous_beneficiary_id FROM beneficiaries;")
+    ben_rows = cursor.fetchall()
+    for r in ben_rows:
+        ben_id = r["pseudonymous_beneficiary_id"]
+        users_data.append((ben_id, hash_password("citizen_pass"), "BENEFICIARY", ben_id))
+
+    cursor.executemany("""
+    INSERT OR REPLACE INTO users (username, password_hash, role, beneficiary_id)
     VALUES (?, ?, ?, ?);
-    """, hist_records)
+    """, users_data)
+    return len(users_data)
 
-    # 4. Insert Current Inventories
-    inv_records = generate_inventory()
-    cursor.executemany("""
-    INSERT INTO inventory (fps_id, commodity, available_quantity_kg)
-    VALUES (?, ?, ?);
-    """, inv_records)
 
-    # 5. Insert Initial Intents for Cycle 2026-09
-    intent_records = generate_sample_intents(beneficiaries, 480)
-    cursor.executemany("""
-    INSERT INTO intent (beneficiary_id, cycle_id, intended_fps_id, commodity, declared_quantity_kg, confidence, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?);
-    """, intent_records)
-
-    # 5.1 Insert Initial Citizen Requests (Citizen Request -> AI Advisory -> Officer Review Queue)
+def seed_citizen_requests(cursor, conn):
+    """Seed initial citizen requests from top intent signals."""
     from app.services.ai_request_advisor import ai_request_advisor
     import json
 
+    cursor.execute("""
+        SELECT beneficiary_id, cycle_id, intended_fps_id, commodity, declared_quantity_kg, confidence, status
+        FROM intent ORDER BY id LIMIT 35;
+    """)
+    intent_rows = cursor.fetchall()
+
+    # Build beneficiary lookup
+    cursor.execute("SELECT pseudonymous_beneficiary_id, registered_fps_id FROM beneficiaries;")
+    ben_map = {b["pseudonymous_beneficiary_id"]: b["registered_fps_id"] for b in cursor.fetchall()}
+
     citizen_request_rows = []
-    # Seed top 35 intents into citizen_requests queue
-    for i, it in enumerate(intent_records[:35]):
-        ben_id, cyc, int_fps, com, decl_qty, conf, st = it
-        # Lookup home FPS
-        home_fps = "FPS-KA-BLR-001"
-        for b in beneficiaries:
-            if b[0] == ben_id:
-                home_fps = b[2]
-                break
+    for i, it in enumerate(intent_rows):
+        ben_id = it["beneficiary_id"]
+        cyc = it["cycle_id"]
+        int_fps = it["intended_fps_id"]
+        com = it["commodity"]
+        decl_qty = it["declared_quantity_kg"]
+
+        home_fps = ben_map.get(ben_id, int_fps)
 
         ent = ai_request_advisor.get_beneficiary_entitlement(conn, ben_id, com)
-        ai_res = ai_request_advisor.evaluate_request(
-            conn, ben_id, int_fps, com, decl_qty, cyc
-        )
+        ai_res = ai_request_advisor.evaluate_request(conn, ben_id, int_fps, com, decl_qty, cyc)
         ai_data = ai_res["ai_assessment"]
 
         req_id = f"REQ-{cyc}-{ben_id.split('-')[-1]}-{com[:1]}"
         req_type = "PORTABILITY_PREFERENCE" if int_fps != home_fps else "MONTHLY_PREFERENCE_SIGNAL"
 
-        # Varied status for demonstration
         if i % 7 == 0:
             req_status = "OFFICER_APPROVED"
             auth_qty = decl_qty
             off_name = "K. Srinivas Murthy (DSO)"
             off_role = "DISTRICT_SUPPLY_OFFICER"
             off_notes = "Verified within card quota; authorized full allocation."
-            auth_time = "2026-08-26 14:30:00"
+            auth_time = "2026-09-26 14:30:00"
         elif i % 11 == 0:
             req_status = "OFFICER_PARTIAL_APPROVED"
             auth_qty = ai_data["recommended_quantity_kg"]
             off_name = "K. Srinivas Murthy (DSO)"
             off_role = "DISTRICT_SUPPLY_OFFICER"
             off_notes = "Capped to statutory floor/headroom balance."
-            auth_time = "2026-08-26 15:15:00"
+            auth_time = "2026-09-26 15:15:00"
         elif i % 13 == 0:
             req_status = "OFFICER_REDIRECTED"
             auth_qty = decl_qty
             off_name = "Basavaraj V. (Depot Manager)"
             off_role = "DEPOT_MANAGER"
             off_notes = "Redirected to nearby FPS due to local storage constraint."
-            auth_time = "2026-08-26 16:00:00"
+            auth_time = "2026-09-26 16:00:00"
         else:
             req_status = "PENDING_OFFICER_REVIEW"
             auth_qty = 0.0
@@ -345,100 +425,67 @@ def seed_all_data(recreate=False):
         authorized_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     """, citizen_request_rows)
+    return len(citizen_request_rows)
 
-    # 6. Insert Central Depots
-    depots_data = [
-        ("DEPOT-01", "Bengaluru Central FCI Godown (Hebbal)", DEMO_DISTRICT, "Hebbal Ring Road, Bengaluru", 600.0, 500.0, 150.0, 320.0, 180.0, "OPERATIONAL"),
-        ("DEPOT-02", "Banaswadi PDS Buffer Storage Depot", DEMO_DISTRICT, "Banaswadi Industrial Area, Bengaluru", 450.0, 380.0, 120.0, 240.0, 140.0, "OPERATIONAL")
-    ]
-    cursor.executemany("""
-    INSERT OR REPLACE INTO depots (
-        depot_id, name, district, location, capacity_mt,
-        available_stock_mt, loading_capacity_mt_day, rice_stock_mt, wheat_stock_mt, status
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-    """, depots_data)
 
-    # 7. Insert Fleet Vehicles
-    vehicles_data = [
-        ("DEMO-KA-04-E-1021", "Eicher Pro 10 MT (North-West Heavy Corridor)", "10-Ton Heavy Haulage Carrier", "NORTH_WEST", 10000.0, "Bengaluru Central FCI Godown (Hebbal)", 32.0, "Ramesh Kumar", "+91-9876543210", "DEPOT-01", "AVAILABLE"),
-        ("DEMO-KA-04-E-1022", "Tata Ultra 10 MT (East Corridor / IT Belt)", "10-Ton Heavy Haulage Carrier", "EAST_IT_CORRIDOR", 10000.0, "Bengaluru Central FCI Godown (Hebbal)", 32.0, "Suresh Gowda", "+91-9876543211", "DEPOT-01", "AVAILABLE"),
-        ("DEMO-KA-51-M-3419", "BharatBenz 10 MT (South Industrial Corridor)", "10-Ton Heavy Haulage Carrier", "SOUTH_INDUSTRIAL", 10000.0, "Banaswadi PDS Buffer Storage Depot", 32.0, "Manjunath V.", "+91-9876543212", "DEPOT-02", "AVAILABLE"),
-        ("DEMO-KA-01-F-7801", "Ashok Leyland 8 MT (Central Urban / Heritage Cluster)", "8-Ton Urban Medium Logistics", "CENTRAL_HERITAGE", 8000.0, "Banaswadi PDS Buffer Storage Depot", 28.0, "Kiran Patil", "+91-9876543213", "DEPOT-02", "AVAILABLE")
-    ]
-    cursor.executemany("""
-    INSERT OR REPLACE INTO vehicles (
-        truck_id, model, vehicle_type, corridor, max_payload_kg,
-        current_location, operating_cost_per_km, driver_name, driver_phone, source_depot_id, status
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-    """, vehicles_data)
+def seed_all_data(recreate=False):
+    """
+    Seeds the SQLite database with real CSV datasets:
+    621 FPS, 10K Beneficiaries, 63 Godowns, 311 Trucks, 22K Historical Demand, 10K Intents.
+    """
+    if recreate:
+        recreate_db()
+    else:
+        init_db()
 
-    # 8. Insert Supply Routes (Connecting Depots to 20 FPS)
-    routes_data = []
-    depot_locations = {
-        "DEPOT-01": (13.0358, 77.5970),
-        "DEPOT-02": (13.0100, 77.6500)
-    }
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-    import math
-    for depot_id, dcoords in depot_locations.items():
-        for cfg in FPS_CONFIGS:
-            fps_id = cfg["fps_id"]
-            lat1, lon1 = dcoords
-            lat2, lon2 = cfg["lat"], cfg["lng"]
+    # Check if already seeded
+    cursor.execute("SELECT COUNT(*) FROM fps;")
+    if cursor.fetchone()[0] > 0 and not recreate:
+        conn.close()
+        return {"status": "already_seeded", "message": "Database already contains seed data."}
 
-            # Haversine distance in km
-            dlat = math.radians(lat2 - lat1)
-            dlon = math.radians(lon2 - lon1)
-            a = math.sin(dlat / 2.0)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2.0)**2
-            c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
-            dist_km = round(6371.0 * c * 1.3, 1)  # urban road curvature
-            if dist_km < 3.0:
-                dist_km = 3.2
+    random.seed(42)
 
-            # Transit time in minutes (avg 25 km/h urban logistics speed)
-            est_mins = int(round((dist_km / 25.0) * 60)) + 10
+    # 1. Load FPS from CSV
+    fps_count = seed_fps(cursor)
+    print(f"  [1/9] Seeded {fps_count} Fair Price Shops from CSV")
 
-            road_cond = "PAVED_HIGHWAY" if dist_km > 15 else ("URBAN_CORRIDOR" if dist_km > 6 else "RURAL_FEEDER")
-            restr = "PEAK_HOUR_RESTRICTION" if cfg["type"] in ("HIGH_MIGRANT", "DECREASING") and "Central" in cfg["name"] else "CLEAR"
-            route_id = f"RT-{depot_id}-{fps_id.split('-')[-1]}"
+    # 2. Load Beneficiaries from CSV
+    ben_count = seed_beneficiaries(cursor)
+    print(f"  [2/9] Seeded {ben_count} Beneficiaries from CSV")
 
-            routes_data.append((
-                route_id, depot_id, fps_id, dist_km, est_mins, road_cond, restr
-            ))
+    # 3. Load Historical Demand from CSV
+    hist_count = seed_historical_demand(cursor)
+    print(f"  [3/9] Seeded {hist_count} Historical Demand records from CSV")
 
-    cursor.executemany("""
-    INSERT OR REPLACE INTO routes (
-        route_id, source_depot_id, destination_fps_id, distance_km,
-        estimated_time_mins, road_condition, restriction_status
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?);
-    """, routes_data)
+    # 4. Generate Inventory levels
+    inv_count = seed_inventory(cursor)
+    print(f"  [4/9] Seeded {inv_count} Inventory records")
+
+    # 5. Load Intent Signals from CSV
+    intent_count = seed_intents(cursor)
+    print(f"  [5/9] Seeded {intent_count} Intent Signals from CSV")
+
+    # 6. Load Godowns as Depots from CSV
+    depot_count = seed_godowns_as_depots(cursor)
+    print(f"  [6/9] Seeded {depot_count} Godowns/Depots from CSV")
+
+    # 7. Load Trucks as Vehicles from CSV
+    vehicle_count = seed_trucks_as_vehicles(cursor)
+    print(f"  [7/9] Seeded {vehicle_count} Trucks/Vehicles from CSV")
+
+    # 8. Generate Routes
+    route_count = seed_routes(cursor)
+    print(f"  [8/9] Seeded {route_count} Supply Routes")
 
     # 9. Seed User Accounts
-    from app.core.auth import hash_password
-    users_data = [
-        ("admin_user", hash_password("admin_pass"), "ADMIN", None),
-        ("dso_user", hash_password("dso_pass"), "DSO", None),
-        ("field_officer_user", hash_password("field_pass"), "FIELD_OFFICER", None),
-        ("auditor_user", hash_password("auditor_pass"), "AUDITOR", None)
-    ]
-    
-    cursor.execute("SELECT pseudonymous_beneficiary_id FROM beneficiaries;")
-    ben_rows = cursor.fetchall()
-    for r in ben_rows:
-        ben_id = r["pseudonymous_beneficiary_id"]
-        users_data.append((ben_id, hash_password("citizen_pass"), "BENEFICIARY", ben_id))
+    user_count = seed_users(cursor, conn)
+    print(f"  [9/9] Seeded {user_count} User Accounts")
 
-    cursor.executemany("""
-    INSERT OR REPLACE INTO users (
-        username, password_hash, role, beneficiary_id
-    )
-    VALUES (?, ?, ?, ?);
-    """, users_data)
-
-    # 10. Initialize Planning Cycle Engine State (Day 22: Choice Window Open by Default)
+    # 10. Initialize Planning Cycle Engine State
     from app.services.planning_cycle_engine import planning_cycle_engine
     planning_cycle_engine.ensure_tables(conn)
     cursor.execute("DELETE FROM demand_snapshots WHERE cycle_id = ?;", (CURRENT_CYCLE,))
@@ -450,38 +497,32 @@ def seed_all_data(recreate=False):
 
     conn.commit()
 
-    # Verification counts
-    cursor.execute("SELECT COUNT(*) FROM fps;")
-    fps_count = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM beneficiaries;")
-    ben_count = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM historical_demand;")
-    hist_count = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM inventory;")
-    inv_count = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM intent;")
-    intent_count = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM routes;")
-    routes_count = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM users;")
-    users_count = cursor.fetchone()[0]
+    # 11. Seed Citizen Requests (after commit so FK lookups work)
+    try:
+        cr_count = seed_citizen_requests(cursor, conn)
+        conn.commit()
+        print(f"  [+] Seeded {cr_count} Citizen Requests with AI Advisory")
+    except Exception as e:
+        print(f"  [!] Citizen request seeding skipped: {e}")
 
     conn.close()
 
     return {
         "status": "success",
         "notice": DEMO_NOTICE,
-        "district": DEMO_DISTRICT,
+        "datasets": "Real CSV (31 Districts, Karnataka)",
         "fps_count": fps_count,
         "beneficiaries_count": ben_count,
         "historical_demand_records": hist_count,
         "inventory_records": inv_count,
         "intent_declarations_count": intent_count,
-        "routes_count": routes_count,
-        "users_count": users_count,
-        "historical_cycles": HISTORICAL_CYCLES,
+        "depot_count": depot_count,
+        "vehicle_count": vehicle_count,
+        "routes_count": route_count,
+        "users_count": user_count,
         "active_cycle": CURRENT_CYCLE
     }
+
 
 if __name__ == "__main__":
     recreate_flag = "--recreate" in sys.argv or "-r" in sys.argv

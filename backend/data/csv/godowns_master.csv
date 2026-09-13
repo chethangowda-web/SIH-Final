@@ -1,0 +1,63 @@
+godown_id,godown_name,district,capacity_mt
+GDN-KA-0001,Bagalkot Synthetic Godown 1,Bagalkot,5000.0
+GDN-KA-0002,Bagalkot Synthetic Godown 2,Bagalkot,1000.0
+GDN-KA-0003,Ballari Synthetic Godown 1,Ballari,1000.0
+GDN-KA-0004,Ballari Synthetic Godown 2,Ballari,5000.0
+GDN-KA-0005,Belagavi Synthetic Godown 1,Belagavi,2000.0
+GDN-KA-0006,Belagavi Synthetic Godown 2,Belagavi,1500.0
+GDN-KA-0007,Bengaluru Rural Synthetic Godown 1,Bengaluru Rural,1500.0
+GDN-KA-0008,Bengaluru Rural Synthetic Godown 2,Bengaluru Rural,1500.0
+GDN-KA-0009,Bengaluru Urban Synthetic Godown 1,Bengaluru Urban,5000.0
+GDN-KA-0010,Bengaluru Urban Synthetic Godown 2,Bengaluru Urban,1000.0
+GDN-KA-0011,Bidar Synthetic Godown 1,Bidar,5000.0
+GDN-KA-0012,Bidar Synthetic Godown 2,Bidar,5000.0
+GDN-KA-0013,Chamarajanagar Synthetic Godown 1,Chamarajanagar,3000.0
+GDN-KA-0014,Chamarajanagar Synthetic Godown 2,Chamarajanagar,1000.0
+GDN-KA-0015,Chikkaballapur Synthetic Godown 1,Chikkaballapur,3000.0
+GDN-KA-0016,Chikkaballapur Synthetic Godown 2,Chikkaballapur,2500.0
+GDN-KA-0017,Chikkamagaluru Synthetic Godown 1,Chikkamagaluru,1000.0
+GDN-KA-0018,Chikkamagaluru Synthetic Godown 2,Chikkamagaluru,1000.0
+GDN-KA-0019,Chitradurga Synthetic Godown 1,Chitradurga,1000.0
+GDN-KA-0020,Chitradurga Synthetic Godown 2,Chitradurga,1500.0
+GDN-KA-0021,Dakshina Kannada Synthetic Godown 1,Dakshina Kannada,1500.0
+GDN-KA-0022,Dakshina Kannada Synthetic Godown 2,Dakshina Kannada,3000.0
+GDN-KA-0023,Davanagere Synthetic Godown 1,Davanagere,3000.0
+GDN-KA-0024,Davanagere Synthetic Godown 2,Davanagere,1000.0
+GDN-KA-0025,Dharwad Synthetic Godown 1,Dharwad,3000.0
+GDN-KA-0026,Dharwad Synthetic Godown 2,Dharwad,1500.0
+GDN-KA-0027,Gadag Synthetic Godown 1,Gadag,5000.0
+GDN-KA-0028,Gadag Synthetic Godown 2,Gadag,5000.0
+GDN-KA-0029,Hassan Synthetic Godown 1,Hassan,5000.0
+GDN-KA-0030,Hassan Synthetic Godown 2,Hassan,3000.0
+GDN-KA-0031,Haveri Synthetic Godown 1,Haveri,2500.0
+GDN-KA-0032,Haveri Synthetic Godown 2,Haveri,1500.0
+GDN-KA-0033,Kalaburagi Synthetic Godown 1,Kalaburagi,2500.0
+GDN-KA-0034,Kalaburagi Synthetic Godown 2,Kalaburagi,3000.0
+GDN-KA-0035,Kodagu Synthetic Godown 1,Kodagu,2000.0
+GDN-KA-0036,Kodagu Synthetic Godown 2,Kodagu,1000.0
+GDN-KA-0037,Kolar Synthetic Godown 1,Kolar,1500.0
+GDN-KA-0038,Kolar Synthetic Godown 2,Kolar,5000.0
+GDN-KA-0039,Koppal Synthetic Godown 1,Koppal,2500.0
+GDN-KA-0040,Koppal Synthetic Godown 2,Koppal,2000.0
+GDN-KA-0041,Mandya Synthetic Godown 1,Mandya,2000.0
+GDN-KA-0042,Mandya Synthetic Godown 2,Mandya,1500.0
+GDN-KA-0043,Mysuru Synthetic Godown 1,Mysuru,1500.0
+GDN-KA-0044,Mysuru Synthetic Godown 2,Mysuru,2000.0
+GDN-KA-0045,Raichur Synthetic Godown 1,Raichur,1000.0
+GDN-KA-0046,Raichur Synthetic Godown 2,Raichur,1000.0
+GDN-KA-0047,Ramanagara Synthetic Godown 1,Ramanagara,2500.0
+GDN-KA-0048,Ramanagara Synthetic Godown 2,Ramanagara,1000.0
+GDN-KA-0049,Shivamogga Synthetic Godown 1,Shivamogga,2000.0
+GDN-KA-0050,Shivamogga Synthetic Godown 2,Shivamogga,2000.0
+GDN-KA-0051,Tumakuru Synthetic Godown 1,Tumakuru,3000.0
+GDN-KA-0052,Tumakuru Synthetic Godown 2,Tumakuru,2000.0
+GDN-KA-0053,Udupi Synthetic Godown 1,Udupi,1000.0
+GDN-KA-0054,Udupi Synthetic Godown 2,Udupi,5000.0
+GDN-KA-0055,Uttara Kannada Synthetic Godown 1,Uttara Kannada,2500.0
+GDN-KA-0056,Uttara Kannada Synthetic Godown 2,Uttara Kannada,3000.0
+GDN-KA-0057,Vijayanagara Synthetic Godown 1,Vijayanagara,1000.0
+GDN-KA-0058,Vijayanagara Synthetic Godown 2,Vijayanagara,2500.0
+GDN-KA-0059,Vijayapura Synthetic Godown 1,Vijayapura,1000.0
+GDN-KA-0060,Vijayapura Synthetic Godown 2,Vijayapura,3000.0
+GDN-KA-0061,Yadgir Synthetic Godown 1,Yadgir,2000.0
+GDN-KA-0062,Yadgir Synthetic Godown 2,Yadgir,5000.0

@@ -874,8 +874,11 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
     );
   }
 
-  // SECTION 4: ENTITLEMENT SUMMARY (Non-editable)
+  // SECTION 4: STATUTORY QUOTA SUMMARY (Government Approved)
   Widget _buildSection4EntitlementSummary(double monthly, double consumed, double remaining) {
+    final riceTotal = _eligibleMembersCount * 4.0;
+    final wheatTotal = _eligibleMembersCount * 1.0;
+
     return Container(
       padding: const EdgeInsets.all(AppConstants.space16),
       decoration: BoxDecoration(
@@ -899,8 +902,8 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                 ),
               ),
               const Text(
-                'NON-EDITABLE',
-                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: AppConstants.textSecondary),
+                'STATUTORY QUOTA',
+                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
               ),
             ],
           ),
@@ -909,10 +912,10 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
           LayoutBuilder(
             builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 520;
-              final b1 = _buildEntitlementBox(tr('entitlement.monthly_quota'), '${monthly.toStringAsFixed(1)} ${tr('commodity.kg')}', '${tr('commodity.rice')} + ${tr('commodity.wheat')}');
-              final b2 = _buildEntitlementBox(tr('entitlement.consumed'), '${consumed.toStringAsFixed(1)} ${tr('commodity.kg')}', 'This Month');
-              final b3 = _buildEntitlementBox(tr('entitlement.remaining_balance'), '${remaining.toStringAsFixed(1)} ${tr('commodity.kg')}', 'Available to Lift', isHighlight: true);
-              final b4 = _buildEntitlementBox('Planning Cycle', 'Cycle 7', 'Sep 2026');
+              final b1 = _buildEntitlementBox(tr('entitlement.monthly_quota'), '${monthly.toStringAsFixed(1)} ${tr('commodity.kg')}', '100% Subsidized', isHighlight: true);
+              final b2 = _buildEntitlementBox(tr('commodity.rice'), '${riceTotal.toStringAsFixed(1)} ${tr('commodity.kg')}', '₹0.00 / kg');
+              final b3 = _buildEntitlementBox(tr('commodity.wheat'), '${wheatTotal.toStringAsFixed(1)} ${tr('commodity.kg')}', '₹0.00 / kg');
+              final b4 = _buildEntitlementBox('Planning Cycle', 'Cycle 2026-10', 'Statewide PDS');
 
               if (isNarrow) {
                 return Column(
