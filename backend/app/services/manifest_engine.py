@@ -161,9 +161,29 @@ class ManifestEngine:
         # Fetch vehicle driver details
         cursor.execute("SELECT model, driver_name, driver_phone, source_depot_id FROM vehicles WHERE truck_id = ?;", (truck_id,))
         v_row = cursor.fetchone()
-        driver_name = v_row["driver_name"] if v_row else "Basavaraj Gowda"
-        driver_phone = v_row["driver_phone"] if v_row else "+91 94801 23456"
-        source_depot_id = v_row["source_depot_id"] if v_row else "DEPOT-01"
+        driver_name = v_row["driver_name"] if (v_row and v_row["driver_name"]) else "Basavaraj Gowda"
+        driver_phone = v_row["driver_phone"] if (v_row and v_row["driver_phone"]) else "+91 94801 23456"
+        source_depot_id = v_row["source_depot_id"] if (v_row and v_row["source_depot_id"]) else None
+
+        # Verify source_depot_id is a valid foreign key in depots table
+        if source_depot_id:
+            cursor.execute("SELECT depot_id FROM depots WHERE depot_id = ?;", (source_depot_id,))
+            if not cursor.fetchone():
+                source_depot_id = None
+
+        if not source_depot_id:
+            cursor.execute("SELECT depot_id FROM depots LIMIT 1;")
+            dep_row = cursor.fetchone()
+            source_depot_id = dep_row["depot_id"] if dep_row else "GDN-KA-0001"
+
+        # Ensure truck_id exists in vehicles table to satisfy foreign key constraint
+        cursor.execute("SELECT truck_id FROM vehicles WHERE truck_id = ?;", (truck_id,))
+        if not cursor.fetchone():
+            cursor.execute("""
+            INSERT OR IGNORE INTO vehicles (truck_id, model, vehicle_type, corridor, max_payload_kg, driver_name, driver_phone, source_depot_id, status)
+            VALUES (?, 'Demo Carrier Fleet 10 MT', '10-Ton Heavy Haulage Carrier', ?, 10000.0, ?, ?, ?, 'AVAILABLE');
+            """, (truck_id, opt_dossier.get("corridor", "CENTRAL"), driver_name, driver_phone, source_depot_id))
+
 
         delivery_seq = opt_dossier["delivery_sequence"]
         total_rice = sum(float(s.get("rice_kg", 0.0)) for s in delivery_seq)
