@@ -146,6 +146,18 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
     );
     """)
 
+    # Seed fallback master records for default citizen users if absent
+    cursor.execute("""
+    INSERT OR IGNORE INTO fps (fps_id, name, district, latitude, longitude, capacity_kg)
+    VALUES ('FPS-KA-BAG-0001', 'Fair Price Shop 1 (Bagalkot)', 'Bagalkot', 16.185, 75.696, 5000.0);
+    """)
+    cursor.execute("""
+    INSERT OR IGNORE INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language)
+    VALUES 
+        ('BEN-KA-0001', 'Deepa Reddy', 'FPS-KA-BAG-0001', 'en'),
+        ('RC-KA-000001', 'Deepa Reddy', 'FPS-KA-BAG-0001', 'en');
+    """)
+
     # 5. intent (Forward Beneficiary Signal)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS intent (
