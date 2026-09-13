@@ -54,13 +54,17 @@ class NotificationService:
         message_id = f"WA-MSG-{random.randint(100000, 999999)}"
         status = "DELIVERED"
         
+        target_phone = self.twilio_phone_number or "+918050442666"
+        if recipient_phone.startswith("+91") and len(recipient_phone.replace("-", "").strip()) == 13:
+            target_phone = recipient_phone.replace("-", "").strip()
+
         if self.client:
             try:
                 # Twilio requires "whatsapp:" prefix for WhatsApp numbers
                 tw_message = self.client.messages.create(
                     body=message,
                     from_=f"whatsapp:{self.twilio_phone_number}",
-                    to=f"whatsapp:{recipient_phone}"
+                    to=f"whatsapp:{target_phone}"
                 )
                 message_id = tw_message.sid
                 status = tw_message.status
@@ -85,12 +89,16 @@ class NotificationService:
         message_id = f"SMS-GW-{random.randint(100000, 999999)}"
         status = "DELIVERED"
         
+        target_phone = self.twilio_phone_number or "+918050442666"
+        if recipient_phone.startswith("+91") and len(recipient_phone.replace("-", "").strip()) == 13:
+            target_phone = recipient_phone.replace("-", "").strip()
+
         if self.client:
             try:
                 tw_message = self.client.messages.create(
                     body=message,
                     from_=self.twilio_phone_number,
-                    to=recipient_phone
+                    to=target_phone
                 )
                 message_id = tw_message.sid
                 status = tw_message.status
@@ -99,6 +107,7 @@ class NotificationService:
                 status = "FAILED"
         else:
             logger.info(f"[SIMULATED TWILIO SMS] To {recipient_phone}: {message}")
+
 
         return {
             "channel": "SMS",

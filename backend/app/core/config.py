@@ -56,9 +56,10 @@ class Settings(BaseSettings):
     ]
     
     # Twilio API Credentials (for real SMS/WhatsApp/IVR integration)
-    TWILIO_ACCOUNT_SID: str | None = None
-    TWILIO_AUTH_TOKEN: str | None = None
-    TWILIO_PHONE_NUMBER: str | None = None
+    TWILIO_ACCOUNT_SID: str = "AC5f5cfb44e18f44372e613297f1c8c59b"
+    TWILIO_AUTH_TOKEN: str = "14c6067a3b9301749d1c2b9a6b4d0965"
+    TWILIO_PHONE_NUMBER: str = "+918050442666"
+
     
     # Default active cycle for Demo
     CURRENT_CYCLE: str = "2026-09"
