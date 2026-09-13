@@ -6,7 +6,6 @@ import '../../models/beneficiary_model.dart';
 import '../../services/api_service.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/delivery_timeline.dart';
-import 'biometric_verification_dialog.dart';
 import 'intent_selection_screen.dart';
 import 'intent_history_screen.dart';
 import 'demo_login_screen.dart';
@@ -315,45 +314,6 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
 
     if (result == true || result == null) {
       _loadBeneficiaryData();
-    }
-  }
-
-  void _openBiometricVerificationDialog(CombinedCitizenDeliveryOrder order) async {
-    if (_beneficiary == null) return;
-
-    final riceQty = order.authorizedRiceKg > 0 ? order.authorizedRiceKg : (_eligibleMembersCount * 4.0);
-    final wheatQty = order.authorizedWheatKg > 0 ? order.authorizedWheatKg : (_eligibleMembersCount * 1.0);
-
-    final res = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => BiometricVerificationDialog(
-        beneficiary: _beneficiary!,
-        entitlement: _entitlement,
-        deliveryMode: order.deliveryMode,
-        deliveryAddress: order.deliveryAddress,
-        fpsName: order.intendedFpsName ?? order.registeredFpsName,
-        riceQtyKg: riceQty,
-        wheatQtyKg: wheatQty,
-        eligibleMembersCount: _eligibleMembersCount,
-        onDistributionComplete: (distributedKg, remainingKg) {
-          setState(() {
-            _distributedQuantityKg = distributedKg;
-            _remainingBalanceKg = remainingKg;
-            _isBiometricVerified = true;
-          });
-        },
-      ),
-    );
-
-    if (res == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(tr('biometric.distribute_success_toast')),
-          backgroundColor: const Color(0xFF15803D),
-          duration: const Duration(seconds: 4),
-        ),
-      );
     }
   }
 
@@ -2154,9 +2114,6 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                   ),
                 ],
 
-                // Biometric Handover & Distribution Verification Card
-                _buildBiometricVerificationTriggerCard(order),
-
                 // Action Buttons if delivered but not confirmed/disputed
                 if (!isConfirmed && !isDispute) ...[
                   const Divider(height: 20),
@@ -2200,98 +2157,6 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           );
         }),
       ],
-    );
-  }
-
-  Widget _buildBiometricVerificationTriggerCard(CombinedCitizenDeliveryOrder order) {
-    final isHome = order.deliveryMode == 'HOME_DELIVERY';
-
-    return Container(
-      key: const ValueKey('card_biometric_verification_trigger'),
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _isBiometricVerified ? const Color(0xFFF0FDF4) : const Color(0xFFEFF6FF),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: _isBiometricVerified ? const Color(0xFF86EFAC) : AppConstants.accentBlue.withValues(alpha: 0.4),
-          width: 1.2,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    _isBiometricVerified ? Icons.verified_user_rounded : Icons.security_rounded,
-                    color: _isBiometricVerified ? const Color(0xFF15803D) : AppConstants.accentBlue,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _isBiometricVerified
-                        ? tr('biometric.distributed_badge')
-                        : (isHome ? 'DOORSTEP DIGITAL HANDOVER VERIFICATION' : 'FPS COUNTER DIGITAL HANDOVER VERIFICATION'),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: _isBiometricVerified ? const Color(0xFF15803D) : AppConstants.primaryNavy,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _isBiometricVerified ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  _isBiometricVerified ? 'HANDOVER COMPLETE' : 'VERIFICATION REQUIRED',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: _isBiometricVerified ? const Color(0xFF15803D) : const Color(0xFFB45309),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            _isBiometricVerified
-                ? 'Identity verified via digital ePoS token verification. Foodgrain successfully handed over and quota deducted.'
-                : (isHome ? tr('biometric.doorstep_banner') : tr('biometric.fps_banner')),
-            style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary, height: 1.3),
-          ),
-          const SizedBox(height: 10),
-
-          if (!_isBiometricVerified)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                key: const ValueKey('btn_start_biometric_verification'),
-                onPressed: () => _openBiometricVerificationDialog(order),
-                icon: const Icon(Icons.security_rounded, size: 16),
-                label: Text(
-                  isHome ? tr('biometric.btn_verify_home') : tr('biometric.btn_verify_fps'),
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppConstants.primaryNavy,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 
