@@ -98,6 +98,10 @@ class CitizenRequestAdvisor:
                 rice_quota = 20.0
                 wheat_quota = 5.0
 
+        # Align household member count with statutory foodgrain quota for per-member schemes (PHH: 5kg/person)
+        if card_type == "PHH" and (rice_quota + wheat_quota) > 0:
+            members = max(1, int(round((rice_quota + wheat_quota) / 5.0)))
+
         # Query existing actual distribution / consumed balance for this cycle from confirmed citizen requests
         try:
             cursor.execute("""

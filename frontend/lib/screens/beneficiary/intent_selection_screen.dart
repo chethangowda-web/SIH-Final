@@ -18,7 +18,7 @@ class IntentSelectionScreen extends StatefulWidget {
     required this.beneficiary,
     this.apiService,
     this.initialDeliveryMode = 'FPS_COLLECTION',
-    this.initialEligibleMembersCount = 4,
+    this.initialEligibleMembersCount = 5,
   });
 
   @override
@@ -49,13 +49,19 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
     _deliveryMode = widget.initialDeliveryMode;
-    _eligibleMembersCount = widget.initialEligibleMembersCount;
+    _eligibleMembersCount = widget.initialEligibleMembersCount >= 5 ? widget.initialEligibleMembersCount : 5;
     _riceQtyKg = _eligibleMembersCount * 4.0;
     _wheatQtyKg = _eligibleMembersCount * 1.0;
     _loadData();
   }
 
-  double get _maxHouseholdEntitlementKg => _eligibleMembersCount * 5.0;
+  double get _maxHouseholdEntitlementKg {
+    if (_entitlement != null) {
+      final entTotal = _entitlement!.statutoryEntitlementRiceKg + _entitlement!.statutoryEntitlementWheatKg;
+      if (entTotal > 0) return entTotal;
+    }
+    return _eligibleMembersCount * 5.0;
+  }
   double get _combinedQtyKg => _riceQtyKg + _wheatQtyKg;
   bool get _isOverEntitled => _combinedQtyKg > _maxHouseholdEntitlementKg;
 
@@ -95,7 +101,12 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
           // This ensures the displayed count matches the verified ration card registry,
           // not a client-side default. Rice = 4kg/member, Wheat = 1kg/member.
           if (ent != null) {
-            _eligibleMembersCount = ent.familyMembersCount;
+            final statutoryTotal = ent.statutoryEntitlementRiceKg + ent.statutoryEntitlementWheatKg;
+            final derivedMembers = (statutoryTotal > 0) ? (statutoryTotal / 5.0).round() : ent.familyMembersCount;
+            _eligibleMembersCount = ent.familyMembersCount > 0 ? ent.familyMembersCount : derivedMembers;
+            if (statutoryTotal >= 25.0 && _eligibleMembersCount < 5) {
+              _eligibleMembersCount = (statutoryTotal / 5.0).round();
+            }
             _riceQtyKg = ent.statutoryEntitlementRiceKg;
             _wheatQtyKg = ent.statutoryEntitlementWheatKg;
           }

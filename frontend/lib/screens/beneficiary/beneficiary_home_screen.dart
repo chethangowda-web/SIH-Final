@@ -159,7 +159,12 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           if (ent.familyMembersCount > 0) {
             _eligibleMembersCount = ent.familyMembersCount;
           }
-          _remainingBalanceKg = (_eligibleMembersCount * 5.0 - _distributedQuantityKg).clamp(0.0, _eligibleMembersCount * 5.0);
+          final statutoryTotal = ent.statutoryEntitlementRiceKg + ent.statutoryEntitlementWheatKg;
+          if (statutoryTotal >= 25.0 && _eligibleMembersCount < 5) {
+            _eligibleMembersCount = (statutoryTotal / 5.0).round();
+          }
+          final totalEligible = (statutoryTotal > 0) ? statutoryTotal : (_eligibleMembersCount * 5.0);
+          _remainingBalanceKg = (totalEligible - _distributedQuantityKg).clamp(0.0, totalEligible);
           _isLoading = false;
         });
       }

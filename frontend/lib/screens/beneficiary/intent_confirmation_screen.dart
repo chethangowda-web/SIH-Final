@@ -33,7 +33,7 @@ class IntentConfirmationScreen extends StatefulWidget {
     this.deliveryDistanceKm = 0.6,
     this.transportFeeInr = 0.0,
     this.entitlementSummary,
-    this.eligibleMembersCount = 4,
+    this.eligibleMembersCount = 5,
     this.customRiceKg,
     this.customWheatKg,
   });

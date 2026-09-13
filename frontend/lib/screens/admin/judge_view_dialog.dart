@@ -7,11 +7,45 @@ class JudgeViewDialog extends StatefulWidget {
   const JudgeViewDialog({super.key});
 
   static void show(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) => const JudgeViewDialog(),
-    );
+    final isMobile = MediaQuery.of(context).size.width < 720;
+    if (isMobile) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => Container(
+          height: MediaQuery.of(ctx).size.height * 0.90,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4.5,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Expanded(child: JudgeViewDialog()),
+            ],
+          ),
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) => const JudgeViewDialog(),
+      );
+    }
   }
 
   @override
