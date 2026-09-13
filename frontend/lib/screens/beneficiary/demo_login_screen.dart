@@ -139,6 +139,10 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         _citizenOtpController.clear();
       });
       _startOtpTimer();
+      final otpCode = res['demo_otp_code'] as String?;
+      final msg = res['message'] as String? ?? 'OTP sent to your registered mobile number.';
+      final displayText = otpCode != null ? '$msg (Security Code: $otpCode)' : msg;
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -147,14 +151,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  res['message'] as String? ?? 'OTP sent to your registered mobile number.',
-                ),
+                child: Text(displayText),
               ),
             ],
           ),
           backgroundColor: _govGreen,
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 8),
         ),
       );
     } catch (e) {
