@@ -55,6 +55,11 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5000",
     ]
     
+    # Twilio API Credentials (for real SMS/WhatsApp/IVR integration)
+    TWILIO_ACCOUNT_SID: str | None = None
+    TWILIO_AUTH_TOKEN: str | None = None
+    TWILIO_PHONE_NUMBER: str | None = None
+    
     # Default active cycle for Demo
     CURRENT_CYCLE: str = "2026-09"
     NEXT_CYCLE: str = "2026-10"

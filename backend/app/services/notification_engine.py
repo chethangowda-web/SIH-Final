@@ -21,44 +21,119 @@ from app.core.config import settings
 DEMO_NOTICE = "DEMO DATA — NOT GOVERNMENT DATA (SIMULATED PRE-DISPATCH ALERTS)"
 
 
+import logging
+from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
+
+logger = logging.getLogger(__name__)
+
 class NotificationService:
-    """Notification Service Abstraction for WhatsApp, SMS, and IVR Channels."""
+    """Notification Service Abstraction for WhatsApp, SMS, and IVR Channels (Twilio Integration)."""
+
+    def __init__(self):
+        self.account_sid = settings.TWILIO_ACCOUNT_SID
+        self.auth_token = settings.TWILIO_AUTH_TOKEN
+        self.twilio_phone_number = settings.TWILIO_PHONE_NUMBER
+        
+        self.client = None
+        if self.account_sid and self.account_sid != "dummy" and self.auth_token and self.auth_token != "dummy":
+            try:
+                self.client = Client(self.account_sid, self.auth_token)
+            except Exception as e:
+                logger.error(f"Failed to initialize Twilio Client: {e}")
 
     def send_whatsapp(self, recipient_phone: str, recipient_name: str, message: str, ref_id: str = "") -> Dict[str, Any]:
-        """Simulate WhatsApp delivery with instant read receipt."""
+        """Send WhatsApp message using Twilio API (Fallback to simulation if credentials absent)."""
+        message_id = f"WA-MSG-{random.randint(100000, 999999)}"
+        status = "DELIVERED"
+        
+        if self.client:
+            try:
+                # Twilio requires "whatsapp:" prefix for WhatsApp numbers
+                tw_message = self.client.messages.create(
+                    body=message,
+                    from_=f"whatsapp:{self.twilio_phone_number}",
+                    to=f"whatsapp:{recipient_phone}"
+                )
+                message_id = tw_message.sid
+                status = tw_message.status
+            except TwilioRestException as e:
+                logger.error(f"Twilio WhatsApp Error: {e}")
+                status = "FAILED"
+        else:
+            logger.info(f"[SIMULATED TWILIO WA] To {recipient_phone}: {message}")
+
         return {
             "channel": "WHATSAPP",
             "recipient_phone": recipient_phone,
             "recipient_name": recipient_name,
-            "status": "DELIVERED",
-            "message_id": f"WA-MSG-{random.randint(100000, 999999)}",
+            "status": status,
+            "message_id": message_id,
             "delivered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "read_receipt": True
+            "read_receipt": True if status == "DELIVERED" else False
         }
 
     def send_sms(self, recipient_phone: str, recipient_name: str, message: str, ref_id: str = "") -> Dict[str, Any]:
-        """Simulate statutory SMS telecom gateway delivery."""
+        """Send SMS message using Twilio API (Fallback to simulation if credentials absent)."""
+        message_id = f"SMS-GW-{random.randint(100000, 999999)}"
+        status = "DELIVERED"
+        
+        if self.client:
+            try:
+                tw_message = self.client.messages.create(
+                    body=message,
+                    from_=self.twilio_phone_number,
+                    to=recipient_phone
+                )
+                message_id = tw_message.sid
+                status = tw_message.status
+            except TwilioRestException as e:
+                logger.error(f"Twilio SMS Error: {e}")
+                status = "FAILED"
+        else:
+            logger.info(f"[SIMULATED TWILIO SMS] To {recipient_phone}: {message}")
+
         return {
             "channel": "SMS",
             "recipient_phone": recipient_phone,
             "recipient_name": recipient_name,
-            "status": "DELIVERED",
-            "message_id": f"SMS-GW-{random.randint(100000, 999999)}",
+            "status": status,
+            "message_id": message_id,
             "delivered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "telecom_circle": "KARNATAKA_DO_TRAI"
         }
 
     def send_ivr(self, recipient_phone: str, recipient_name: str, message: str, ref_id: str = "") -> Dict[str, Any]:
-        """Simulate automated IVR voice call prompt with fallback behavior."""
-        # 80% answered, 20% fallback
+        """Trigger IVR voice call using Twilio API (Fallback to simulation if credentials absent)."""
+        # 80% answered, 20% fallback in simulation
         outcome = "DELIVERED" if random.random() > 0.20 else "FALLBACK_TRIGGERED"
+        call_id = f"IVR-CALL-{random.randint(100000, 999999)}"
+        duration = 42 if outcome == "DELIVERED" else 0
+        
+        if self.client:
+            try:
+                twiml_url = f"http://twimlets.com/echo?Twiml=%3CResponse%3E%3CSay%3E{message.replace(' ', '%20')}%3C%2FSay%3E%3C%2FResponse%3E"
+                call = self.client.calls.create(
+                    twiml=f'<Response><Say>{message}</Say></Response>',
+                    to=recipient_phone,
+                    from_=self.twilio_phone_number
+                )
+                call_id = call.sid
+                outcome = call.status
+                duration = 0 # Call just initiated
+            except TwilioRestException as e:
+                logger.error(f"Twilio IVR Error: {e}")
+                outcome = "FAILED"
+        else:
+            logger.info(f"[SIMULATED TWILIO IVR] Calling {recipient_phone}: {message}")
+
         return {
             "channel": "IVR",
             "recipient_phone": recipient_phone,
             "recipient_name": recipient_name,
             "status": outcome,
-            "call_id": f"IVR-CALL-{random.randint(100000, 999999)}",
-            "duration_secs": 42 if outcome == "DELIVERED" else 0,
+            "call_id": call_id,
+            "duration_secs": duration,
             "delivered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 

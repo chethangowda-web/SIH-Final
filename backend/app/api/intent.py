@@ -651,3 +651,4 @@ def simulate_channel_intent(
         "response_message": f"[{payload.channel} GATEWAY] Intent registered successfully! Confirmation SMS sent to beneficiary."
     }
 
+
