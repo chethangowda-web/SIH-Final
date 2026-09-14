@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../models/admin_model.dart';
@@ -121,10 +122,10 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
           ],
           totalStopsCount: 4,
           deliverySequence: [
-            OptimizedStop(sequenceOrder: 1, fpsId: 'FPS-KA-BLR-001', fpsName: 'Malleshwaram Seva Kendra', legDistanceKm: 4.2, cumulativeDistanceKm: 4.2, riceKg: 1500.0, wheatKg: 1000.0, totalDropKg: 2500.0, timeWindow: '06:45 AM'),
-            OptimizedStop(sequenceOrder: 2, fpsId: 'FPS-KA-BLR-002', fpsName: 'Rajajinagar PDS Depot #02', legDistanceKm: 4.5, cumulativeDistanceKm: 8.7, riceKg: 1350.0, wheatKg: 900.0, totalDropKg: 2250.0, timeWindow: '07:30 AM'),
-            OptimizedStop(sequenceOrder: 3, fpsId: 'FPS-KA-BLR-003', fpsName: 'Yeshwanthpur Co-Op Society', legDistanceKm: 3.4, cumulativeDistanceKm: 12.1, riceKg: 1500.0, wheatKg: 1000.0, totalDropKg: 2500.0, timeWindow: '08:15 AM'),
-            OptimizedStop(sequenceOrder: 4, fpsId: 'FPS-KA-BLR-004', fpsName: 'Mathikere Fair Price Depot', legDistanceKm: 3.3, cumulativeDistanceKm: 15.4, riceKg: 1200.0, wheatKg: 800.0, totalDropKg: 2000.0, timeWindow: '09:00 AM'),
+            OptimizedStop(sequenceOrder: 1, fpsId: 'FPS-KA-BLR-001', fpsName: 'Malleshwaram Seva Kendra', legDistanceKm: 4.2, cumulativeDistanceKm: 4.2, riceKg: 1500.0, wheatKg: 1000.0, totalDropKg: 2500.0, timeWindow: '06:45 AM', latitude: 13.0035, longitude: 77.5710),
+            OptimizedStop(sequenceOrder: 2, fpsId: 'FPS-KA-BLR-002', fpsName: 'Rajajinagar PDS Depot #02', legDistanceKm: 4.5, cumulativeDistanceKm: 8.7, riceKg: 1350.0, wheatKg: 900.0, totalDropKg: 2250.0, timeWindow: '07:30 AM', latitude: 12.9850, longitude: 77.5556),
+            OptimizedStop(sequenceOrder: 3, fpsId: 'FPS-KA-BLR-003', fpsName: 'Yeshwanthpur Co-Op Society', legDistanceKm: 3.4, cumulativeDistanceKm: 12.1, riceKg: 1500.0, wheatKg: 1000.0, totalDropKg: 2500.0, timeWindow: '08:15 AM', latitude: 13.0220, longitude: 77.5433),
+            OptimizedStop(sequenceOrder: 4, fpsId: 'FPS-KA-BLR-004', fpsName: 'Mathikere Fair Price Depot', legDistanceKm: 3.3, cumulativeDistanceKm: 15.4, riceKg: 1200.0, wheatKg: 800.0, totalDropKg: 2000.0, timeWindow: '09:00 AM', latitude: 13.0380, longitude: 77.5590),
           ],
           optimizationScore: 94.8,
           efficiencyPct: 98.2,
@@ -531,11 +532,15 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
           _buildCriticalParametersCard(m),
           const SizedBox(height: 14),
 
-          // 5. Itemized FPS Delivery Sequence Stops
+          // 5. Truck Route Map Visualization
+          _buildTruckRouteMapCard(m),
+          const SizedBox(height: 14),
+
+          // 6. Itemized FPS Delivery Sequence Stops
           _buildDeliverySequenceSection(m),
           const SizedBox(height: 14),
 
-          // 6. Immutable Audit Trail Timeline Card
+          // 7. Immutable Audit Trail Timeline Card
           _buildAuditTrailTimelineCard(m),
         ],
       ),
@@ -1026,6 +1031,170 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
     );
   }
 
+  // ─── TRUCK ROUTE MAP ─────────────────────────────────────────────────────────
+
+  Widget _buildTruckRouteMapCard(DispatchManifestDossier m) {
+    // Build the depot node and the FPS stop nodes for the map.
+    // We use real/fallback coordinates if available; otherwise we generate
+    // a clean circular layout so the map is always useful.
+    final stops = m.deliverySequence;
+    final hasCoords = stops.isNotEmpty &&
+        stops.any((s) => s.latitude != 0.0 && s.longitude != 0.0);
+
+    // Depot center (Yeshwanthpur Industrial Suburb)
+    const depotLat = 13.0220;
+    const depotLng = 77.5433;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppConstants.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ──────────────────────────────────────────────────────────
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A3A6B).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.local_shipping_rounded,
+                        color: Color(0xFF1A3A6B), size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Truck Route Map — TSP Optimized Delivery Path',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppConstants.primaryNavy),
+                      ),
+                      Text(
+                        'Vehicle: ${m.truckModel} • ${m.truckId} • ${m.totalStopsCount} delivery stops • ${m.deliverySequence.isNotEmpty ? m.deliverySequence.last.cumulativeDistanceKm.toStringAsFixed(1) : "—"} km total',
+                        style: const TextStyle(
+                            fontSize: 10.5, color: AppConstants.textSecondary),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppConstants.successGreen.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border:
+                      Border.all(color: AppConstants.successGreen.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.speed_rounded,
+                        size: 13, color: AppConstants.successGreen),
+                    const SizedBox(width: 4),
+                    Text(
+                      'TSP Score: ${m.optimizationScore.toStringAsFixed(1)}%',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppConstants.successGreen),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // ── Map Canvas ──────────────────────────────────────────────────────
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              height: 280,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFFEFF3F9), Color(0xFFE8EDF5)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFD0D8E8)),
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return CustomPaint(
+                    size:
+                        Size(constraints.maxWidth, constraints.maxHeight),
+                    painter: _TruckRouteMapPainter(
+                      stops: stops,
+                      hasCoords: hasCoords,
+                      depotLat: depotLat,
+                      depotLng: depotLng,
+                      depotName: m.sourceDepotName,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── Legend Row ──────────────────────────────────────────────────────
+          Row(
+            children: [
+              _buildMapLegendItem(
+                  const Color(0xFF1A3A6B), Icons.warehouse_rounded, 'Source Depot'),
+              const SizedBox(width: 16),
+              _buildMapLegendItem(
+                  AppConstants.purpleAccent, Icons.store_rounded, 'FPS Delivery Stop'),
+              const SizedBox(width: 16),
+              _buildMapLegendItem(
+                  AppConstants.accentAmber, Icons.local_shipping_rounded, 'Truck (In Transit)'),
+              const SizedBox(width: 16),
+              _buildMapLegendItem(
+                  AppConstants.accentBlue, Icons.timeline_rounded, 'Optimized Route Path'),
+              const Spacer(),
+              Text(
+                'Departure: ${m.departureWindow}  •  Route: ${m.routeType.replaceAll("_", " ")}',
+                style: const TextStyle(
+                    fontSize: 10, color: AppConstants.textSecondary),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapLegendItem(Color color, IconData icon, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(
+                fontSize: 10.5,
+                color: color,
+                fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
   Widget _buildDeliverySequenceSection(DispatchManifestDossier m) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1251,4 +1420,638 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
       ],
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRUCK ROUTE MAP CUSTOM PAINTER
+// Renders the TSP-optimised delivery route on a Flutter canvas.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TruckRouteMapPainter extends CustomPainter {
+  final List<OptimizedStop> stops;
+  final bool hasCoords;
+  final double depotLat;
+  final double depotLng;
+  final String depotName;
+
+  _TruckRouteMapPainter({
+    required this.stops,
+    required this.hasCoords,
+    required this.depotLat,
+    required this.depotLng,
+    required this.depotName,
+  });
+
+  // ── Coordinate → Canvas projection ─────────────────────────────────────────
+
+  /// Project a geo-coordinate (lat/lng) to canvas pixels, given the bounding
+  /// box of all points. Latitude is inverted so that "north" is at the top.
+  Offset _project(double lat, double lng, Rect bounds,
+      double minLat, double maxLat, double minLng, double maxLng,
+      {double padding = 48}) {
+    final rangeW = (maxLng - minLng).abs();
+    final rangeH = (maxLat - minLat).abs();
+
+    // Avoid division by zero when all points are at the same coordinate.
+    final scaleX = rangeW < 1e-6 ? 1.0 : (bounds.width - padding * 2) / rangeW;
+    final scaleY = rangeH < 1e-6 ? 1.0 : (bounds.height - padding * 2) / rangeH;
+
+    final x = bounds.left + padding + (lng - minLng) * scaleX;
+    final y = bounds.top + padding + (maxLat - lat) * scaleY; // invert Y
+    return Offset(x, y);
+  }
+
+  // ── Layout fallback (circular) when coords are missing ────────────────────
+
+  List<Offset> _circularLayout(Rect bounds) {
+    if (stops.isEmpty) return [];
+    final cx = bounds.center.dx;
+    final cy = bounds.center.dy;
+    final r = math.min(bounds.width, bounds.height) * 0.32;
+    return List.generate(stops.length, (i) {
+      final angle = -math.pi / 2 + (2 * math.pi * i / stops.length);
+      return Offset(cx + r * math.cos(angle), cy + r * math.sin(angle));
+    });
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+
+    // 1. Background grid ─────────────────────────────────────────────────────
+    _drawGrid(canvas, rect);
+
+    if (stops.isEmpty) {
+      _drawEmptyState(canvas, rect);
+      return;
+    }
+
+    // 2. Collect all point coordinates ────────────────────────────────────────
+    List<Offset> stopOffsets;
+    Offset depotOffset;
+
+    if (hasCoords) {
+      // Determine bounding box of all points (depot + stops).
+      double minLat = depotLat, maxLat = depotLat;
+      double minLng = depotLng, maxLng = depotLng;
+
+      for (final s in stops) {
+        if (s.latitude == 0.0 && s.longitude == 0.0) continue;
+        minLat = math.min(minLat, s.latitude);
+        maxLat = math.max(maxLat, s.latitude);
+        minLng = math.min(minLng, s.longitude);
+        maxLng = math.max(maxLng, s.longitude);
+      }
+
+      // Add a small margin so points aren't right on the edge.
+      final latPad = (maxLat - minLat) * 0.18 + 0.002;
+      final lngPad = (maxLng - minLng) * 0.18 + 0.002;
+      minLat -= latPad; maxLat += latPad;
+      minLng -= lngPad; maxLng += lngPad;
+
+      depotOffset = _project(depotLat, depotLng, rect,
+          minLat, maxLat, minLng, maxLng, padding: 52);
+
+      stopOffsets = stops.map((s) {
+        final lat = s.latitude != 0.0 ? s.latitude : depotLat;
+        final lng = s.longitude != 0.0 ? s.longitude : depotLng;
+        return _project(lat, lng, rect,
+            minLat, maxLat, minLng, maxLng, padding: 52);
+      }).toList();
+    } else {
+      // Fall back to evenly-spaced circular layout.
+      stopOffsets = _circularLayout(rect);
+      depotOffset = rect.center;
+    }
+
+    // 3. Build the full route: depot → stop1 → stop2 → … → depot ────────────
+    final routePoints = [depotOffset, ...stopOffsets, depotOffset];
+
+    // 4. Road shadow / halo ───────────────────────────────────────────────────
+    final shadowPaint = Paint()
+      ..color = const Color(0xFF1A3A6B).withValues(alpha: 0.10)
+      ..strokeWidth = 12
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    _drawPolyline(canvas, routePoints.sublist(0, routePoints.length - 1),
+        shadowPaint);
+
+    // 5. Main route line ──────────────────────────────────────────────────────
+    final routePaint = Paint()
+      ..color = const Color(0xFF2563EB)
+      ..strokeWidth = 3.0
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    _drawPolyline(canvas, routePoints.sublist(0, routePoints.length - 1),
+        routePaint);
+
+    // 6. Dashed return leg (last stop → depot) ────────────────────────────────
+    _drawDashedLine(canvas, routePoints[routePoints.length - 2], depotOffset,
+        const Color(0xFF64748B), 2.0);
+
+    // 7. Directional arrows along route ───────────────────────────────────────
+    for (int i = 0; i < routePoints.length - 2; i++) {
+      _drawArrow(canvas, routePoints[i], routePoints[i + 1],
+          const Color(0xFF2563EB));
+    }
+
+    // 8. Distance labels on each leg ──────────────────────────────────────────
+    for (int i = 0; i < stops.length; i++) {
+      final from = i == 0 ? depotOffset : stopOffsets[i - 1];
+      final to = stopOffsets[i];
+      final mid = Offset((from.dx + to.dx) / 2, (from.dy + to.dy) / 2);
+      _drawDistanceBadge(canvas, mid,
+          '${stops[i].legDistanceKm.toStringAsFixed(1)} km');
+    }
+
+    // 9. FPS stop markers ─────────────────────────────────────────────────────
+    for (int i = 0; i < stops.length; i++) {
+      _drawStopMarker(canvas, stopOffsets[i], stops[i]);
+    }
+
+    // 10. Depot marker ────────────────────────────────────────────────────────
+    _drawDepotMarker(canvas, depotOffset);
+
+    // 11. Truck marker (positioned at 40% of the first leg) ───────────────────
+    if (stopOffsets.isNotEmpty) {
+      const t = 0.42;
+      final truckPos = Offset(
+        depotOffset.dx + (stopOffsets[0].dx - depotOffset.dx) * t,
+        depotOffset.dy + (stopOffsets[0].dy - depotOffset.dy) * t,
+      );
+      _drawTruckMarker(canvas, truckPos, depotOffset, stopOffsets[0]);
+    }
+
+    // 12. Compass rose ────────────────────────────────────────────────────────
+    _drawCompass(canvas, Offset(size.width - 36, 36));
+
+    // 13. Scale bar ───────────────────────────────────────────────────────────
+    _drawScaleBar(canvas, Offset(16, size.height - 20));
+  }
+
+  // ── Drawing helpers ─────────────────────────────────────────────────────────
+
+  void _drawGrid(Canvas canvas, Rect rect) {
+    final gridPaint = Paint()
+      ..color = const Color(0xFF94A3B8).withValues(alpha: 0.15)
+      ..strokeWidth = 0.8;
+    const step = 40.0;
+    for (double x = 0; x < rect.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, rect.height), gridPaint);
+    }
+    for (double y = 0; y < rect.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(rect.width, y), gridPaint);
+    }
+  }
+
+  void _drawEmptyState(Canvas canvas, Rect rect) {
+    final tp = TextPainter(
+      text: const TextSpan(
+        text: 'No delivery stops in this manifest.',
+        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas,
+        rect.center - Offset(tp.width / 2, tp.height / 2));
+  }
+
+  void _drawPolyline(Canvas canvas, List<Offset> points, Paint paint) {
+    if (points.length < 2) return;
+    final path = Path()..moveTo(points[0].dx, points[0].dy);
+    for (int i = 1; i < points.length; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawDashedLine(
+      Canvas canvas, Offset from, Offset to, Color color, double width) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    const dashLen = 6.0, gapLen = 4.0;
+    final dx = to.dx - from.dx, dy = to.dy - from.dy;
+    final total = math.sqrt(dx * dx + dy * dy);
+    if (total == 0) return;
+    final nx = dx / total, ny = dy / total;
+    double traveled = 0;
+    bool drawing = true;
+    while (traveled < total) {
+      final segLen = drawing ? dashLen : gapLen;
+      final end = math.min(traveled + segLen, total);
+      if (drawing) {
+        canvas.drawLine(
+          Offset(from.dx + nx * traveled, from.dy + ny * traveled),
+          Offset(from.dx + nx * end, from.dy + ny * end),
+          paint,
+        );
+      }
+      traveled = end;
+      drawing = !drawing;
+    }
+  }
+
+  void _drawArrow(Canvas canvas, Offset from, Offset to, Color color) {
+    final dx = to.dx - from.dx, dy = to.dy - from.dy;
+    final dist = math.sqrt(dx * dx + dy * dy);
+    if (dist < 30) return;
+
+    // Place arrow at 65% along the segment.
+    const t = 0.65;
+    final cx = from.dx + dx * t, cy = from.dy + dy * t;
+    final angle = math.atan2(dy, dx);
+
+    const arrowSize = 7.0;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    path.moveTo(cx + arrowSize * math.cos(angle),
+        cy + arrowSize * math.sin(angle));
+    path.lineTo(
+        cx + arrowSize * math.cos(angle + 2.5),
+        cy + arrowSize * math.sin(angle + 2.5));
+    path.lineTo(
+        cx + arrowSize * math.cos(angle - 2.5),
+        cy + arrowSize * math.sin(angle - 2.5));
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawDistanceBadge(Canvas canvas, Offset center, String text) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          color: Color(0xFF1E40AF),
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    const pad = 4.0;
+    final bgRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+          center: center,
+          width: tp.width + pad * 2 + 2,
+          height: tp.height + pad),
+      const Radius.circular(4),
+    );
+
+    canvas.drawRRect(
+        bgRect,
+        Paint()
+          ..color = const Color(0xFFDBEAFE)
+          ..style = PaintingStyle.fill);
+    canvas.drawRRect(
+        bgRect,
+        Paint()
+          ..color = const Color(0xFF93C5FD)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8);
+
+    tp.paint(canvas,
+        center - Offset(tp.width / 2, tp.height / 2));
+  }
+
+  void _drawStopMarker(Canvas canvas, Offset pos, OptimizedStop stop) {
+    const r = 14.0;
+
+    // Outer shadow
+    canvas.drawCircle(
+        pos,
+        r + 3,
+        Paint()
+          ..color = const Color(0xFF7C3AED).withValues(alpha: 0.18)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+
+    // Filled circle
+    canvas.drawCircle(
+        pos, r,
+        Paint()
+          ..color = const Color(0xFF7C3AED)
+          ..style = PaintingStyle.fill);
+
+    // White border
+    canvas.drawCircle(
+        pos, r,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0);
+
+    // Stop number text
+    final tp = TextPainter(
+      text: TextSpan(
+        text: '${stop.sequenceOrder}',
+        style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.bold),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, pos - Offset(tp.width / 2, tp.height / 2));
+
+    // Label callout above the circle
+    _drawCallout(
+      canvas,
+      pos,
+      stop.fpsName.length > 20
+          ? '${stop.fpsName.substring(0, 18)}…'
+          : stop.fpsName,
+      '${stop.totalDropKg.toStringAsFixed(0)} kg  •  ETA ${stop.estimatedArrivalWindow}',
+      r,
+    );
+  }
+
+  void _drawCallout(Canvas canvas, Offset pos, String title, String subtitle,
+      double markerRadius) {
+    const titleStyle = TextStyle(
+        color: Color(0xFF1E293B), fontSize: 9.5, fontWeight: FontWeight.bold);
+    const subtitleStyle = TextStyle(
+        color: Color(0xFF475569), fontSize: 8.5);
+
+    final titleTp = TextPainter(
+        text: TextSpan(text: title, style: titleStyle),
+        textDirection: TextDirection.ltr)
+      ..layout(maxWidth: 130);
+    final subTp = TextPainter(
+        text: TextSpan(text: subtitle, style: subtitleStyle),
+        textDirection: TextDirection.ltr)
+      ..layout(maxWidth: 130);
+
+    const hPad = 6.0, vPad = 4.0;
+    final boxW =
+        math.max(titleTp.width, subTp.width) + hPad * 2;
+    final boxH = titleTp.height + subTp.height + vPad * 2 + 2;
+
+    // Position above the marker, centred.
+    final boxLeft = pos.dx - boxW / 2;
+    final boxTop = pos.dy - markerRadius - boxH - 6;
+
+    final bgRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(boxLeft, boxTop, boxW, boxH),
+        const Radius.circular(5));
+
+    canvas.drawRRect(
+        bgRect,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.95)
+          ..style = PaintingStyle.fill);
+    canvas.drawRRect(
+        bgRect,
+        Paint()
+          ..color = const Color(0xFF7C3AED).withValues(alpha: 0.4)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8);
+
+    // Stem triangle
+    final stem = Path()
+      ..moveTo(pos.dx - 5, boxTop + boxH)
+      ..lineTo(pos.dx + 5, boxTop + boxH)
+      ..lineTo(pos.dx, boxTop + boxH + 6)
+      ..close();
+    canvas.drawPath(stem,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.95)
+          ..style = PaintingStyle.fill);
+
+    titleTp.paint(canvas,
+        Offset(boxLeft + hPad, boxTop + vPad));
+    subTp.paint(canvas,
+        Offset(boxLeft + hPad, boxTop + vPad + titleTp.height + 2));
+  }
+
+  void _drawDepotMarker(Canvas canvas, Offset pos) {
+    const r = 18.0;
+
+    // Pulsing halo
+    canvas.drawCircle(
+        pos, r + 8,
+        Paint()
+          ..color = const Color(0xFF1A3A6B).withValues(alpha: 0.12)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+
+    canvas.drawCircle(pos, r + 4,
+        Paint()
+          ..color = const Color(0xFF1A3A6B).withValues(alpha: 0.20)
+          ..style = PaintingStyle.fill);
+
+    canvas.drawCircle(pos, r,
+        Paint()
+          ..color = const Color(0xFF1A3A6B)
+          ..style = PaintingStyle.fill);
+
+    canvas.drawCircle(pos, r,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5);
+
+    // Warehouse icon: simple building shape using lines/rects
+    final iconPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    final outlinePaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    // Body
+    canvas.drawRect(
+        Rect.fromCenter(center: pos + const Offset(0, 2), width: 16, height: 10),
+        iconPaint);
+    // Roof triangle
+    final roof = Path()
+      ..moveTo(pos.dx - 10, pos.dy - 3)
+      ..lineTo(pos.dx, pos.dy - 10)
+      ..lineTo(pos.dx + 10, pos.dy - 3)
+      ..close();
+    canvas.drawPath(roof, outlinePaint);
+
+    // Depot label below
+    final tp = TextPainter(
+      text: const TextSpan(
+        text: 'DEPOT',
+        style: TextStyle(
+            color: Color(0xFF1A3A6B),
+            fontSize: 8,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.5),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, pos + Offset(-tp.width / 2, r + 4));
+  }
+
+  void _drawTruckMarker(
+      Canvas canvas, Offset pos, Offset from, Offset to) {
+    const r = 16.0;
+    final angle = math.atan2(to.dy - from.dy, to.dx - from.dx);
+
+    // Glow
+    canvas.drawCircle(
+        pos, r + 5,
+        Paint()
+          ..color = const Color(0xFFF59E0B).withValues(alpha: 0.25)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+
+    canvas.save();
+    canvas.translate(pos.dx, pos.dy);
+    canvas.rotate(angle);
+
+    // Truck body
+    final body = Paint()
+      ..color = const Color(0xFFF59E0B)
+      ..style = PaintingStyle.fill;
+    final bodyBorder = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8;
+
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            const Rect.fromLTWH(-14, -8, 22, 16), const Radius.circular(3)),
+        body);
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            const Rect.fromLTWH(-14, -8, 22, 16), const Radius.circular(3)),
+        bodyBorder);
+
+    // Cab
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            const Rect.fromLTWH(8, -7, 8, 14), const Radius.circular(2)),
+        Paint()
+          ..color = const Color(0xFFD97706)
+          ..style = PaintingStyle.fill);
+
+    // Wheels
+    final wheel = Paint()
+      ..color = const Color(0xFF1F2937)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(const Offset(-6, 9), 3.5, wheel);
+    canvas.drawCircle(const Offset(8, 9), 3.5, wheel);
+
+    // Headlight dot
+    canvas.drawCircle(const Offset(15, -3), 1.5,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.9)
+          ..style = PaintingStyle.fill);
+
+    canvas.restore();
+
+    // "In Transit" badge above truck
+    final tp = TextPainter(
+      text: const TextSpan(
+        text: '🚛 In Transit',
+        style: TextStyle(
+            color: Color(0xFF92400E),
+            fontSize: 8.5,
+            fontWeight: FontWeight.bold),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    const bPad = 4.0;
+    final bRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+          center: pos - const Offset(0, 26),
+          width: tp.width + bPad * 2,
+          height: tp.height + bPad),
+      const Radius.circular(4),
+    );
+    canvas.drawRRect(bRect,
+        Paint()
+          ..color = const Color(0xFFFEF3C7)
+          ..style = PaintingStyle.fill);
+    canvas.drawRRect(bRect,
+        Paint()
+          ..color = const Color(0xFFF59E0B)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8);
+    tp.paint(canvas, pos - Offset(tp.width / 2, 26 + tp.height / 2));
+  }
+
+  void _drawCompass(Canvas canvas, Offset center) {
+    final paint = Paint()
+      ..color = const Color(0xFF64748B).withValues(alpha: 0.7)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawCircle(center, 14, paint);
+
+    // N arrow
+    final northPath = Path()
+      ..moveTo(center.dx, center.dy - 10)
+      ..lineTo(center.dx - 3, center.dy + 2)
+      ..lineTo(center.dx + 3, center.dy + 2)
+      ..close();
+    canvas.drawPath(northPath,
+        Paint()
+          ..color = const Color(0xFFEF4444)
+          ..style = PaintingStyle.fill);
+
+    // S arrow
+    final southPath = Path()
+      ..moveTo(center.dx, center.dy + 10)
+      ..lineTo(center.dx - 3, center.dy - 2)
+      ..lineTo(center.dx + 3, center.dy - 2)
+      ..close();
+    canvas.drawPath(southPath,
+        Paint()
+          ..color = const Color(0xFF94A3B8)
+          ..style = PaintingStyle.fill);
+
+    final nTp = TextPainter(
+      text: const TextSpan(
+          text: 'N',
+          style: TextStyle(
+              color: Color(0xFFEF4444),
+              fontSize: 8,
+              fontWeight: FontWeight.bold)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    nTp.paint(canvas, center - Offset(nTp.width / 2, 22));
+  }
+
+  void _drawScaleBar(Canvas canvas, Offset origin) {
+    const barW = 60.0;
+    final paint = Paint()
+      ..color = const Color(0xFF64748B).withValues(alpha: 0.7)
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(origin, origin + const Offset(barW, 0), paint);
+    canvas.drawLine(origin, origin - const Offset(0, 4), paint);
+    canvas.drawLine(
+        origin + const Offset(barW, 0),
+        origin + const Offset(barW, -4),
+        paint);
+
+    final tp = TextPainter(
+      text: const TextSpan(
+          text: '~5 km',
+          style: TextStyle(color: Color(0xFF64748B), fontSize: 8)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas,
+        origin + Offset(barW / 2 - tp.width / 2, -tp.height - 2));
+  }
+
+  @override
+  bool shouldRepaint(_TruckRouteMapPainter old) =>
+      old.stops != stops || old.depotLat != depotLat || old.depotLng != depotLng;
 }
