@@ -262,46 +262,55 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   }
 
   // ════════════════════════════════════════════════════════════════
-  // DESKTOP 16:9 EXACT REFERENCE COMPOSITION
+  // DESKTOP FULL-SCREEN EXACT REFERENCE COMPOSITION (EDGE-TO-EDGE)
   // ════════════════════════════════════════════════════════════════
   Widget _buildDesktopLayout(BoxConstraints constraints) {
-    return Center(
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: LayoutBuilder(
-          builder: (context, canvasConstraints) {
-            final canvasW = canvasConstraints.maxWidth;
-            final canvasH = canvasConstraints.maxHeight;
+    final screenW = constraints.maxWidth;
+    final screenH = constraints.maxHeight;
 
-            return Stack(
-              children: [
-                // 1. High-Fidelity Reference Background Artwork (Card removed from background)
-                Positioned.fill(
-                  child: Image.asset(
-                    'assets/images/pds_login_reference_hero.jpg',
-                    fit: BoxFit.cover,
-                    filterQuality: FilterQuality.high,
-                  ),
-                ),
+    // Responsive card dimensions and positioning
+    final cardWidth = (screenW * 0.28).clamp(360.0, 420.0);
+    final cardRight = (screenW * 0.035).clamp(24.0, 56.0);
+    final cardTop = ((screenH - 620) / 2).clamp(28.0, 72.0);
 
-                // 2. Interactive Language Selector at Top Right
-                Positioned(
-                  top: canvasH * 0.05,
-                  right: canvasW * 0.04,
-                  child: _buildLanguageSelectorPill(),
-                ),
+    return SizedBox(
+      width: screenW,
+      height: screenH,
+      child: Stack(
+        children: [
+          // 1. High-Fidelity Clean Background Artwork (Edge-to-Edge, fits entire screen)
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/pds_login_clean_canvas_v2.jpg',
+              fit: BoxFit.cover,
+              alignment: Alignment.centerLeft,
+              filterQuality: FilterQuality.high,
+            ),
+          ),
 
-                // 3. Exactly ONE interactive Floating Login Card positioned on the right
-                Positioned(
-                  top: canvasH * 0.08,
-                  right: canvasW * 0.04,
-                  width: (canvasW * 0.32).clamp(380.0, 440.0),
-                  child: _buildLoginCard(isCompact: false),
-                ),
-              ],
-            );
-          },
-        ),
+          // 2. Interactive Language Selector at Top Right
+          Positioned(
+            top: 24,
+            right: cardRight,
+            child: _buildLanguageSelectorPill(),
+          ),
+
+          // 3. Exactly ONE interactive Floating Login Card positioned cleanly on the right
+          Positioned(
+            top: cardTop,
+            right: cardRight,
+            width: cardWidth,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: (screenH - cardTop - 16).clamp(300.0, screenH),
+              ),
+              child: SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: _buildLoginCard(isCompact: false),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -397,7 +406,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: Image.asset(
-                  'assets/images/pds_login_reference_hero.jpg',
+                  'assets/images/pds_login_clean_canvas_v2.jpg',
                   fit: BoxFit.cover,
                   alignment: Alignment.centerLeft,
                 ),
@@ -451,9 +460,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               topRight: Radius.circular(20),
             ),
             child: Image.asset(
-              'assets/images/login_card_header_exact.png',
+              'assets/images/login_card_header_v2.png',
               fit: BoxFit.fill,
-              height: isCompact ? 68 : null,
+              height: isCompact ? 64 : 76,
               errorBuilder: (_, __, ___) => _buildFallbackCardHeader(),
             ),
           ),
