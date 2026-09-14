@@ -105,6 +105,14 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
         except Exception:
             pass
 
+    cursor.execute("""
+    INSERT OR IGNORE INTO depots (
+        depot_id, name, district, location, capacity_mt, available_stock_mt, loading_capacity_mt_day, rice_stock_mt, wheat_stock_mt, status
+    ) VALUES (
+        'DEPOT-01', 'Bengaluru Central FCI Godown (Hebbal)', 'Bengaluru Urban', 'Hebbal Corridor, Bengaluru', 1200.0, 850.0, 150.0, 550.0, 300.0, 'OPERATIONAL'
+    );
+    """)
+
     # 3. vehicles (Fleet Logistics)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS vehicles (

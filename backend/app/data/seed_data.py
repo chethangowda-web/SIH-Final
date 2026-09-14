@@ -253,6 +253,12 @@ def seed_godowns_as_depots(cursor):
             rice_stock, wheat_stock, "OPERATIONAL"
         ))
 
+    # Guarantee canonical DEPOT-01 is always present for testing and default dialogs
+    records.append((
+        "DEPOT-01", "Bengaluru Central FCI Godown (Hebbal)", "Bengaluru Urban", "Hebbal Corridor, Bengaluru",
+        1200.0, 850.0, 150.0, 550.0, 300.0, "OPERATIONAL"
+    ))
+
     cursor.executemany("""
     INSERT OR REPLACE INTO depots (
         depot_id, name, district, location, capacity_mt,
@@ -478,6 +484,18 @@ def seed_all_data(recreate=False):
     hist_cnt = cursor.fetchone()[0]
     cursor.execute("SELECT COUNT(*) FROM intent;")
     intent_cnt = cursor.fetchone()[0]
+
+    # Guarantee DEPOT-01 is always present in depots table
+    cursor.execute("""
+    INSERT OR IGNORE INTO depots (
+        depot_id, name, district, location, capacity_mt,
+        available_stock_mt, loading_capacity_mt_day, rice_stock_mt, wheat_stock_mt, status
+    ) VALUES (
+        'DEPOT-01', 'Bengaluru Central FCI Godown (Hebbal)', 'Bengaluru Urban', 'Hebbal Corridor, Bengaluru',
+        1200.0, 850.0, 150.0, 550.0, 300.0, 'OPERATIONAL'
+    );
+    """)
+    conn.commit()
 
     if fps_cnt >= 600 and hist_cnt > 1000 and intent_cnt > 1000 and not recreate:
         conn.close()

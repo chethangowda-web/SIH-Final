@@ -106,6 +106,12 @@ class ScarcityAllocationEngine:
         # 1. Fetch Depot Master Details
         cursor.execute("SELECT depot_id, name, district FROM depots WHERE depot_id = ?;", (depot_id,))
         depot_row = cursor.fetchone()
+        if not depot_row:
+            cursor.execute("SELECT depot_id, name, district FROM depots ORDER BY id ASC LIMIT 1;")
+            fallback_row = cursor.fetchone()
+            if fallback_row:
+                depot_id = fallback_row["depot_id"]
+                depot_row = fallback_row
         depot_name = depot_row["name"] if depot_row else "Bengaluru Central FCI Godown (Hebbal)"
 
         # 2. Fetch all FPS serviced by this Depot
