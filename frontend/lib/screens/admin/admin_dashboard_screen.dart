@@ -517,12 +517,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     ).then((_) => _loadDashboardData());
   }
 
-  void _showCausalTraceDialog([String fpsId = 'FPS-KA-BLR-001']) {
+  String get _activeFpsId => _selectedDrawerFps?.fpsId ?? (_dashboardData?.fpsList.isNotEmpty == true ? _dashboardData!.fpsList.first.fpsId : 'FPS-KA-BAG-0001');
+
+  void _showCausalTraceDialog([String? fpsId]) {
+    final targetId = (fpsId != null && fpsId.isNotEmpty) ? fpsId : _activeFpsId;
     showDialog(
       context: context,
       builder: (context) => CausalTraceDialog(
         apiService: _apiService,
-        initialFpsId: fpsId,
+        initialFpsId: targetId,
         cycleId: _dashboardData?.activeCycle ?? '2026-09',
       ),
     );
@@ -1871,7 +1874,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => _showCausalTraceDialog('FPS-KA-BLR-001'),
+                    onPressed: () => _showCausalTraceDialog(_activeFpsId),
                     icon: const Icon(Icons.account_tree_outlined, size: 15, color: AppConstants.primaryNavy),
                     label: const Text('Decision Trace', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy)),
                     style: OutlinedButton.styleFrom(
@@ -3232,7 +3235,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 'Explainable AI Pre-Dispatch Trace',
                 Icons.account_tree_rounded,
                 const Color(0xFFF59E0B),
-                () => _showCausalTraceDialog('FPS-KA-BLR-001'),
+                () => _showCausalTraceDialog(_activeFpsId),
               ),
             ],
           ),
@@ -3376,7 +3379,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           outputNode: 'Calibrated Pre-Dispatch Demand Vector D̂_i for All 620 FPS',
           action1Label: 'Launch What-If Sandbox',
           action1Icon: Icons.tune_rounded,
-          action1: () => _showForecastWhatIfDialog('FPS-KA-BLR-001'),
+          action1: () => _showForecastWhatIfDialog(_activeFpsId),
           action2Label: 'Run Pre-Dispatch Analysis',
           action2Icon: Icons.play_arrow_rounded,
           action2: _generateForecast,
@@ -3424,7 +3427,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           outputNode: 'FPS Allocation Matrix with Locked Beneficiary Entitlement Quotas',
           action1Label: 'Quota Decision Matrix',
           action1Icon: Icons.table_chart_outlined,
-          action1: () => _showDispatchDecisionDialog('FPS-KA-BLR-001'),
+          action1: () => _showDispatchDecisionDialog(_activeFpsId),
           action2Label: 'Citizen Priority Queue',
           action2Icon: Icons.people_outline_rounded,
           action2: _showCitizenRequestQueueDialog,
@@ -3524,7 +3527,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           action1: _showEvaluationModal,
           action2Label: 'Explain Decision Trace',
           action2Icon: Icons.account_tree_outlined,
-          action2: () => _showCausalTraceDialog('FPS-KA-BLR-001'),
+          action2: () => _showCausalTraceDialog(_activeFpsId),
         );
     }
   }

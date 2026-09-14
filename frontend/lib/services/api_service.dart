@@ -2133,7 +2133,7 @@ class ApiService {
   /// Fetch complete 7-stage causal trace for an operational planning cycle & FPS
   Future<CausalTraceRun> fetchCausalTrace({
     String cycleId = '2026-09',
-    String fpsId = 'FPS-KA-BLR-001',
+    String fpsId = 'FPS-KA-BAG-0001',
   }) async {
     final uri = Uri.parse(
         '${AppConstants.apiBaseUrl}/admin/causal-trace?cycle_id=$cycleId&fps_id=$fpsId');
@@ -2154,7 +2154,7 @@ class ApiService {
   /// Trigger calculation run of the 7-stage causal pipeline trace
   Future<CausalTraceRun> runCausalTraceCalculation({
     String cycleId = '2026-09',
-    String fpsId = 'FPS-KA-BLR-001',
+    String fpsId = 'FPS-KA-BAG-0001',
   }) async {
     final uri = Uri.parse(
         '${AppConstants.apiBaseUrl}/admin/causal-trace/run?cycle_id=$cycleId&fps_id=$fpsId');
@@ -2175,7 +2175,7 @@ class ApiService {
   /// Controlled demo: Inject synthetic citizen intent shift and return full downstream delta
   Future<CausalTraceResponse> simulateIntentShiftCausalTrace({
     String cycleId = '2026-09',
-    String fpsId = 'FPS-KA-BLR-001',
+    String fpsId = 'FPS-KA-BAG-0001',
     double shiftDeltaKg = 150.0,
     String beneficiaryId = 'BEN-KA-0001',
   }) async {

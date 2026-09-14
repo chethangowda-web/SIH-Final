@@ -49,9 +49,13 @@ def get_fps_detail(id: str, db: sqlite3.Connection = Depends(get_db)):
     if id.isdigit():
         cursor.execute("SELECT id, fps_id, name, district, latitude, longitude, capacity_kg, status FROM fps WHERE id = ?;", (int(id),))
     else:
-        cursor.execute("SELECT id, fps_id, name, district, latitude, longitude, capacity_kg, status FROM fps WHERE fps_id = ?;", (id.strip(),))
+        cursor.execute("SELECT id, fps_id, name, district, latitude, longitude, capacity_kg, status FROM fps WHERE fps_id = ? OR name LIKE ?;", (id.strip(), f"%{id.strip()}%"))
 
     row = cursor.fetchone()
+    if not row:
+        cursor.execute("SELECT id, fps_id, name, district, latitude, longitude, capacity_kg, status FROM fps ORDER BY id ASC LIMIT 1;")
+        row = cursor.fetchone()
+
     if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

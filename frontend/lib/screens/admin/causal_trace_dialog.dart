@@ -11,7 +11,7 @@ class CausalTraceDialog extends StatefulWidget {
   const CausalTraceDialog({
     super.key,
     this.apiService,
-    this.initialFpsId = 'FPS-KA-BLR-001',
+    this.initialFpsId = 'FPS-KA-BAG-0001',
     this.cycleId = '2026-09',
   });
 
@@ -30,11 +30,11 @@ class _CausalTraceDialogState extends State<CausalTraceDialog> {
   CausalDeltaSummary? _causalDelta;
 
   final List<Map<String, String>> _fpsList = [
-    {'id': 'FPS-KA-BLR-001', 'name': 'FPS-KA-BLR-001 — Malleshwaram Seva Kendra'},
-    {'id': 'FPS-KA-BLR-005', 'name': 'FPS-KA-BLR-005 — Bellandur Outer Ring Road'},
-    {'id': 'FPS-KA-BLR-013', 'name': 'FPS-KA-BLR-013 — Peenya Industrial Area'},
-    {'id': 'FPS-KA-BLR-017', 'name': 'FPS-KA-BLR-017 — Kengeri Satellite Town'},
-    {'id': 'FPS-KA-BLR-019', 'name': 'FPS-KA-BLR-019 — Hebbal Godown Point'},
+    {'id': 'FPS-KA-BAG-0001', 'name': 'FPS-KA-BAG-0001 — Bagalkot Kendra 0001'},
+    {'id': 'FPS-KA-BAG-0005', 'name': 'FPS-KA-BAG-0005 — Bagalkot Depot 0005'},
+    {'id': 'FPS-KA-BAG-0010', 'name': 'FPS-KA-BAG-0010 — Bagalkot Sub-Center 0010'},
+    {'id': 'FPS-KA-BAG-0015', 'name': 'FPS-KA-BAG-0015 — Bagalkot Central 0015'},
+    {'id': 'FPS-KA-BAG-0020', 'name': 'FPS-KA-BAG-0020 — Bagalkot Hub 0020'},
   ];
 
   @override
