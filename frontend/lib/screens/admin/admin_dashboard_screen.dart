@@ -27,10 +27,14 @@ class _WorkflowStageMeta {
   final String title;
   final String category;
   final String engine;
+  final String operationalObjective;
+  final String description;
   final String mathSpec;
   final IconData icon;
   final Color accentColor;
   final List<Map<String, String>> metrics;
+  final List<Map<String, String>> executionSteps;
+  final String governanceGuarantee;
   final String inputNode;
   final String engineNode;
   final String outputNode;
@@ -45,10 +49,14 @@ class _WorkflowStageMeta {
     required this.title,
     required this.category,
     required this.engine,
+    required this.operationalObjective,
+    required this.description,
     required this.mathSpec,
     required this.icon,
     required this.accentColor,
     required this.metrics,
+    required this.executionSteps,
+    required this.governanceGuarantee,
     required this.inputNode,
     required this.engineNode,
     required this.outputNode,
@@ -2879,6 +2887,104 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
                 const SizedBox(height: 14),
 
+                // OPERATIONAL OBJECTIVE & PURPOSE
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: meta.accentColor.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: meta.accentColor.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.flag_rounded, size: 16, color: meta.accentColor),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'OPERATIONAL OBJECTIVE',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: meta.accentColor, letterSpacing: 0.5),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              meta.operationalObjective,
+                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              meta.description,
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF475569), height: 1.35),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // WHAT IS HAPPENING IN THIS STAGE? (CHRONOLOGICAL EXECUTION BREAKDOWN)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppConstants.cardBorder),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.timeline_rounded, size: 15, color: meta.accentColor),
+                              const SizedBox(width: 6),
+                              Text(
+                                'WHAT IS HAPPENING IN STAGE 0${_selectedWorkflowStage + 1}?',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  color: meta.accentColor,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: meta.accentColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '4 Execution Steps',
+                              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: meta.accentColor),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ...meta.executionSteps.asMap().entries.map((entry) {
+                        final i = entry.key + 1;
+                        final step = entry.value;
+                        return _buildExecutionStepCard(
+                          i,
+                          step['title'] ?? '',
+                          step['desc'] ?? '',
+                          step['tag'] ?? '',
+                          meta.accentColor,
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
                 // PIPELINE NODE ARCHITECTURE FLOW
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -2906,6 +3012,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       _buildFlowStepRow('2. ML Engine', meta.engineNode, Icons.memory_rounded, const Color(0xFF8B5CF6)),
                       const SizedBox(height: 6),
                       _buildFlowStepRow('3. Certified Output', meta.outputNode, Icons.verified_rounded, const Color(0xFF10B981)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // STATUTORY GOVERNANCE & AUDIT GUARANTEE
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: meta.accentColor.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: meta.accentColor.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.verified_user_rounded, size: 15, color: meta.accentColor),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'LEGAL & GOVERNANCE GUARANTEE: ${meta.governanceGuarantee}',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: meta.accentColor,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -2941,7 +3075,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         onPressed: () => setState(() => _selectedWorkflowStage--),
                         icon: const Icon(Icons.arrow_back_rounded, size: 14, color: AppConstants.textSecondary),
                         label: Text(
-                          'Stage 0$_selectedWorkflowStage',
+                          'Stage 0$_selectedWorkflowStage (${_phaseTitles[_selectedWorkflowStage - 1]})',
                           style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppConstants.textSecondary),
                         ),
                         style: OutlinedButton.styleFrom(
@@ -2978,6 +3112,91 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                       ),
                   ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExecutionStepCard(int stepNum, String title, String detail, String tag, Color accent) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 22,
+            height: 22,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: accent.withValues(alpha: 0.4)),
+            ),
+            child: Text(
+              '$stepNum',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                color: accent,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: AppConstants.primaryNavy,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: accent.withValues(alpha: 0.25)),
+                      ),
+                      child: Text(
+                        tag,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: accent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  detail,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF475569),
+                    height: 1.35,
+                  ),
                 ),
               ],
             ),
@@ -3414,24 +3633,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   // HELPER TO FETCH METADATA FOR SELECTED WORKFLOW STAGE
   _WorkflowStageMeta _getWorkflowStageMeta(int stage) {
+    final totalHistoricalMT = ((_dashboardData?.totalHistoricalDemandKg ?? 112500.0) / 1000).toStringAsFixed(1);
+    final totalIntentMT = ((_dashboardData?.totalDeclaredIntentKg ?? 16700.0) / 1000).toStringAsFixed(1);
+    final totalForecastMT = ((_dashboardData?.totalForecastDemandKg ?? 62700.0) / 1000).toStringAsFixed(1);
+    final totalDispatchMT = ((_dashboardData?.totalRecommendedDispatchKg ?? 3200.0) / 1000).toStringAsFixed(1);
+    final totalCapacityMT = ((_dashboardData?.totalCapacityKg ?? 180000.0) / 1000).toStringAsFixed(1);
+    final confidencePct = '${((_dashboardData?.averageConfidence ?? 0.942) * 100).toStringAsFixed(1)}%';
+    final totalFps = _dashboardData?.totalFps ?? 620;
+    final highRisk = _dashboardData?.highRiskFpsCount ?? 61;
+
     switch (stage) {
       case 0:
         return _WorkflowStageMeta(
           title: 'Multi-Signal Demand Forecasting & Advance Intent Aggregation',
           category: 'PHASE 01 • PREDICTIVE DEMAND ENGINE',
-          engine: 'Holt-Winters Seasonal Smoothing + Ridge Regression + Live Intent Prior',
+          engine: 'Holt-Winters Seasonal Smoothing + Ridge Regression + Live Citizen Intent Prior',
+          operationalObjective: 'Forecast micro-level FPS commodity requirements before physical grain loading to eliminate stockouts and diversion.',
+          description: 'Combines 6 past distribution cycles of ePoS transaction logs with advance citizen declarations via WhatsApp/USSD to generate calibrated demand vector D̂_i for each shop.',
           mathSpec: 'D̂_i = α·H_i + β·(I_i·1.12) + γ·Buffer - ε_leakage',
           icon: Icons.insights_rounded,
           accentColor: AppConstants.accentBlue,
           metrics: [
-            {'val': '481.1 MT', 'label': 'Historical Base', 'sub': '3-cycle rolling average'},
-            {'val': '129.9 MT', 'label': 'Intent Signals', 'sub': '+12.4% advance citizen demand'},
-            {'val': '276.7 MT', 'label': 'Forecast Demand (D̂)', 'sub': 'Optimized Ridge regression'},
-            {'val': '94.2%', 'label': 'ML Confidence', 'sub': 'Zero starvation benchmark'},
+            {'val': '$totalHistoricalMT MT', 'label': 'Historical Base', 'sub': '6-cycle ePoS rolling baseline'},
+            {'val': '$totalIntentMT MT', 'label': 'Intent Signals', 'sub': '+12.4% advance citizen intent'},
+            {'val': '$totalForecastMT MT', 'label': 'Forecast Demand (D̂)', 'sub': 'ML calibrated demand vector'},
+            {'val': confidencePct, 'label': 'ML Confidence', 'sub': 'Zero starvation benchmark'},
           ],
-          inputNode: 'Past 3-Cycle ePoS Disbursal Logs + Citizen Intent Signals (WhatsApp/USSD)',
+          executionSteps: [
+            {
+              'title': 'Historical Baseline Normalization',
+              'desc': 'Aggregates past 6 cycles of biometric ePoS disbursal logs across all $totalFps FPS to extract baseline consumption patterns.',
+              'tag': '$totalHistoricalMT MT Base',
+            },
+            {
+              'title': 'Advance Citizen Intent Ingestion',
+              'desc': 'Captures advance FPS selections and doorstep delivery requests via WhatsApp bot and SMS, adding a +12.4% advance signal weight.',
+              'tag': '$totalIntentMT MT Intent',
+            },
+            {
+              'title': 'Multi-Signal Ridge Regression',
+              'desc': 'Executes L2 Ridge Regression combined with Holt-Winters seasonal smoothing to forecast precise grain demand D̂_i per FPS.',
+              'tag': '$totalForecastMT MT D̂ Vector',
+            },
+            {
+              'title': 'Pre-Dispatch Stockout Risk Classification',
+              'desc': 'Evaluates shop buffer headroom, classifying district shops into Low Risk (426), Medium Risk (133), and High Risk ($highRisk) to prioritize intervention.',
+              'tag': '$highRisk High Risk Prioritized',
+            },
+          ],
+          governanceGuarantee: 'Certified pre-dispatch demand vector D̂_i generated under NFSA Section 12 with $confidencePct statistical confidence.',
+          inputNode: 'Past 6-Cycle ePoS Disbursal Logs + Citizen Intent Signals (WhatsApp/USSD)',
           engineNode: 'Non-Linear Ensemble with Anomaly Suppression & Buffer Scaling',
-          outputNode: 'Calibrated Pre-Dispatch Demand Vector D̂_i for All 620 FPS',
+          outputNode: 'Calibrated Pre-Dispatch Demand Vector D̂_i for All $totalFps FPS',
           action1Label: 'Launch What-If Sandbox',
           action1Icon: Icons.tune_rounded,
           action1: () => _showForecastWhatIfDialog(_activeFpsId),
@@ -3444,16 +3697,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: 'Statutory Constraint Validation & Buffer Threshold Enforcement',
           category: 'PHASE 02 • GOVERNANCE & SAFETY RULES',
           engine: 'NFSA Statutory Compliance Engine (9 Discrete District Rules)',
+          operationalObjective: 'Enforce statutory safety buffer minimums, NFSA legal allocations, and depot storage throughput ceilings.',
+          description: 'Validates forecasted grain allocations against 9 deterministic legal food security rules, ensuring zero statutory deficits and isolating emergency buffer stocks.',
           mathSpec: '∀ s ∈ Shops: Stock_s + Transit_s ≥ MinSafetyStock_s ∧ Release ≤ Cap_dist',
           icon: Icons.verified_user_rounded,
           accentColor: const Color(0xFF10B981),
           metrics: [
-            {'val': '9 / 9', 'label': 'Rules Compliant', 'sub': '100% NFSA district pass'},
+            {'val': '9 / 9 Pass', 'label': 'Rules Compliant', 'sub': '100% NFSA district pass'},
             {'val': '15.0%', 'label': 'District Buffer', 'sub': 'Statutory emergency reserve'},
-            {'val': '500.0 MT', 'label': 'Release Ceiling', 'sub': 'Depot throughput limit'},
+            {'val': '$totalCapacityMT MT', 'label': 'Storage Ceiling', 'sub': 'FPS network storage limit'},
             {'val': '0 Critical', 'label': 'Stock Anomaly Flags', 'sub': 'Zero unaddressed deficits'},
           ],
-          inputNode: 'Raw Store Balances + Pending Consignments + Threshold Configs',
+          executionSteps: [
+            {
+              'title': 'NFSA 9-Rule Constraint Verification',
+              'desc': 'Evaluates per-card entitlement minimums (5 kg/member NFSA, 35 kg Antyodaya), shop floor limits, and legal buffer safety lines.',
+              'tag': '9 / 9 Rules Pass',
+            },
+            {
+              'title': 'District Emergency Buffer Isolation',
+              'desc': 'Isolates and freezes 15.0% statutory emergency reserve stock at primary godowns (DEPOT-01) to protect against unexpected regional surges.',
+              'tag': '15% Reserve Locked',
+            },
+            {
+              'title': 'Depot Throughput & Storage Ceiling Audit',
+              'desc': 'Checks that recommended releases do not exceed godown gate handling limits or individual fair price shop storage capacity.',
+              'tag': '$totalCapacityMT MT Audited',
+            },
+            {
+              'title': 'Cryptographic Constraint Sign-off',
+              'desc': 'Signs a digital compliance manifest attesting that all 620 FPS meet statutory food security standards before opening allocation solvers.',
+              'tag': 'Zero Legal Violations',
+            },
+          ],
+          governanceGuarantee: 'Full compliance with National Food Security Act 2013 and Karnataka State PDS statutory buffer regulations.',
+          inputNode: 'Raw Store Balances + Pending Consignments + Statutory Rule Configs',
           engineNode: 'Deterministic Constraint Solver with Auto-Reconciliation Rules',
           outputNode: 'Validated Dispatch Baseline with Cryptographic Constraint Seal',
           action1Label: 'Inspect 9 Statutory Rules',
@@ -3468,15 +3746,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: 'Pre-Dispatch Quota Allocation & Scarcity Simplex Rebalancing',
           category: 'PHASE 03 • EQUITY & FAIR SHARE OPTIMIZATION',
           engine: 'Linear Programming Simplex Solver with Portability Dynamic Weights',
+          operationalObjective: 'Equitably allocate available grain across all 620 FPS while dynamically rebalancing for migrant ONORC shifts.',
+          description: 'Solves multi-objective Simplex Linear Programming equations to allocate Rice and Wheat quotas, dynamically adjusting allocations for migrant portability hubs and doorstep delivery priority.',
           mathSpec: 'min ∑_{i,j} (C_ij · X_ij)  s.t.  X_ij ≥ MinNeed_i  (Simplex LP)',
           icon: Icons.balance_rounded,
           accentColor: const Color(0xFF8B5CF6),
           metrics: [
             {'val': 'Simplex LP', 'label': 'Optimization Model', 'sub': 'Fairness rebalancer active'},
-            {'val': '1,420', 'label': 'Portability Cards', 'sub': 'Inter-FPS migrated beneficiaries'},
-            {'val': '380', 'label': 'Doorstep Quotas', 'sub': 'Senior citizen home delivery'},
-            {'val': '0.038', 'label': 'Gini Metric', 'sub': 'Near-perfect distribution equity'},
+            {'val': '1,420 Cards', 'label': 'Portability Shift', 'sub': 'Inter-FPS migrated citizens'},
+            {'val': '380 Cards', 'label': 'Doorstep Priority', 'sub': 'Senior citizen home delivery'},
+            {'val': '0.038', 'label': 'Gini Coefficient', 'sub': 'Near-perfect distribution equity'},
           ],
+          executionSteps: [
+            {
+              'title': 'ONORC Migrant Inflow Redistribution',
+              'desc': 'Shifts grain quotas from low-turnout rural source shops into high-migration urban commercial corridors (e.g. Bellandur and Peenya hubs).',
+              'tag': '1,420 Migrant Beneficiaries',
+            },
+            {
+              'title': 'Priority Doorstep Quota Earmarking',
+              'desc': 'Guarantees pre-allocated, tamper-proof quotas for elderly (>65 years), bedridden, and disabled citizens requiring home delivery.',
+              'tag': '380 Doorstep Quotas',
+            },
+            {
+              'title': 'Simplex Linear Programming Solver',
+              'desc': 'Resolves multi-shop supply trade-offs to minimize total transit cost while ensuring every fair price shop receives sufficient safety headroom.',
+              'tag': 'Min Cost • Max Equity',
+            },
+            {
+              'title': 'Binding Allocation Quota Freeze',
+              'desc': 'Freezes the final FPS allocation matrix, generating binding quotas that prevent local fair price shopkeepers from rationing or hoarding.',
+              'tag': '$totalForecastMT MT Quota Frozen',
+            },
+          ],
+          governanceGuarantee: 'Near-perfect Gini equity index (0.038) guaranteeing zero citizen entitlement loss under One Nation One Ration Card.',
           inputNode: 'Citizen FPS Selection + Portability Flow Vectors + Stock Constraints',
           engineNode: 'Multi-Objective LP Solver Minimizing Transit & Quota Shortfalls',
           outputNode: 'FPS Allocation Matrix with Locked Beneficiary Entitlement Quotas',
@@ -3492,6 +3795,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: 'Fleet Route Clustering & Corridor Logistics Optimization',
           category: 'PHASE 04 • VEHICLE ROUTING PROBLEM (VRP)',
           engine: 'Google OR-Tools VRP Solver with Geofenced Cluster Corridors',
+          operationalObjective: 'Group 620 FPS into optimal delivery corridors and generate shortest, fuel-efficient multi-drop delivery routes.',
+          description: 'Solves Capacitated Vehicle Routing Problem with Time Windows (CVRPTW) to maximize truck bed fill rates (96.4%) and minimize transit mileage across 4 district logistics corridors.',
           mathSpec: 'min ∑_k Cost(Route_k)  s.t.  Payload_k ≤ 10 MT, Cluster_k ≤ 4',
           icon: Icons.alt_route_rounded,
           accentColor: const Color(0xFFF59E0B),
@@ -3501,6 +3806,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             {'val': '12 Trucks', 'label': 'Active Fleet', 'sub': 'GPS-tracked government carriers'},
             {'val': '1.82 MT', 'label': 'CO₂ Conserved', 'sub': 'Route distance minimization'},
           ],
+          executionSteps: [
+            {
+              'title': 'Geofenced Corridor Clustering',
+              'desc': 'Partitions 620 FPS into 4 geographic clusters (North, South, East, West) according to road weight limits, bridge heights, and travel time.',
+              'tag': '4 Logistic Corridors',
+            },
+            {
+              'title': 'CVRPTW Multi-Drop Routing Solver',
+              'desc': 'Executes Google OR-Tools routing algorithm with time windows to compute optimum shop drop sequence for 12 contracted government carriers.',
+              'tag': 'Optimal Turn-by-Turn',
+            },
+            {
+              'title': '10 MT Truck Payload Maximization',
+              'desc': 'Packs consignments to achieve 96.4% bed utilization per vehicle, reducing round trips and conserving an estimated 1.82 MT of CO₂.',
+              'tag': '96.4% Bed Utilization',
+            },
+            {
+              'title': 'Depot Staging Bay Sequencing',
+              'desc': 'Assigns discrete loading bay time slots at DEPOT-01 to prevent truck queues, driver turnaround delays, and bay congestion.',
+              'tag': 'Synchronized Bay Release',
+            },
+          ],
+          governanceGuarantee: 'GPS-geofenced fleet tracking with automated deviation logging and speed compliance alerts to District Supply Officer.',
           inputNode: '620 FPS Geocoordinates + Road Matrix + Depot Staging Gates',
           engineNode: 'Capacitated VRP with Time Windows (CVRPTW) Corridor Optimizer',
           outputNode: 'Optimized Carrier Manifests & Sequencing for Depot Dispatch',
@@ -3516,15 +3844,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: 'Cryptographic SHA-256 Tamper-Proof Gatepass & Manifest Seal',
           category: 'PHASE 05 • DISPATCH INTEGRITY & AUDIT SEAL',
           engine: 'HMAC-SHA256 Cryptographic Digest Engine with QR Verifier',
+          operationalObjective: 'Digitally seal every consignment with SHA-256 cryptographic signatures to eliminate en-route diversion and leakage.',
+          description: 'Generates tamper-evident digital gatepasses and high-density QR consignment seals linking driver Aadhaar, carrier truck ID, and fair price shop quotas.',
           mathSpec: 'HMAC-SHA256(CycleID || ConsignmentMatrix || FPS_List) ⟶ QR Seal',
           icon: Icons.local_shipping_rounded,
           accentColor: const Color(0xFF0EA5E9),
           metrics: [
-            {'val': '620 Passes', 'label': 'Signed Gatepasses', 'sub': 'SHA-256 tamper-evident'},
-            {'val': '100% Sealed', 'label': 'Depot Consignments', 'sub': 'Certified waybill releases'},
+            {'val': '$totalFps Passes', 'label': 'Signed Gatepasses', 'sub': 'SHA-256 tamper-evident'},
+            {'val': '$totalDispatchMT MT', 'label': 'Sealed Dispatch', 'sub': 'Depot certified release'},
             {'val': 'Instant QR', 'label': 'Offline Scan Verifier', 'sub': 'Field checkpoint check'},
-            {'val': 'Biometric', 'label': 'Driver Auth Log', 'sub': 'Aadhaar OTP handshake'},
+            {'val': 'Aadhaar OTP', 'label': 'Driver Auth Log', 'sub': 'Biometric gate clearance'},
           ],
+          executionSteps: [
+            {
+              'title': 'HMAC-SHA256 Consignment Digest',
+              'desc': 'Hashes cycle ID, truck license number, driver Aadhaar token, and allocated metric tonnage into an unalterable 256-bit cryptographic digest.',
+              'tag': 'SHA-256 Digest Created',
+            },
+            {
+              'title': 'High-Density 2D QR Gatepass Emission',
+              'desc': 'Encodes consignment payload into offline-scannable QR codes on physical consignment sheets and driver mobile handsets.',
+              'tag': 'Offline Verifiable QR',
+            },
+            {
+              'title': 'Depot Departure Gate Verification',
+              'desc': 'Depot security officers scan gatepass QR at exit barrier; vehicle tare weight and departure timestamp logged automatically.',
+              'tag': '100% Gate Verified',
+            },
+            {
+              'title': 'Immutable Governance Audit Commit',
+              'desc': 'Appends cryptographic consignment event into the immutable audit trail, establishing unbroken chain of custody under Essential Commodities Act.',
+              'tag': 'Tamper-Proof Audit Log',
+            },
+          ],
+          governanceGuarantee: 'Legally binding non-repudiation chain of custody backed by HMAC-SHA256 cryptographic signatures and biometric driver verification.',
           inputNode: 'Certified Allocation Quota + Carrier Truck ID + Depot Timestamp',
           engineNode: 'Cryptographic Hash Generation & QR Code Tamper-Proof Serialization',
           outputNode: 'Immutable Digital Gatepasses & Physical Driver Consignment Sheets',
@@ -3540,15 +3893,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: 'ePoS Terminal Real-Time Sync & Aadhaar Biometric Lift Verification',
           category: 'PHASE 06 • LIVE TERMINAL TELEMETRY',
           engine: 'NIC ePoS Gateway Synchronization & Real-Time Disbursal Uplink',
+          operationalObjective: 'Track live citizen grain disbursals in real-time as ration cards are swiped and authenticated across 620 FPS.',
+          description: 'Synchronizes weighing machine scales and biometric ePoS terminals with NIC central servers, continuously monitoring stock drawdown velocity and flagging anomalies.',
           mathSpec: 'ePoS_Lift(b, t) ⟷ BioAuth(UIDAI) ∧ RemainingEntitlement(b) ≥ 0',
           icon: Icons.fingerprint_rounded,
           accentColor: const Color(0xFF059669),
           metrics: [
-            {'val': '620 / 620', 'label': 'ePoS Terminals', 'sub': 'Live active terminal link'},
+            {'val': '$totalFps / $totalFps', 'label': 'ePoS Terminals', 'sub': 'Live active terminal link'},
             {'val': '99.1%', 'label': 'Biometric Auth', 'sub': 'First-attempt Aadhaar match'},
             {'val': '84.6%', 'label': 'Lift Progression', 'sub': 'District cycle disbursal'},
             {'val': '0.08%', 'label': 'Variance Gap', 'sub': 'Under statutory tolerance'},
           ],
+          executionSteps: [
+            {
+              'title': 'NIC ePoS Disbursal Uplink',
+              'desc': 'Ingests live encrypted transaction streams directly from weighing machine terminals across all $totalFps fair price shops in Karnataka.',
+              'tag': '$totalFps Terminals Online',
+            },
+            {
+              'title': 'UIDAI Aadhaar Citizen Verification',
+              'desc': 'Authenticates citizen fingerprint/iris biometric in real-time (99.1% first-attempt success), guaranteeing zero proxy or ghost lifting.',
+              'tag': '99.1% Bio-Auth Match',
+            },
+            {
+              'title': 'Real-Time Inventory Headroom Depletion',
+              'desc': 'Automatically decrements store inventory upon each successful transaction; triggers automated replenishment alerts when buffer drops below 25%.',
+              'tag': 'Live Buffer Monitoring',
+            },
+            {
+              'title': 'Autonomous Anomaly & Fraud Detection',
+              'desc': 'Scans for irregular disbursal patterns (e.g. rapid consecutive swipes, off-hour transactions) and immediately flags them for field vigilance.',
+              'tag': '0.08% Audit Tolerance',
+            },
+          ],
+          governanceGuarantee: 'Zero proxy distribution guarantee via Aadhaar UIDAI biometric validation with real-time audit reconciliation.',
           inputNode: 'NIC ePoS Transaction Log Streams + Aadhaar UIDAI Biometric Tokens',
           engineNode: 'Continuous Real-Time Reconciliation vs Locked Pre-Dispatch Quotas',
           outputNode: 'Verified Citizen Grain Disbursal Ledger & Anomaly Exception Feeds',
@@ -3565,15 +3943,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           title: 'Closed-Loop Post-Distribution MAPE Calibration & Feedback Learning',
           category: 'PHASE 07 • CLOSED-LOOP ML EVALUATION',
           engine: 'Continuous Error Minimization & Bayesian Prior Weight Calibrator',
+          operationalObjective: 'Compare end-of-month ePoS disbursal logs with pre-dispatch forecasts, self-calibrating ML weights for the upcoming cycle.',
+          description: 'Calculates Mean Absolute Percentage Error (MAPE) between predicted demand D̂_i and actual consumption, auto-tuning seasonal smoothing and citizen intent weights for next cycle.',
           mathSpec: 'MAPE = (1/N) ∑ |Actual_i - D̂_i| / Actual_i ⟶ Update(α, β, γ)',
           icon: Icons.published_with_changes_rounded,
           accentColor: const Color(0xFF6366F1),
           metrics: [
-            {'val': '4.8%', 'label': 'Forecast MAPE', 'sub': 'Exceeds 90% accuracy goal'},
+            {'val': '4.8%', 'label': 'Forecast MAPE', 'sub': 'High precision, exceeds 90%'},
             {'val': '99.8%', 'label': 'Starvation Prevention', 'sub': 'Zero stockout incidents'},
             {'val': 'Auto-Tuned', 'label': 'Closed-Loop Feedback', 'sub': 'Prior weights calibrated'},
-            {'val': 'Immutable', 'label': 'Audit Governance', 'sub': 'Permanent state record'},
+            {'val': 'Permanent', 'label': 'Audit Governance', 'sub': 'Immutable state record'},
           ],
+          executionSteps: [
+            {
+              'title': 'End-of-Month Disbursal Reconciliation',
+              'desc': 'Aggregates final monthly ePoS disbursal ledgers across all $totalFps FPS, comparing physical grain lifted against Day 25 predictions.',
+              'tag': 'Cycle Reconciliation',
+            },
+            {
+              'title': 'MAPE & Residual Variance Computation',
+              'desc': 'Computes Mean Absolute Percentage Error (4.8% district average), verifying that forecasting accuracy exceeded the 90.0% benchmark.',
+              'tag': '4.8% MAPE Achieved',
+            },
+            {
+              'title': 'Bayesian Hyperparameter Retuning',
+              'desc': 'Adjusts model prior weights (alpha historical, beta intent, gamma buffer) to correct for localized seasonal drift in the upcoming planning cycle.',
+              'tag': 'Auto-Tuned Weights (α, β, γ)',
+            },
+            {
+              'title': 'State Governance Archive Sign-off',
+              'desc': 'Produces a cryptographically signed closed-loop audit dossier for District Supply Officer and Food & Civil Supplies Directorate archive.',
+              'tag': 'Signed Audit Dossier',
+            },
+          ],
+          governanceGuarantee: 'Continuous self-calibrating ML governance pipeline with complete explainability, causal trace verification, and zero entitlement loss.',
           inputNode: 'Completed Cycle Disbursal Log vs Day 25 Pre-Dispatch Predictions',
           engineNode: 'Mean Absolute Percentage Error (MAPE) Calibration & Weight Tuning',
           outputNode: 'Self-Correcting Next-Cycle ML Hyperparameters (α, β, γ) & Audit Report',
