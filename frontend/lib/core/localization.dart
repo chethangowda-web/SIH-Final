@@ -89,8 +89,29 @@ const Map<String, Map<String, String>> _translations = {
     'login.gov_of_india': 'Government of India',
     'login.welcome_back': 'Welcome Back',
     'login.welcome_sub': 'Login to access your ration and service management portal',
+    'login.subtitle': 'Access your food security and service management portal',
+    'login.citizen_portal_credentials': 'Citizen Portal Access Credentials',
+    'login.three_factor_auth': '3-FACTOR CITIZEN AUTH',
+    'login.tab_dept_official': 'Department Official',
     'login.ration_num_label': 'Ration Card Number',
+    'login.ration_card_hint_full': 'e.g. RC-KA-000001 or BEN-KA-0001',
     'login.enter_12_digit': 'Enter your 12-digit ration card number',
+    'login.aadhaar_num_label': 'Aadhaar Number (12 Digits)',
+    'login.aadhaar_hint': 'e.g. 5489 1234 5678',
+    'login.phone_num_label': 'Registered Phone Number (10 Digits)',
+    'login.phone_hint': 'e.g. +91 8050442666 / 98765 43210',
+    'login.get_otp_sms': 'Get OTP Code via SMS',
+    'login.enter_sms_code': 'Enter 6-Digit SMS Code',
+    'login.sms_dispatched': 'SMS dispatched to registered mobile',
+    'login.resend_otp': 'Resend OTP',
+    'login.official_user_label': 'Official Username',
+    'login.official_user_hint': 'field_officer_user / dso_user / admin_user',
+    'login.official_creds_hint': 'Official Credentials: admin_user (pass: admin1234 / admin_pass) • field_officer_user (pass: field_pass) • dso_user (pass: dso_pass) • auditor_user (pass: auditor_pass)',
+    'login.signin_official_btn': 'Sign In as Official',
+    'login.footer_disclaimer': 'Department of Food & Civil Supplies • Government of India',
+    'login.enter_valid_aadhaar': 'Please enter a valid 12-digit Aadhaar Number.',
+    'login.enter_valid_phone': 'Please enter a valid 10-digit Registered Mobile Number.',
+    'login.enter_valid_otp': 'Please enter the 6-digit OTP received on your mobile.',
     'login.data_safe': 'Your data is safe with us',
     'login.feat_track_movement': 'Track\nGrain Movement',
     'login.feat_verify_shops': 'Verify\nRegistered Shops',
@@ -431,8 +452,29 @@ const Map<String, Map<String, String>> _translations = {
     'login.gov_of_india': 'भारत सरकार',
     'login.welcome_back': 'स्वागत है',
     'login.welcome_sub': 'अपने राशन और सेवा प्रबंधन पोर्टल तक पहुंचने के लिए लॉगिन करें',
+    'login.subtitle': 'अपने खाद्य सुरक्षा और सेवा प्रबंधन पोर्टल तक पहुंचें',
+    'login.citizen_portal_credentials': 'नागरिक पोर्टल पहुंच क्रेडेंशियल',
+    'login.three_factor_auth': '3-स्तरीय नागरिक प्रमाणीकरण',
+    'login.tab_dept_official': 'विभागीय अधिकारी',
     'login.ration_num_label': 'राशन कार्ड नंबर',
+    'login.ration_card_hint_full': 'उदा. RC-KA-000001 अथवा BEN-KA-0001',
     'login.enter_12_digit': 'अपना 12-अंकीय राशन कार्ड नंबर दर्ज करें',
+    'login.aadhaar_num_label': 'आधार नंबर (12 अंक)',
+    'login.aadhaar_hint': 'उदा. 5489 1234 5678',
+    'login.phone_num_label': 'पंजीकृत मोबाइल नंबर (10 अंक)',
+    'login.phone_hint': 'उदा. +91 8050442666 / 98765 43210',
+    'login.get_otp_sms': 'SMS द्वारा OTP कोड प्राप्त करें',
+    'login.enter_sms_code': '6-अंकीय SMS कोड दर्ज करें',
+    'login.sms_dispatched': 'पंजीकृत मोबाइल पर SMS भेजा गया',
+    'login.resend_otp': 'OTP पुनः भेजें',
+    'login.official_user_label': 'अधिकारी उपयोगकर्ता नाम',
+    'login.official_user_hint': 'field_officer_user / dso_user / admin_user',
+    'login.official_creds_hint': 'अधिकारिक क्रेडेंशियल: admin_user (पास: admin1234 / admin_pass) • field_officer_user (पास: field_pass) • dso_user (पास: dso_pass) • auditor_user (पास: auditor_pass)',
+    'login.signin_official_btn': 'अधिकारी के रूप में साइन इन करें',
+    'login.footer_disclaimer': 'खाद्य एवं नागरिक आपूर्ति विभाग • भारत सरकार',
+    'login.enter_valid_aadhaar': 'कृपया एक वैध 12-अंकीय आधार नंबर दर्ज करें।',
+    'login.enter_valid_phone': 'कृपया एक वैध 10-अंकीय पंजीकृत मोबाइल नंबर दर्ज करें।',
+    'login.enter_valid_otp': 'कृपया मोबाइल पर प्राप्त 6-अंकीय OTP दर्ज करें।',
     'login.data_safe': 'आपका डेटा हमारे पास सुरक्षित है',
     'login.feat_track_movement': 'अनाज आवागमन\nट्रैक करें',
     'login.feat_verify_shops': 'पंजीकृत दुकानों\nका सत्यापन',
@@ -738,6 +780,31 @@ const Map<String, Map<String, String>> _translations = {
 
     // Login Screen Comprehensive
     'login.tagline': 'ಪಾರದರ್ಶಕ • ದಕ್ಷ • ಉತ್ತಮ ನಾಳೆಗಾಗಿ',
+    'login.welcome_back': 'ಮರಳಿ ಸ್ವಾಗತ',
+    'login.welcome_sub': 'ನಿಮ್ಮ ಪಡಿತರ ಮತ್ತು ಸೇವಾ ನಿರ್ವಹಣಾ ಪೋರ್ಟಲ್ ಅನ್ನು ಪ್ರವೇಶಿಸಲು ಲಾಗಿನ್ ಮಾಡಿ',
+    'login.subtitle': 'ನಿಮ್ಮ ಆಹಾರ ಭದ್ರತೆ ಮತ್ತು ಸೇವಾ ನಿರ್ವಹಣಾ ಪೋರ್ಟಲ್ ಅನ್ನು ಪ್ರವೇಶಿಸಿ',
+    'login.citizen_portal_credentials': 'ನಾಗರಿಕ ಪೋರ್ಟಲ್ ಪ್ರವೇಶ ರುಜುವಾತುಗಳು',
+    'login.three_factor_auth': '3-ಹಂತದ ನಾಗರಿಕ ದೃಢೀಕರಣ',
+    'login.tab_dept_official': 'ಇಲಾಖಾ ಅಧಿಕಾರಿ',
+    'login.ration_num_label': 'ಪಡಿತರ ಚೀಟಿ ಸಂಖ್ಯೆ',
+    'login.ration_card_hint_full': 'ಉದಾ: RC-KA-000001 ಅಥವಾ BEN-KA-0001',
+    'login.enter_12_digit': 'ನಿಮ್ಮ 12-ಅಂಕಿಯ ಪಡಿತರ ಚೀಟಿ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ',
+    'login.aadhaar_num_label': 'ಆಧಾರ್ ಸಂಖ್ಯೆ (12 ಅಂಕಿಗಳು)',
+    'login.aadhaar_hint': 'ಉದಾ: 5489 1234 5678',
+    'login.phone_num_label': 'ನೋಂದಾಯಿತ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ (10 ಅಂಕಿಗಳು)',
+    'login.phone_hint': 'ಉದಾ: +91 8050442666 / 98765 43210',
+    'login.get_otp_sms': 'SMS ಮೂಲಕ OTP ಕೋಡ್ ಪಡೆಯಿರಿ',
+    'login.enter_sms_code': '6-ಅಂಕಿಯ SMS ಕೋಡ್ ನಮೂದಿಸಿ',
+    'login.sms_dispatched': 'ನೋಂದಾಯಿತ ಮೊಬೈಲ್‌ಗೆ SMS ಕಳುಹಿಸಲಾಗಿದೆ',
+    'login.resend_otp': 'OTP ಮರುಕಳುಹಿಸಿ',
+    'login.official_user_label': 'ಅಧಿಕೃತ ಬಳಕೆದಾರ ಹೆಸರು',
+    'login.official_user_hint': 'field_officer_user / dso_user / admin_user',
+    'login.official_creds_hint': 'ಅಧಿಕೃತ ರುಜುವಾತುಗಳು: admin_user (ಪಾಸ್: admin1234 / admin_pass) • field_officer_user (ಪಾಸ್: field_pass) • dso_user (ಪಾಸ್: dso_pass) • auditor_user (ಪಾಸ್: auditor_pass)',
+    'login.signin_official_btn': 'ಅಧಿಕಾರಿಯಾಗಿ ಸೈನ್ ಇನ್ ಮಾಡಿ',
+    'login.footer_disclaimer': 'ಆಹಾರ ಮತ್ತು ನಾಗರಿಕ ಸರಬರಾಜು ಇಲಾಖೆ • ಭಾರತ ಸರ್ಕಾರ',
+    'login.enter_valid_aadhaar': 'ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ 12-ಅಂಕಿಯ ಆಧಾರ್ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ.',
+    'login.enter_valid_phone': 'ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ 10-ಅಂಕಿಯ ನೋಂದಾಯಿತ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ.',
+    'login.enter_valid_otp': 'ದಯವಿಟ್ಟು ಮೊಬೈಲ್‌ನಲ್ಲಿ ಸ್ವೀಕರಿಸಿದ 6-ಅಂಕಿಯ OTP ನಮೂದಿಸಿ.',
     'login.hero_title_1': 'ನ್ಯಾಯಸಮ್ಮತ ವಿತರಣೆ.',
     'login.hero_title_2': 'ಬಲಿಷ್ಠ ಸಮುದಾಯಗಳು.',
     'login.hero_subtitle': 'ನಿಮ್ಮ ಪಡಿತರವನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ, ನಿಮ್ಮ ಅರ್ಹತೆಗಳನ್ನು ನಿರ್ವಹಿಸಿ ಮತ್ತು ಅಗತ್ಯ ಸೇವೆಗಳನ್ನು ಪಡೆಯಿರಿ — ಎಲ್ಲವೂ ಒಂದೇ ಸ್ಥಳದಲ್ಲಿ.',
@@ -1044,11 +1111,13 @@ const Map<String, Map<String, String>> _translations = {
 class LanguageSelectorWidget extends StatelessWidget {
   final bool isCompact;
   final Color? backgroundColor;
+  final bool isLight;
 
   const LanguageSelectorWidget({
     super.key,
     this.isCompact = false,
     this.backgroundColor,
+    this.isLight = false,
   });
 
   @override
@@ -1057,18 +1126,29 @@ class LanguageSelectorWidget extends StatelessWidget {
       animation: LanguageController.instance,
       builder: (context, _) {
         final current = LanguageController.instance.currentLanguage;
+        final lightMode = isLight || backgroundColor != null;
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
           decoration: BoxDecoration(
-            color: backgroundColor ?? Colors.white.withValues(alpha: 0.15),
+            color: backgroundColor ??
+                (lightMode ? const Color(0xFFF1F5F9) : Colors.white.withValues(alpha: 0.15)),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: backgroundColor != null
-                  ? AppConstants.cardBorder
+              color: lightMode
+                  ? const Color(0xFFCBD5E1)
                   : Colors.white.withValues(alpha: 0.25),
-              width: 1,
+              width: 1.2,
             ),
+            boxShadow: lightMode
+                ? const [
+                    BoxShadow(
+                      color: Color(0x0A000000),
+                      blurRadius: 4,
+                      offset: Offset(0, 1),
+                    )
+                  ]
+                : null,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1078,9 +1158,7 @@ class LanguageSelectorWidget extends StatelessWidget {
                 child: Icon(
                   Icons.translate_rounded,
                   size: isCompact ? 13 : 15,
-                  color: backgroundColor != null
-                      ? AppConstants.primaryNavy
-                      : Colors.white,
+                  color: lightMode ? AppConstants.primaryNavy : Colors.white,
                 ),
               ),
               ...AppLanguage.values.map((lang) {
@@ -1095,11 +1173,18 @@ class LanguageSelectorWidget extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? (backgroundColor != null
-                              ? AppConstants.primaryNavy
-                              : Colors.white)
+                          ? (lightMode ? AppConstants.primaryNavy : Colors.white)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(16),
+                      boxShadow: isSelected && lightMode
+                          ? const [
+                              BoxShadow(
+                                color: Color(0x220F2942),
+                                blurRadius: 4,
+                                offset: Offset(0, 1),
+                              ),
+                            ]
+                          : null,
                     ),
                     child: Text(
                       lang.nativeName,
@@ -1108,12 +1193,10 @@ class LanguageSelectorWidget extends StatelessWidget {
                         fontWeight:
                             isSelected ? FontWeight.w800 : FontWeight.w600,
                         color: isSelected
-                            ? (backgroundColor != null
-                                ? Colors.white
-                                : AppConstants.primaryNavy)
-                            : (backgroundColor != null
-                                ? AppConstants.textSecondary
-                                : Colors.white.withValues(alpha: 0.85)),
+                            ? (lightMode ? Colors.white : AppConstants.primaryNavy)
+                            : (lightMode
+                                ? const Color(0xFF1E293B)
+                                : Colors.white.withValues(alpha: 0.9)),
                       ),
                     ),
                   ),

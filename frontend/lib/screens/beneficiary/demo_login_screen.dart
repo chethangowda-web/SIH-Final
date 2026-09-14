@@ -109,19 +109,19 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
     if (cardId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid Ration Card Number.')),
+        SnackBar(content: Text(tr('login.enter_valid_card'))),
       );
       return;
     }
     if (aadhaar.isEmpty || aadhaar.replaceAll(' ', '').length < 12) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid 12-digit Aadhaar Number.')),
+        SnackBar(content: Text(tr('login.enter_valid_aadhaar'))),
       );
       return;
     }
     if (phone.isEmpty || phone.replaceAll(RegExp(r'\D'), '').length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid 10-digit Registered Mobile Number.')),
+        SnackBar(content: Text(tr('login.enter_valid_phone'))),
       );
       return;
     }
@@ -178,7 +178,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     final otp = _citizenOtpController.text.trim();
     if (otp.isEmpty || otp.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter the 6-digit OTP received on your mobile.')),
+        SnackBar(content: Text(tr('login.enter_valid_otp'))),
       );
       return;
     }
@@ -331,7 +331,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   ),
                 ),
                 Text(
-                  'Department of Food & Civil Supplies',
+                  tr('login.dept_title'),
                   style: TextStyle(
                     fontSize: isSmall ? 10 : 11.5,
                     fontWeight: FontWeight.w500,
@@ -343,7 +343,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ],
         ),
         // Language Toggle inside Login Screen Header
-        const LanguageSelectorWidget(isCompact: true),
+        const LanguageSelectorWidget(isCompact: true, isLight: true),
       ],
     );
   }
@@ -417,8 +417,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             ),
             child: Row(
               children: [
-                _buildSegmentTab(0, Icons.phone_android_rounded, 'Citizen OTP', _govGreen, isSmall),
-                _buildSegmentTab(1, Icons.badge_outlined, 'Department Official', _govNavy, isSmall),
+                _buildSegmentTab(0, Icons.phone_android_rounded, tr('login.tab_citizen_otp'), _govGreen, isSmall),
+                _buildSegmentTab(1, Icons.badge_outlined, tr('login.tab_dept_official'), _govNavy, isSmall),
               ],
             ),
           ),
@@ -494,7 +494,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           children: [
             Expanded(
               child: Text(
-                'Citizen Portal Access Credentials',
+                tr('login.citizen_portal_credentials'),
                 style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -507,9 +507,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: _govGreenBorder),
               ),
-              child: const Text(
-                '3-FACTOR CITIZEN AUTH',
-                style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: _govGreen),
+              child: Text(
+                tr('login.three_factor_auth'),
+                style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: _govGreen),
               ),
             ),
           ],
@@ -517,13 +517,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         const SizedBox(height: 12),
 
         // Field 1: Ration Card Number
-        Text('Ration Card Number', style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
+        Text(tr('login.ration_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
         const SizedBox(height: 4),
         TextField(
           controller: _citizenCardController,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'e.g. RC-KA-000001 or BEN-KA-0001',
+            hintText: tr('login.ration_card_hint_full'),
             prefixIcon: Icon(Icons.credit_card_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
@@ -537,14 +537,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         const SizedBox(height: 10),
 
         // Field 2: Aadhaar Number
-        Text('Aadhaar Number (12 Digits)', style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
+        Text(tr('login.aadhaar_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
         const SizedBox(height: 4),
         TextField(
           controller: _citizenAadhaarController,
           keyboardType: TextInputType.number,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'e.g. 5489 1234 5678',
+            hintText: tr('login.aadhaar_hint'),
             prefixIcon: Icon(Icons.fingerprint_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
@@ -558,14 +558,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         const SizedBox(height: 10),
 
         // Field 3: Registered Phone / Mobile Number
-        Text('Registered Phone Number (10 Digits)', style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
+        Text(tr('login.phone_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
         const SizedBox(height: 4),
         TextField(
           controller: _citizenPhoneController,
           keyboardType: TextInputType.phone,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'e.g. +91 8050442666 / 98765 43210',
+            hintText: tr('login.phone_hint'),
             prefixIcon: Icon(Icons.phone_android_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
@@ -590,7 +590,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             ),
             child: _isSendingOtp
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Text('Get OTP Code via SMS', style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
+                : Text(tr('login.get_otp_sms'), style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
           )
         else ...[
           // OTP Received Input Section
@@ -612,7 +612,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                         Icon(Icons.sms_outlined, size: isSmall ? 13 : 14, color: _govGreen),
                         const SizedBox(width: 4),
                         Text(
-                          'Enter 6-Digit SMS Code',
+                          tr('login.enter_sms_code'),
                           style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700, color: _govGreen),
                         ),
                       ],
@@ -654,13 +654,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'SMS dispatched to registered mobile',
+                      tr('login.sms_dispatched'),
                       style: TextStyle(fontSize: isSmall ? 9.5 : 10.5, color: _slate500),
                     ),
                     InkWell(
                       onTap: _isSendingOtp ? null : _handleSendOtp,
                       child: Text(
-                        'Resend OTP',
+                        tr('login.resend_otp'),
                         style: TextStyle(fontSize: isSmall ? 10 : 11, fontWeight: FontWeight.w700, color: _govNavy),
                       ),
                     ),
@@ -688,7 +688,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                     children: [
                       Icon(Icons.check_circle_rounded, size: isSmall ? 15 : 16),
                       const SizedBox(width: 6),
-                      Text('Verify OTP & Login', style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
+                      Text(tr('login.verify_login_btn'), style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
                     ],
                   ),
           ),
@@ -706,7 +706,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Official Username',
+          tr('login.official_user_label'),
           style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
         ),
         const SizedBox(height: 6),
@@ -714,7 +714,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           controller: _adminUsernameController,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'field_officer_user / dso_user / admin_user',
+            hintText: tr('login.official_user_hint'),
             prefixIcon: Icon(Icons.person_outline_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
@@ -727,7 +727,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         SizedBox(height: isSmall ? 10 : 14),
 
         Text(
-          'Password',
+          tr('login.password_label'),
           style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
         ),
         const SizedBox(height: 6),
@@ -765,7 +765,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Official Credentials: admin_user (pass: admin1234 / admin_pass) • field_officer_user (pass: field_pass) • dso_user (pass: dso_pass) • auditor_user (pass: auditor_pass)',
+                  tr('login.official_creds_hint'),
                   style: TextStyle(fontSize: isSmall ? 10 : 11, color: _slate700, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -786,7 +786,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ),
           child: _isAdminLoggingIn
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : Text('Sign In as Official', style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
+              : Text(tr('login.signin_official_btn'), style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
         ),
       ],
     );
@@ -822,7 +822,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
         // Official Gov Disclaimer
         Text(
-          'Department of Food & Civil Supplies • Government of India',
+          tr('login.footer_disclaimer'),
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: isSmall ? 10 : 11, color: _slate400),
         ),
