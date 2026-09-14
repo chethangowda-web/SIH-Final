@@ -385,45 +385,6 @@ class ApiService {
     return results;
   }
 
-  /// Explicitly dispatch or re-send the official PDS collection plan WhatsApp receipt via Twilio
-  Future<Map<String, dynamic>> sendWhatsAppReceipt({
-    required String beneficiaryId,
-    required String requestId,
-    required String cycleId,
-    required String intendedFpsName,
-    required double quantityKg,
-    required String commodity,
-    required String deliveryMode,
-    String? phoneNumber,
-  }) async {
-    final payload = <String, dynamic>{
-      'beneficiary_id': beneficiaryId,
-      'request_id': requestId,
-      'cycle_id': cycleId,
-      'intended_fps_name': intendedFpsName,
-      'quantity_kg': quantityKg,
-      'commodity': commodity,
-      'delivery_mode': deliveryMode,
-      if (phoneNumber != null && phoneNumber.isNotEmpty) 'phone_number': phoneNumber,
-    };
-
-    final response = await client
-        .post(
-          Uri.parse('${AppConstants.apiBaseUrl}/intent/send-whatsapp-receipt'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: json.encode(payload),
-        )
-        .timeout(AppConstants.apiTimeout);
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return json.decode(response.body) as Map<String, dynamic>;
-    } else {
-      throw parseError(response, 'Failed to send WhatsApp receipt');
-    }
-  }
 
   /// Fetch authoritative government entitlement breakdown and remaining balance
   Future<BeneficiaryEntitlementSummary> fetchBeneficiaryEntitlementSummary(
