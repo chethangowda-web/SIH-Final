@@ -135,9 +135,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (widget.userRole != null && widget.userRole!.isNotEmpty) {
       _apiService.authSession.setSession(
         token: _apiService.authSession.token ?? 'demo_token',
-        userId: widget.username ?? _apiService.authSession.userId ?? 'official_1',
+        username: widget.username ?? _apiService.authSession.username ?? 'official_1',
         role: widget.userRole!,
-        cardId: _apiService.authSession.cardId,
+        beneficiaryId: _apiService.authSession.beneficiaryId,
       );
     }
     _loadDashboardData();
@@ -1174,7 +1174,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // ROLE WORKSPACE WINDOW BANNER
   Widget _buildRoleWorkspaceBanner() {
     final role = _apiService.authSession.role;
-    final username = widget.username ?? _apiService.authSession.userId ?? 'Official User';
+    final username = widget.username ?? _apiService.authSession.username ?? 'Official User';
 
     Color bannerBg;
     Color borderColor;

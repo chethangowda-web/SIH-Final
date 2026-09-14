@@ -1,0 +1,11 @@
+{
+  "name": "PDS DemandSync",
+  "short_name": "DemandSync",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0A2540",
+  "description": "Forward-Looking Beneficiary Intent for Pre-Dispatch PDS Demand Forecasting",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false
+}

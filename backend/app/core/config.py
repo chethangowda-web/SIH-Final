@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     DB_PATH: Path = BASE_DIR / "pds_demandsync.db"
     
     # Flutter Web static distribution directory
-    STATIC_DIR: Path = BASE_DIR.parent / "frontend" / "build" / "web"
+    STATIC_DIR: Path = (BASE_DIR / "app" / "static_web") if (BASE_DIR / "app" / "static_web").exists() else (BASE_DIR.parent / "frontend" / "build" / "web")
     
     # Logging Configuration
     LOG_LEVEL: str = "INFO"

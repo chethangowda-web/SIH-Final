@@ -1,22 +1,11 @@
-# Stage 1: Build the Flutter Web App
-FROM ghcr.io/cirruslabs/flutter:stable AS frontend-builder
-WORKDIR /app/frontend
-COPY frontend/ ./
-# Resolve dependencies and build for web
-RUN flutter pub get
-RUN flutter build web --release --base-href "/app/"
-
-# Stage 2: Build the Python Backend
+# Production Dockerfile for PDS DemandSync (FastAPI + Embedded Flutter Web)
 FROM python:3.11-slim
 WORKDIR /app
 
 # Set environment variables for production
 ENV ENVIRONMENT=production
-# Provide a default secure secret key (for Railway deployment)
 ENV SECRET_KEY=a_very_long_secure_random_production_secret_key_minimum_32_characters_railway
 ENV HOST=0.0.0.0
-
-# Ensure stdout/stderr are unbuffered for logs
 ENV PYTHONUNBUFFERED=1
 
 # Install backend dependencies
@@ -25,11 +14,8 @@ RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r backend/requirements.txt
 RUN pip install --no-cache-dir python-multipart
 
-# Copy backend source code
+# Copy backend source code (including prebuilt static_web)
 COPY backend/ ./backend/
-
-# Copy the built Flutter web files from the frontend-builder stage
-COPY --from=frontend-builder /app/frontend/build/web ./frontend/build/web
 
 # Set working directory to backend
 WORKDIR /app/backend
