@@ -36,6 +36,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   AdminDashboardData? _dashboardData;
   bool _isLoading = true;
   String? _errorMessage;
+  int _selectedMainTab = 0; // 0: Overview & Incidents, 1: All 620 FPS Matrix, 2: AI Pipeline & Tools
   String _selectedFilter = 'ALL'; // 'ALL', 'HIGH_RISK', 'LOW_INVENTORY', 'PORTABILITY'
   String _searchQuery = '';
   bool _isActionExecuting = false;
@@ -1002,20 +1003,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // SECTION 1: ENTERPRISE COMMAND BAR & 7-STAGE PRIMARY WORKFLOW STEPPER
-                            _buildEnterpriseCommandBar(),
+                            // EXECUTIVE KPI SUMMARY ROW (Always visible at top)
+                            _buildExecutiveKpiRow(),
                             const SizedBox(height: AppConstants.space16),
 
-                            // SECTION 2: EXECUTIVE KPI ROW (5 Polished KPI Cards)
-                            _buildExecutiveKpiRow(),
-                            const SizedBox(height: AppConstants.space20),
+                            // MAIN NAVIGATION TAB SWITCHER
+                            _buildMainTabSwitcher(),
+                            const SizedBox(height: AppConstants.space16),
 
-                            // SECTION 3: OPERATIONAL HEALTH & ATTENTION ITEMS (2x2 Grid + Live Alerts)
-                            _buildOperationalHealthAndAlerts(),
-                            const SizedBox(height: AppConstants.space20),
+                            // TAB CONTENT
+                            if (_selectedMainTab == 0) ...[
+                              // TAB 0: OVERVIEW & OPERATIONAL INCIDENTS
+                              _buildOperationalHealthAndAlerts(),
+                            ] else if (_selectedMainTab == 1) ...[
+                              // TAB 1: ALL 620 FAIR PRICE SHOPS MATRIX
+                              _buildFpsOperationsMatrix(),
+                            ] else ...[
+                              // TAB 2: AI PIPELINE & DECISION TRACE TOOLS
+                              _buildEnterpriseCommandBar(),
+                            ],
 
-                            // SECTION 4: FAIR PRICE SHOP OPERATIONS MATRIX
-                            _buildFpsOperationsMatrix(),
                             const SizedBox(height: AppConstants.space20),
 
                             // Footer Reassurance
@@ -1086,6 +1093,85 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ],
                   ],
                 ),
+    );
+  }
+
+  // MAIN TAB SWITCHER
+  Widget _buildMainTabSwitcher() {
+    final activeShops = _dashboardData?.fpsList.length ?? 620;
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppConstants.cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          _buildTabButton(0, 'Overview & Alerts', Icons.dashboard_outlined, '3 Live Alerts'),
+          _buildTabButton(1, 'All 620 FPS Matrix', Icons.storefront_outlined, '$activeShops Shops'),
+          _buildTabButton(2, 'AI Pipeline & Tools', Icons.alt_route_rounded, '7 Stages'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabButton(int index, String label, IconData icon, String badge) {
+    final isSelected = _selectedMainTab == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _selectedMainTab = index),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? AppConstants.primaryNavy : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: isSelected ? Colors.white : AppConstants.textSecondary),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                    color: isSelected ? Colors.white : AppConstants.textPrimary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white.withValues(alpha: 0.2) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  badge,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? Colors.white : AppConstants.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
