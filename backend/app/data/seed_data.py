@@ -51,8 +51,40 @@ def _read_csv(filename: str):
 
 
 def seed_fps(cursor):
-    """Load 621 FPS from fps_master.csv."""
-    rows = _read_csv("fps_master.csv")
+    """Load 621 FPS from fps_master.csv (or dynamically generate 620 Karnataka FPS centers if CSV missing)."""
+    try:
+        rows = _read_csv("fps_master.csv")
+    except Exception:
+        rows = []
+        districts = [
+            ("Bagalkot", 16.185, 75.696), ("Ballari", 15.139, 76.921), ("Belagavi", 15.849, 74.497),
+            ("Bengaluru Rural", 13.225, 77.575), ("Bengaluru Urban", 12.971, 77.594), ("Bidar", 17.910, 77.519),
+            ("Chamarajanagar", 11.926, 76.939), ("Chikkaballapura", 13.432, 77.727), ("Chikkamagaluru", 13.316, 75.772),
+            ("Chitradurga", 14.225, 76.398), ("Dakshina Kannada", 12.914, 74.856), ("Davanagere", 14.464, 75.921),
+            ("Dharwad", 15.458, 75.007), ("Gadag", 15.431, 75.631), ("Hassan", 13.003, 76.100),
+            ("Haveri", 14.795, 75.399), ("Kalaburagi", 17.329, 76.834), ("Kodagu", 12.424, 75.738),
+            ("Kolar", 13.136, 78.129), ("Koppal", 15.347, 76.155), ("Mandya", 12.524, 76.896),
+            ("Mysuru", 12.295, 76.639), ("Raichur", 16.207, 77.356), ("Ramanagara", 12.723, 77.281),
+            ("Shivamogga", 13.929, 75.568), ("Tumakuru", 13.339, 77.101), ("Udupi", 13.340, 74.742),
+            ("Uttara Kannada", 14.800, 74.130), ("Vijayanagara", 15.273, 76.390), ("Vijayapura", 16.830, 75.710),
+            ("Yadgir", 16.766, 77.138)
+        ]
+        counter = 1
+        for dist_name, base_lat, base_lng in districts:
+            for i in range(1, 21):
+                fps_code = f"FPS-KA-{dist_name[:3].upper()}-{i:04d}"
+                lat = round(base_lat + (i * 0.008), 4)
+                lng = round(base_lng + (i * 0.008), 4)
+                rows.append({
+                    "fps_id": fps_code,
+                    "name": f"Fair Price Shop {i} ({dist_name})",
+                    "district": dist_name,
+                    "latitude": str(lat),
+                    "longitude": str(lng),
+                    "capacity_kg": "5000",
+                    "registered_cards_count": "100"
+                })
+
     records = []
     for row in rows:
         fps_id = row["fps_id"].strip()

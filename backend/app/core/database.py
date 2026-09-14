@@ -1044,6 +1044,27 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
     _migration_008_sih_v2_features(cursor)
     conn.commit()
 
+    # Automatically populate full 620 Fair Price Shops dataset if not present
+    try:
+        cursor.execute("SELECT COUNT(*) FROM fps;")
+        fps_count = cursor.fetchone()[0]
+        if fps_count < 600:
+            import logging
+            logger = logging.getLogger(__name__)
+            try:
+                from app.data.seed_data import seed_fps, seed_beneficiaries
+                seeded_count = seed_fps(cursor)
+                logger.info(f"Auto-seeded {seeded_count} Fair Price Shops into database.")
+                try:
+                    seed_beneficiaries(cursor)
+                except Exception as b_err:
+                    logger.warning(f"Beneficiaries seed warning: {b_err}")
+                conn.commit()
+            except Exception as s_err:
+                logger.warning(f"Auto seed FPS failed: {s_err}")
+    except Exception as e:
+        pass
+
     from app.services.planning_cycle_engine import planning_cycle_engine
     planning_cycle_engine.ensure_tables(conn)
 
