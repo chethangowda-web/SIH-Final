@@ -160,6 +160,7 @@ def citizen_send_otp(
 ):
     """
     Sends a 6-digit OTP via SMS to the mobile phone linked with the specified Ration Card / Citizen.
+    Strictly verifies existence against NFSA Master Dataset. Anti-fraud enforcement active.
     """
     from app.services.notification_engine import notification_engine
     from app.core.config import settings
@@ -167,16 +168,29 @@ def citizen_send_otp(
     cursor = db.cursor()
     card_clean = payload.card_id.strip()
     cursor.execute(
-        "SELECT pseudonymous_beneficiary_id, name_for_demo FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;",
+        "SELECT pseudonymous_beneficiary_id, name_for_demo, phone FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;",
         (card_clean,)
     )
     ben = cursor.fetchone()
     if not ben:
-        cursor.execute(
-            "INSERT INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status) VALUES (?, ?, 'FPS-KA-BAG-0001', 'kn', 'ACTIVE');",
-            (card_clean, f"Citizen ({card_clean})")
+        # Anti-fraud protection: Do not auto-create fake beneficiaries
+        logger.warning("Anti-fraud trigger: Card ID '%s' not found in NFSA dataset.", card_clean)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset. Anti-fraud verification active."
         )
-        db.commit()
+
+    # Cross-verify phone number if provided and present in record
+    db_phone = ben["phone"] if ("phone" in ben.keys() and ben["phone"]) else None
+    if payload.phone_number and db_phone:
+        input_phone_clean = payload.phone_number.replace("+", "").replace("-", "").replace(" ", "").strip()
+        db_phone_clean = db_phone.replace("+", "").replace("-", "").replace(" ", "").strip()
+        if input_phone_clean and db_phone_clean and not db_phone_clean.endswith(input_phone_clean[-10:]):
+            logger.warning("Anti-fraud trigger: Provided phone '%s' does not match NFSA record '%s' for '%s'", payload.phone_number, db_phone, card_clean)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="3-Factor Security Check Failed: Provided phone number does not match registered government PDS record for this Ration Card."
+            )
 
     # Generate real 6-digit OTP
     real_otp = f"{random.randint(100000, 999999):06d}"
@@ -203,7 +217,7 @@ def citizen_send_otp(
     db.commit()
 
     # Determine real recipient phone number
-    target_phone = payload.phone_number.strip() if payload.phone_number else (settings.TWILIO_PHONE_NUMBER or "+918050442666")
+    target_phone = payload.phone_number.strip() if payload.phone_number else (db_phone or settings.TWILIO_PHONE_NUMBER or "+918050442666")
     sms_body = f"PDS DemandSync Security OTP: {real_otp} is your verification code to access your citizen ration portal. Valid for 5 minutes. Do not share with anyone."
 
     # Dispatch live SMS via Twilio Notification Service
@@ -240,11 +254,10 @@ def citizen_verify_otp(
     )
     ben = cursor.fetchone()
     if not ben:
-        cursor.execute(
-            "INSERT INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status) VALUES (?, ?, 'FPS-KA-BAG-0001', 'kn', 'ACTIVE');",
-            (card_clean, f"Citizen ({card_clean})")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset."
         )
-        db.commit()
 
     # Validate OTP (Accept 123456 or last generated OTP)
     if payload.otp_code.strip() != "123456":
