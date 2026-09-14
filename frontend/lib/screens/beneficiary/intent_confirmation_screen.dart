@@ -192,6 +192,17 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
           _isSubmitting = false;
           _completedRecords = results;
         });
+
+        // Automatically open WhatsApp with the digital pass for the beneficiary
+        final reqId = (results.isNotEmpty && results.first.id > 0)
+            ? 'REQ-2026-09-${results.first.id.toString().padLeft(4, '0')}'
+            : 'REQ-2026-09-INGESTED';
+
+        Future.delayed(const Duration(milliseconds: 350), () {
+          if (mounted) {
+            _openWhatsAppReceipt(reqId);
+          }
+        });
       }
     } catch (e) {
       if (mounted) {

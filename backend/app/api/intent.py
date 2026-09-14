@@ -241,7 +241,7 @@ def submit_intent(
         from app.core.config import settings
         cursor.execute("SELECT phone, name_for_demo FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;", (payload.beneficiary_id.strip(),))
         b_info = cursor.fetchone()
-        user_phone = (b_info["phone"] if b_info and b_info["phone"] else None) or settings.TWILIO_PHONE_NUMBER or "+918050442666"
+        user_phone = (b_info["phone"] if b_info and b_info["phone"] else None) or getattr(settings, "TWILIO_DEFAULT_RECIPIENT", "+918050442666")
         user_name = b_info["name_for_demo"] if b_info and b_info["name_for_demo"] else payload.beneficiary_id.strip()
 
         mode_str = "Doorstep Home Delivery" if delivery_mode == "HOME_DELIVERY" else "Collect at Fair Price Shop"
@@ -730,7 +730,7 @@ def send_whatsapp_receipt(
     cursor.execute("SELECT phone, name_for_demo FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;", (payload.beneficiary_id.strip(),))
     b_info = cursor.fetchone()
 
-    target_phone = payload.phone_number or (b_info["phone"] if b_info and b_info["phone"] else None) or settings.TWILIO_PHONE_NUMBER or "+918050442666"
+    target_phone = payload.phone_number or (b_info["phone"] if b_info and b_info["phone"] else None) or getattr(settings, "TWILIO_DEFAULT_RECIPIENT", "+918050442666")
     user_name = b_info["name_for_demo"] if b_info and b_info["name_for_demo"] else payload.beneficiary_id.strip()
 
     mode_str = "Doorstep Home Delivery" if payload.delivery_mode.upper() == "HOME_DELIVERY" else "Collect at Fair Price Shop"

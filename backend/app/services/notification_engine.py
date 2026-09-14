@@ -63,7 +63,7 @@ class NotificationService:
         elif clean_phone.startswith("91") and len(clean_phone) == 12:
             target_phone = f"+{clean_phone}"
         else:
-            target_phone = self.twilio_phone_number or "+918050442666"
+            target_phone = getattr(settings, "TWILIO_DEFAULT_RECIPIENT", "+918050442666")
 
         if self.client:
             try:
@@ -112,7 +112,7 @@ class NotificationService:
             elif clean_phone.startswith("91") and len(clean_phone) == 12:
                 target_phone = f"+{clean_phone}"
             else:
-                target_phone = self.twilio_phone_number or "+918050442666"
+                target_phone = getattr(settings, "TWILIO_DEFAULT_RECIPIENT", "+918050442666")
 
             try:
                 tw_message = self.client.messages.create(
