@@ -2915,6 +2915,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Wrap(
                   spacing: 10,
                   runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     ElevatedButton.icon(
                       onPressed: meta.action1,
@@ -2935,6 +2936,47 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       ),
                     ),
+                    if (_selectedWorkflowStage > 0)
+                      OutlinedButton.icon(
+                        onPressed: () => setState(() => _selectedWorkflowStage--),
+                        icon: const Icon(Icons.arrow_back_rounded, size: 14, color: AppConstants.textSecondary),
+                        label: Text(
+                          'Stage 0$_selectedWorkflowStage',
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppConstants.textSecondary),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppConstants.cardBorder),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                    if (_selectedWorkflowStage < 6)
+                      ElevatedButton.icon(
+                        onPressed: () => setState(() => _selectedWorkflowStage++),
+                        icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                        label: Text(
+                          'Next Stage 0${_selectedWorkflowStage + 2} (${_phaseTitles[_selectedWorkflowStage + 1]}) →',
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: meta.accentColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        ),
+                      )
+                    else
+                      ElevatedButton.icon(
+                        onPressed: _isPipelineRunning ? null : () => _startPreDispatchPipeline(isRerun: true),
+                        icon: const Icon(Icons.replay_rounded, size: 14),
+                        label: const Text(
+                          'Re-run Full 7-Phase Analysis',
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppConstants.successGreen,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        ),
+                      ),
                   ],
                 ),
               ],
