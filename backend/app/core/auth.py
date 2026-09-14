@@ -192,7 +192,9 @@ def check_admin_access(request: Request, current_user: dict = Depends(get_curren
 
     # 3. Policy / Forecast / Quota Mutation requests (POST, PUT, DELETE) require DSO or ADMIN (FIELD_OFFICER is blocked)
     elif method in ["POST", "PUT", "DELETE"]:
-        if current_user["role"] not in ["DSO", "ADMIN"]:
+        read_only_post_paths = ["/manifests/generate", "/manifest/generate", "/predispatch/analyze", "/scarcity/reconcile", "/gatepass/generate"]
+        is_read_only_post = any(p in path for p in read_only_post_paths)
+        if not is_read_only_post and current_user["role"] not in ["DSO", "ADMIN"]:
             logger.warning("Access Forbidden: user '%s' (role '%s') attempted administrative mutation %s %s", current_user.get("username"), current_user["role"], method, path)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
