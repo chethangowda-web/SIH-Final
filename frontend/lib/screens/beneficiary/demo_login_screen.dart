@@ -4,6 +4,10 @@ import '../../core/localization.dart';
 import '../../services/api_service.dart';
 import 'beneficiary_home_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
+import '../admin/dso_dashboard_screen.dart';
+import '../admin/field_officer_dashboard_screen.dart';
+import '../admin/auditor_dashboard_screen.dart';
+import '../admin/system_admin_dashboard_screen.dart';
 import '../connectivity_screen.dart';
 
 class DemoLoginScreen extends StatefulWidget {
@@ -220,15 +224,20 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       final role = (authRes['role'] as String? ?? 'DSO').toUpperCase();
       final uName = authRes['username'] as String? ?? username;
 
+      Widget targetScreen;
+      if (role == 'FIELD_OFFICER') {
+        targetScreen = FieldOfficerDashboardScreen(apiService: _apiService, username: uName);
+      } else if (role == 'AUDITOR') {
+        targetScreen = AuditorDashboardScreen(apiService: _apiService, username: uName);
+      } else if (role == 'ADMIN') {
+        targetScreen = SystemAdminDashboardScreen(apiService: _apiService, username: uName);
+      } else {
+        targetScreen = DsoDashboardScreen(apiService: _apiService, username: uName);
+      }
+
       if (!mounted) return;
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => AdminDashboardScreen(
-            apiService: _apiService,
-            userRole: role,
-            username: uName,
-          ),
-        ),
+        MaterialPageRoute(builder: (context) => targetScreen),
       );
     } catch (e) {
       if (!mounted) return;
