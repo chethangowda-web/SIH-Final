@@ -2075,6 +2075,80 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
 
           // 2. PRIMARY 7-STAGE WORKFLOW STEPPER WITH LIVE TIMERS & INTERACTIVE STAGE SELECTOR
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF334155)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF34D399),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: Color(0xFF34D399), blurRadius: 6, spreadRadius: 1),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'PRE-DISPATCH 7-STAGE INTELLIGENCE PIPELINE',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFF60A5FA).withValues(alpha: 0.4)),
+                      ),
+                      child: Text(
+                        'STAGE 0${_selectedWorkflowStage + 1} OF 07 ACTIVE',
+                        style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: Color(0xFF93C5FD), letterSpacing: 0.3),
+                      ),
+                    ),
+                  ],
+                ),
+                Wrap(
+                  spacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Icon(Icons.touch_app_outlined, size: 13, color: Color(0xFF94A3B8)),
+                    Text(
+                      'Click any stage card to inspect live telemetry & solver variables',
+                      style: TextStyle(fontSize: 10.5, color: Colors.white.withValues(alpha: 0.7), fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -2485,80 +2559,124 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     IconData? icon,
     required VoidCallback onTap,
   }) {
-    Color bg;
+    Color cardBg;
     Color border;
+    Color accentStripe;
     Color iconBg;
     Color titleColor;
-    Color subColor;
+    Color badgeBg;
+    Color badgeTextColor;
+    String statusPill;
 
-    if (isSelected) {
-      bg = Colors.white;
-      border = AppConstants.accentBlue;
-      iconBg = AppConstants.accentBlue;
-      titleColor = AppConstants.primaryNavy;
-      subColor = AppConstants.accentBlue;
-    } else if (isActive) {
-      bg = const Color(0xFFEFF6FF);
-      border = const Color(0xFF3B82F6);
-      iconBg = AppConstants.accentBlue;
-      titleColor = AppConstants.primaryNavy;
-      subColor = AppConstants.accentBlue;
+    if (isActive) {
+      cardBg = const Color(0xFFF0F9FF);
+      border = const Color(0xFF0284C7);
+      accentStripe = const Color(0xFF0284C7);
+      iconBg = const Color(0xFF0284C7);
+      titleColor = const Color(0xFF0369A1);
+      badgeBg = const Color(0xFFE0F2FE);
+      badgeTextColor = const Color(0xFF0369A1);
+      statusPill = 'RUNNING';
     } else if (isWarning) {
-      bg = const Color(0xFFFEF3C7);
+      cardBg = const Color(0xFFFFFBEB);
       border = const Color(0xFFF59E0B);
-      iconBg = const Color(0xFFB45309);
+      accentStripe = const Color(0xFFF59E0B);
+      iconBg = const Color(0xFFD97706);
       titleColor = const Color(0xFFB45309);
-      subColor = const Color(0xFF92400E);
+      badgeBg = const Color(0xFFFEF3C7);
+      badgeTextColor = const Color(0xFF92400E);
+      statusPill = 'ALERT';
     } else if (isDone) {
-      bg = const Color(0xFFF0FDF4);
-      border = const Color(0xFFBBF7D0);
-      iconBg = const Color(0xFF15803D);
+      cardBg = isSelected ? const Color(0xFFF0FDF4) : Colors.white;
+      border = isSelected ? const Color(0xFF15803D) : const Color(0xFFBBF7D0);
+      accentStripe = const Color(0xFF16A34A);
+      iconBg = const Color(0xFF16A34A);
       titleColor = AppConstants.primaryNavy;
-      subColor = const Color(0xFF15803D);
+      badgeBg = const Color(0xFFDCFCE7);
+      badgeTextColor = const Color(0xFF15803D);
+      statusPill = 'SEALED';
+    } else if (isSelected) {
+      cardBg = Colors.white;
+      border = AppConstants.accentBlue;
+      accentStripe = AppConstants.accentBlue;
+      iconBg = AppConstants.primaryNavy;
+      titleColor = AppConstants.primaryNavy;
+      badgeBg = const Color(0xFFEFF6FF);
+      badgeTextColor = AppConstants.accentBlue;
+      statusPill = 'SELECTED';
     } else {
-      bg = AppConstants.backgroundLight;
-      border = AppConstants.cardBorder;
-      iconBg = AppConstants.textSecondary;
-      titleColor = AppConstants.textSecondary;
-      subColor = AppConstants.textSecondary;
+      cardBg = const Color(0xFFF8FAFC);
+      border = const Color(0xFFE2E8F0);
+      accentStripe = const Color(0xFFCBD5E1);
+      iconBg = const Color(0xFF94A3B8);
+      titleColor = const Color(0xFF64748B);
+      badgeBg = const Color(0xFFF1F5F9);
+      badgeTextColor = const Color(0xFF64748B);
+      statusPill = 'READY';
     }
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+        duration: const Duration(milliseconds: 220),
+        width: 148,
+        padding: const EdgeInsets.only(left: 10, right: 10, top: 0, bottom: 9),
         decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10),
+          color: cardBg,
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppConstants.accentBlue : border,
-            width: isSelected ? 2.0 : (isActive ? 1.5 : 1),
+            color: isSelected ? border : (isActive ? border : border),
+            width: isSelected ? 2.0 : (isActive ? 1.8 : 1.0),
           ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppConstants.accentBlue.withValues(alpha: 0.18),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
+          boxShadow: [
+            if (isSelected)
+              BoxShadow(
+                color: border.withValues(alpha: 0.24),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              )
+            else if (isActive)
+              BoxShadow(
+                color: const Color(0xFF0284C7).withValues(alpha: 0.22),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              )
+            else
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Top Accent Stripe
+            Container(
+              height: 3.5,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: accentStripe,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(10),
+                  topRight: Radius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 7),
+            // Header: Avatar + Status Pill
             Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  width: 20,
-                  height: 20,
+                  width: 22,
+                  height: 22,
                   decoration: BoxDecoration(
                     color: iconBg,
-                    borderRadius: BorderRadius.circular(5),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Center(
                     child: isActive
@@ -2568,60 +2686,56 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           )
                         : (isDone
-                            ? const Icon(Icons.check, size: 12, color: Colors.white)
+                            ? const Icon(Icons.check, size: 13, color: Colors.white)
                             : (isWarning
-                                ? const Icon(Icons.priority_high, size: 12, color: Colors.white)
+                                ? const Icon(Icons.priority_high, size: 13, color: Colors.white)
                                 : (icon != null
-                                    ? Icon(icon, size: 12, color: Colors.white)
-                                    : Text('$num', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white))))),
+                                    ? Icon(icon, size: 13, color: Colors.white)
+                                    : Text('$num', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: Colors.white))))),
                   ),
                 ),
-                const SizedBox(width: 7),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: isSelected ? FontWeight.w900 : FontWeight.w800,
-                    color: isSelected ? AppConstants.accentBlue : titleColor,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: badgeBg,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    statusPill,
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w900,
+                      color: badgeTextColor,
+                      letterSpacing: 0.4,
+                    ),
                   ),
                 ),
-                if (isActive) ...[
-                  const SizedBox(width: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: AppConstants.accentBlue.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'RUNNING',
-                      style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: AppConstants.accentBlue, letterSpacing: 0.5),
-                    ),
-                  ),
-                ] else if (isSelected) ...[
-                  const SizedBox(width: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: AppConstants.primaryNavy.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'SELECTED',
-                      style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
-                    ),
-                  ),
-                ],
               ],
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 6),
+            // Title
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected || isActive ? FontWeight.w900 : FontWeight.w800,
+                color: titleColor,
+                letterSpacing: -0.1,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            // Subtext
             Text(
               subtext,
               style: TextStyle(
                 fontSize: 9.5,
-                fontWeight: isDone || isActive || isWarning || isSelected ? FontWeight.w700 : FontWeight.normal,
-                color: isSelected ? AppConstants.primaryNavy : subColor,
+                fontWeight: isDone || isActive || isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? AppConstants.primaryNavy : const Color(0xFF64748B),
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -2631,11 +2745,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _buildStepConnector({bool isDone = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 3),
-      child: Icon(
-        Icons.chevron_right_rounded,
-        size: 16,
-        color: isDone ? const Color(0xFF15803D) : const Color(0xFFCBD5E1),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 2,
+            color: isDone ? const Color(0xFF16A34A) : const Color(0xFFCBD5E1),
+          ),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 15,
+            color: isDone ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
+          ),
+        ],
       ),
     );
   }
@@ -2807,29 +2931,71 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // MATHEMATICAL FORMULATION CHIP
+                // MATHEMATICAL FORMULATION TERMINAL WITH INTERACTIVE INSPECTOR
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                    color: const Color(0xFF030712),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF334155)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.functions_rounded, size: 14, color: Color(0xFF67E8F9)),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0284C7).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Icon(Icons.functions_rounded, size: 14, color: Color(0xFF38BDF8)),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           meta.mathSpec,
                           style: const TextStyle(
                             fontFamily: 'monospace',
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
                             color: Color(0xFF67E8F9),
-                            letterSpacing: 0.3,
+                            letterSpacing: 0.4,
                           ),
                           overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: () => _showFormulaBreakdownDialog(context, meta),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFF475569)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.tune_rounded, size: 12, color: Color(0xFFE2E8F0)),
+                              SizedBox(width: 5),
+                              Text(
+                                'Inspect Variables',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFE2E8F0),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -2985,33 +3151,53 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // PIPELINE NODE ARCHITECTURE FLOW
+                // PIPELINE NODE ARCHITECTURE FLOW (INTERACTIVE VISUAL GRAPH)
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: AppConstants.cardBorder),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Icon(Icons.account_tree_outlined, size: 14, color: AppConstants.primaryNavy),
-                          SizedBox(width: 6),
-                          Text(
-                            'PIPELINE DATA FLOW ARCHITECTURE',
-                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
+                          const Row(
+                            children: [
+                              Icon(Icons.account_tree_rounded, size: 15, color: AppConstants.primaryNavy),
+                              SizedBox(width: 6),
+                              Text(
+                                'PIPELINE DATA FLOW & INTERACTIVE KERNEL TOPOLOGY',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppConstants.primaryNavy, letterSpacing: 0.5),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle_rounded, size: 10, color: Color(0xFF059669)),
+                                SizedBox(width: 3),
+                                Text(
+                                  'CRYPTOGRAPHIC AUDIT SEALED',
+                                  style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w900, color: Color(0xFF059669), letterSpacing: 0.4),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      _buildFlowStepRow('1. Input Feeds', meta.inputNode, Icons.input_rounded, const Color(0xFF3B82F6)),
-                      const SizedBox(height: 6),
-                      _buildFlowStepRow('2. ML Engine', meta.engineNode, Icons.memory_rounded, const Color(0xFF8B5CF6)),
-                      const SizedBox(height: 6),
-                      _buildFlowStepRow('3. Certified Output', meta.outputNode, Icons.verified_rounded, const Color(0xFF10B981)),
+                      const SizedBox(height: 12),
+                      _buildPipelineDataFlowGraph(meta),
                     ],
                   ),
                 ),
@@ -3122,20 +3308,45 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildExecutionStepCard(int stepNum, String title, String detail, String tag, Color accent) {
+    // Status and latency metadata for stage steps
+    String statusLabel = 'EXECUTED';
+    Color statusColor = const Color(0xFF15803D);
+    Color statusBg = const Color(0xFFDCFCE7);
+    IconData statusIcon = Icons.check_circle_rounded;
+
+    if (_isPipelineRunning && stepNum == 3) {
+      statusLabel = 'SOLVING';
+      statusColor = const Color(0xFF0284C7);
+      statusBg = const Color(0xFFE0F2FE);
+      statusIcon = Icons.sync_rounded;
+    } else if (stepNum > 3 && !_isPipelineCompleted) {
+      statusLabel = 'READY';
+      statusColor = const Color(0xFF64748B);
+      statusBg = const Color(0xFFF1F5F9);
+      statusIcon = Icons.schedule_rounded;
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 5,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 22,
-            height: 22,
+            width: 24,
+            height: 24,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.15),
@@ -3145,7 +3356,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Text(
               '$stepNum',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 11.5,
                 fontWeight: FontWeight.w900,
                 color: accent,
               ),
@@ -3171,21 +3382,50 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: accent.withValues(alpha: 0.25)),
-                      ),
-                      child: Text(
-                        tag,
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: accent,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: statusBg,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(statusIcon, size: 10, color: statusColor),
+                              const SizedBox(width: 3),
+                              Text(
+                                statusLabel,
+                                style: TextStyle(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w900,
+                                  color: statusColor,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: accent.withValues(alpha: 0.25)),
+                          ),
+                          child: Text(
+                            tag,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: accent,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -3207,22 +3447,76 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildStageMetricTile(String value, String label, String subtext, Color accent) {
+    IconData iconData = Icons.insights_rounded;
+    final lower = label.toLowerCase();
+    if (lower.contains('corridor') || lower.contains('cluster') || lower.contains('route')) {
+      iconData = Icons.alt_route_rounded;
+    } else if (lower.contains('payload') || lower.contains('weight') || lower.contains('capacity') || lower.contains('quota')) {
+      iconData = Icons.scale_rounded;
+    } else if (lower.contains('truck') || lower.contains('fleet') || lower.contains('carrier')) {
+      iconData = Icons.local_shipping_rounded;
+    } else if (lower.contains('co2') || lower.contains('green') || lower.contains('fuel')) {
+      iconData = Icons.eco_rounded;
+    } else if (lower.contains('rule') || lower.contains('floor') || lower.contains('statutory')) {
+      iconData = Icons.gavel_rounded;
+    } else if (lower.contains('intent') || lower.contains('signal') || lower.contains('card')) {
+      iconData = Icons.cell_tower_rounded;
+    } else if (lower.contains('gini') || lower.contains('equity') || lower.contains('balance')) {
+      iconData = Icons.balance_rounded;
+    } else if (lower.contains('qr') || lower.contains('pass') || lower.contains('gate')) {
+      iconData = Icons.qr_code_2_rounded;
+    } else if (lower.contains('epos') || lower.contains('bio') || lower.contains('auth')) {
+      iconData = Icons.fingerprint_rounded;
+    } else if (lower.contains('mape') || lower.contains('error') || lower.contains('model')) {
+      iconData = Icons.auto_graph_rounded;
+    }
+
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppConstants.cardBorder),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: 26,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(iconData, size: 13, color: accent),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
           Text(
             value,
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 17,
               fontWeight: FontWeight.w900,
               color: accent,
+              letterSpacing: -0.2,
             ),
           ),
           const SizedBox(height: 2),
@@ -3236,14 +3530,142 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 1),
-          Text(
-            subtext,
-            style: const TextStyle(
-              fontSize: 9.5,
-              color: AppConstants.textSecondary,
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(4),
             ),
-            maxLines: 1,
+            child: Text(
+              subtext,
+              style: const TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+                color: AppConstants.textSecondary,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // INTERACTIVE VISUAL PIPELINE DATA FLOW GRAPH
+  Widget _buildPipelineDataFlowGraph(_WorkflowStageMeta meta) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isVertical = constraints.maxWidth < 640;
+        final node1 = _buildDataNodeCard(
+          stepIndex: '01',
+          nodeName: 'INPUT FEEDS',
+          desc: meta.inputNode,
+          icon: Icons.sensors_rounded,
+          accent: const Color(0xFF0284C7),
+        );
+        final node2 = _buildDataNodeCard(
+          stepIndex: '02',
+          nodeName: 'ALGORITHMIC ENGINE',
+          desc: meta.engineNode,
+          icon: Icons.memory_rounded,
+          accent: const Color(0xFF8B5CF6),
+        );
+        final node3 = _buildDataNodeCard(
+          stepIndex: '03',
+          nodeName: 'CERTIFIED ARTIFACT',
+          desc: meta.outputNode,
+          icon: Icons.verified_user_rounded,
+          accent: const Color(0xFF10B981),
+        );
+
+        if (isVertical) {
+          return Column(
+            children: [
+              node1,
+              _buildFlowConnectorVertical(),
+              node2,
+              _buildFlowConnectorVertical(),
+              node3,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: node1),
+            _buildFlowConnectorHorizontal(),
+            Expanded(child: node2),
+            _buildFlowConnectorHorizontal(),
+            Expanded(child: node3),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDataNodeCard({
+    required String stepIndex,
+    required String nodeName,
+    required String desc,
+    required IconData icon,
+    required Color accent,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Icon(icon, size: 13, color: accent),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '$stepIndex • $nodeName',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: accent,
+                    letterSpacing: 0.4,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            desc,
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: AppConstants.primaryNavy,
+              height: 1.3,
+            ),
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -3251,33 +3673,292 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _buildFlowStepRow(String stageLabel, String desc, IconData icon, Color color) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(4),
+  Widget _buildFlowConnectorHorizontal() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 2,
+            color: const Color(0xFFCBD5E1),
           ),
-          child: Icon(icon, size: 12, color: color),
+          const Icon(
+            Icons.arrow_forward_rounded,
+            size: 14,
+            color: AppConstants.accentBlue,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFlowConnectorVertical() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Icon(
+        Icons.arrow_downward_rounded,
+        size: 14,
+        color: AppConstants.accentBlue,
+      ),
+    );
+  }
+
+  // MATHEMATICAL SPECIFICATION & VARIABLES INSPECTION MODAL
+  void _showFormulaBreakdownDialog(BuildContext context, _WorkflowStageMeta meta) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: const Color(0xFF0F172A),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: meta.accentColor.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: meta.accentColor.withValues(alpha: 0.4)),
+              ),
+              child: Icon(Icons.functions_rounded, size: 20, color: meta.accentColor),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'STAGE 0${_selectedWorkflowStage + 1} MATHEMATICAL SPECIFICATION',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF94A3B8), letterSpacing: 0.5),
+                  ),
+                  Text(
+                    meta.title,
+                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.white),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 105,
-          child: Text(
-            stageLabel,
-            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: color),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Terminal Formula Box
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF030712),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF1E293B)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'OBJECTIVE FUNCTION & CONSTRAINTS (LATEX SPEC):',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF64748B), letterSpacing: 0.5),
+                      ),
+                      const SizedBox(height: 6),
+                      SelectableText(
+                        meta.mathSpec,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF38BDF8),
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _buildFormulaInfoSection('Algorithmic Engine', meta.engine, Icons.memory_rounded, meta.accentColor),
+                const SizedBox(height: 10),
+                _buildFormulaInfoSection('Operational Objective', meta.operationalObjective, Icons.flag_rounded, const Color(0xFF38BDF8)),
+                const SizedBox(height: 10),
+                _buildFormulaInfoSection('Legal & Statutory Guarantee', meta.governanceGuarantee, Icons.verified_user_rounded, const Color(0xFF34D399)),
+                const SizedBox(height: 14),
+                _buildFormulaVariablesTable(_selectedWorkflowStage),
+              ],
+            ),
           ),
         ),
-        Expanded(
-          child: Text(
-            desc,
-            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppConstants.textPrimary),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close Specification', style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormulaInfoSection(String title, String desc, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title.toUpperCase(),
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: color, letterSpacing: 0.4),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  desc,
+                  style: const TextStyle(fontSize: 11, color: Color(0xFFE2E8F0), height: 1.35),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormulaVariablesTable(int stage) {
+    List<Map<String, String>> vars;
+    switch (stage) {
+      case 0:
+        vars = [
+          {'sym': 'D̂_i', 'name': 'Calibrated Demand Vector', 'role': 'Predicted metric grain demand for shop i'},
+          {'sym': 'H_i', 'name': 'Seasonal Baseline', 'role': '6-cycle Holt-Winters baseline weighting (α = 0.35)'},
+          {'sym': 'I_i', 'name': 'Citizen Advance Intent', 'role': 'WhatsApp & SMS registered preferences (β = 0.65)'},
+          {'sym': 'Buffer', 'name': 'Statutory Reserve Headroom', 'role': '15% emergency starvation protection (γ)'},
+          {'sym': 'Leakage', 'name': 'Diversion Penalty', 'role': 'Historical ePoS discrepancy deduction (δ)'},
+        ];
+        break;
+      case 1:
+        vars = [
+          {'sym': 'S_min', 'name': 'Statutory Entitlement Floor', 'role': 'NFSA 2013 inviolable minimum allocation'},
+          {'sym': 'Cap_i', 'name': 'Storage Silo Capacity', 'role': 'Physical storage limit to prevent spoilage'},
+          {'sym': 'Margin', 'name': 'Safety Headroom', 'role': 'Guarantees shop inventory does not dip below 15%'},
+          {'sym': 'ExpireDays', 'name': 'Grain Batch Expiry Window', 'role': 'FIFO inspection rule (minimum 45 days headroom)'},
+        ];
+        break;
+      case 2:
+        vars = [
+          {'sym': 'C_ij', 'name': 'Transit Cost Matrix', 'role': 'Cost per quintal along logistics arc (depot j -> FPS i)'},
+          {'sym': 'X_ij', 'name': 'Tonnage Flow Allocation', 'role': 'Decision variable solved via Simplex LP'},
+          {'sym': 'MinNeed_i', 'name': 'Nutritional Floor', 'role': 'Household cereal requirement threshold'},
+          {'sym': 'Gini', 'name': 'Equity Index', 'role': 'Target Gini ≤ 0.040 across rural and urban wards'},
+        ];
+        break;
+      case 3:
+        vars = [
+          {'sym': 'Route_k', 'name': 'Vehicle Turn-by-Turn Sequence', 'role': 'Drop route solved via Google OR-Tools CVRPTW'},
+          {'sym': 'Payload_k', 'name': 'Truck Bed Loading', 'role': 'Rigid capacity upper bound (≤ 10 Metric Tons)'},
+          {'sym': 'Cluster_k', 'name': 'Logistics Corridor', 'role': 'Geofenced district partition (North, South, East, West)'},
+          {'sym': 'CO2', 'name': 'Diesel Emissions Reduction', 'role': 'Route distance minimization objective'},
+        ];
+        break;
+      case 4:
+        vars = [
+          {'sym': 'GatePass', 'name': '256-Bit Cryptographic Digest', 'role': 'HMAC-SHA256 signature for physical dispatch'},
+          {'sym': 'DriverUID', 'name': 'Biometric Aadhaar Token', 'role': 'Driver identity authentication at barrier gate'},
+          {'sym': 'TareWeight', 'name': 'Weighbridge Net Tonnage', 'role': 'Depot scale sensor reading verification'},
+          {'sym': '2D QR', 'name': 'Offline Machine-Readable Tag', 'role': 'Offline inspection payload at field checkpoints'},
+        ];
+        break;
+      case 5:
+        vars = [
+          {'sym': 'ePoS_Lift', 'name': 'NIC Weighing Terminal Event', 'role': 'Real-time biometric disbursal transaction'},
+          {'sym': 'BioAuth', 'name': 'UIDAI Biometric Match', 'role': '1:1 fingerprint/iris match (99.1% benchmark)'},
+          {'sym': 'Remaining', 'name': 'Statutory Card Balance', 'role': 'Instant entitlement balance decrement'},
+          {'sym': 'Tolerance', 'name': 'Audit Discrepancy Margin', 'role': 'Allowed physical scale variance (0.08%)'},
+        ];
+        break;
+      case 6:
+      default:
+        vars = [
+          {'sym': 'MAPE', 'name': 'Mean Absolute Percentage Error', 'role': 'Closed-loop variance benchmark (Achieved 4.8%)'},
+          {'sym': 'Actual_i', 'name': 'True ePoS Lift Volume', 'role': 'Ground-truth grain disbursed to citizens'},
+          {'sym': 'D̂_i', 'name': 'Pre-Dispatch Prediction', 'role': 'Day 25 locked forecast demand snapshot'},
+          {'sym': 'α, β, γ', 'name': 'Bayesian Model Weights', 'role': 'Self-calibrating priors updated for next month'},
+        ];
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF030712),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF1E293B)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'DECISION VARIABLES & PARAMETERS MATRIX:',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF94A3B8), letterSpacing: 0.5),
+          ),
+          const SizedBox(height: 8),
+          ...vars.map((v) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 75,
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFF334155)),
+                      ),
+                      child: Text(
+                        v['sym']!,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF38BDF8),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${v['name']!}: ',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
+                            ),
+                            TextSpan(
+                              text: v['role']!,
+                              style: const TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
     );
   }
 
