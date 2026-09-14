@@ -265,36 +265,42 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   // DESKTOP 16:9 EXACT REFERENCE COMPOSITION
   // ════════════════════════════════════════════════════════════════
   Widget _buildDesktopLayout(BoxConstraints constraints) {
-    // Exact 16:9 canvas container scaled to viewport
     return Center(
       child: AspectRatio(
         aspectRatio: 16 / 9,
-        child: Stack(
-          children: [
-            // 1. High-Fidelity Reference Background Artwork
-            Positioned.fill(
-              child: Image.asset(
-                'assets/images/pds_login_reference_hero.jpg',
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.high,
-              ),
-            ),
+        child: LayoutBuilder(
+          builder: (context, canvasConstraints) {
+            final canvasW = canvasConstraints.maxWidth;
+            final canvasH = canvasConstraints.maxHeight;
 
-            // 2. Interactive Language Selector at Top Right
-            Positioned(
-              top: constraints.maxHeight * 0.05,
-              right: constraints.maxWidth * 0.04,
-              child: _buildLanguageSelectorPill(),
-            ),
+            return Stack(
+              children: [
+                // 1. High-Fidelity Reference Background Artwork (Card removed from background)
+                Positioned.fill(
+                  child: Image.asset(
+                    'assets/images/pds_login_reference_hero.jpg',
+                    fit: BoxFit.cover,
+                    filterQuality: FilterQuality.high,
+                  ),
+                ),
 
-            // 3. Interactive Floating Login Card positioned precisely on the right
-            Positioned(
-              top: constraints.maxHeight * 0.165,
-              right: constraints.maxWidth * 0.038,
-              width: constraints.maxWidth * 0.315,
-              child: _buildLoginCard(isCompact: false),
-            ),
-          ],
+                // 2. Interactive Language Selector at Top Right
+                Positioned(
+                  top: canvasH * 0.05,
+                  right: canvasW * 0.04,
+                  child: _buildLanguageSelectorPill(),
+                ),
+
+                // 3. Exactly ONE interactive Floating Login Card positioned on the right
+                Positioned(
+                  top: canvasH * 0.08,
+                  right: canvasW * 0.04,
+                  width: (canvasW * 0.32).clamp(380.0, 440.0),
+                  child: _buildLoginCard(isCompact: false),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -455,36 +461,36 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           // 2. Card Body Content
           Padding(
             padding: EdgeInsets.symmetric(
-              horizontal: isCompact ? 16 : 18,
-              vertical: isCompact ? 14 : 16,
+              horizontal: isCompact ? 16 : 22,
+              vertical: isCompact ? 14 : 20,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Title & Subtitle
-                const Text(
+                Text(
                   'Welcome Back',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: isCompact ? 19 : 22,
                     fontWeight: FontWeight.w800,
                     color: _slate900,
                     letterSpacing: -0.4,
                   ),
                 ),
-                const SizedBox(height: 2),
-                const Text(
+                const SizedBox(height: 4),
+                Text(
                   'Login to access your department services',
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: isCompact ? 11.5 : 13,
                     color: _slate500,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: isCompact ? 12 : 16),
 
                 // Authentication Selector Tabs [ Citizen OTP ] [ Department Official ]
-                _buildAuthSelectorTabs(),
-                const SizedBox(height: 12),
+                _buildAuthSelectorTabs(isCompact),
+                SizedBox(height: isCompact ? 12 : 16),
 
                 // Form Fields (Dynamic based on Tab)
                 if (_selectedTabIndex == 1)
@@ -492,14 +498,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                 else
                   _buildCitizenOtpForm(isCompact),
 
-                const SizedBox(height: 12),
+                SizedBox(height: isCompact ? 12 : 16),
 
                 // Card Footer
-                const Text(
+                Text(
                   'Department of Food & Civil Supplies  •  Government of India',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 9.5,
+                    fontSize: isCompact ? 9.5 : 10.5,
                     color: _slate400,
                     fontWeight: FontWeight.w500,
                   ),
@@ -542,9 +548,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   // ════════════════════════════════════════════════════════════════
   // AUTH SELECTOR TABS [ Citizen OTP ] [ Department Official ]
   // ════════════════════════════════════════════════════════════════
-  Widget _buildAuthSelectorTabs() {
+  Widget _buildAuthSelectorTabs(bool isCompact) {
     return Container(
-      height: 38,
+      height: isCompact ? 38 : 42,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: _slate50,
@@ -568,14 +574,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   children: [
                     Icon(
                       Icons.person_outline_rounded,
-                      size: 15,
+                      size: isCompact ? 14 : 16,
                       color: _selectedTabIndex == 0 ? Colors.white : _slate600,
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 6),
                     Text(
                       'Citizen OTP',
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: isCompact ? 11.5 : 12.5,
                         fontWeight: FontWeight.w700,
                         color: _selectedTabIndex == 0 ? Colors.white : _slate600,
                       ),
@@ -601,14 +607,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   children: [
                     Icon(
                       Icons.account_balance_outlined,
-                      size: 14,
+                      size: isCompact ? 14 : 15,
                       color: _selectedTabIndex == 1 ? Colors.white : _slate600,
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 6),
                     Text(
                       'Department Official',
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: isCompact ? 11.5 : 12.5,
                         fontWeight: FontWeight.w700,
                         color: _selectedTabIndex == 1 ? Colors.white : _slate600,
                       ),
@@ -631,85 +637,85 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Label: Official Username
-        const Text(
+        Text(
           'Official Username',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _slate700),
+          style: TextStyle(fontSize: isCompact ? 11 : 12, fontWeight: FontWeight.w700, color: _slate700),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 5),
         // Input: Official Username with Person Icon
         TextField(
           controller: _adminUsernameController,
-          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _slate900),
+          style: TextStyle(fontSize: isCompact ? 12.5 : 13.5, fontWeight: FontWeight.w600, color: _slate900),
           decoration: InputDecoration(
             hintText: 'admin_user',
-            hintStyle: const TextStyle(color: _slate400, fontSize: 12),
-            prefixIcon: const Icon(Icons.person_outline_rounded, size: 16, color: _slate500),
+            hintStyle: const TextStyle(color: _slate400, fontSize: 13),
+            prefixIcon: const Icon(Icons.person_outline_rounded, size: 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isCompact ? 9 : 12),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _primaryBlue, width: 1.5)),
           ),
         ),
 
-        const SizedBox(height: 10),
+        SizedBox(height: isCompact ? 10 : 14),
 
         // Label: Password
-        const Text(
+        Text(
           'Password',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _slate700),
+          style: TextStyle(fontSize: isCompact ? 11 : 12, fontWeight: FontWeight.w700, color: _slate700),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 5),
         // Input: Password with Lock Icon and Eye Visibility Toggle
         TextField(
           controller: _adminPasswordController,
           obscureText: _isPasswordObscured,
-          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _slate900),
+          style: TextStyle(fontSize: isCompact ? 12.5 : 13.5, fontWeight: FontWeight.w600, color: _slate900),
           decoration: InputDecoration(
             hintText: '••••••••',
-            hintStyle: const TextStyle(color: _slate400, fontSize: 12),
-            prefixIcon: const Icon(Icons.lock_outline_rounded, size: 16, color: _slate500),
+            hintStyle: const TextStyle(color: _slate400, fontSize: 13),
+            prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18, color: _slate500),
             suffixIcon: IconButton(
               icon: Icon(
                 _isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                size: 16,
+                size: 18,
                 color: _slate500,
               ),
               onPressed: () => setState(() => _isPasswordObscured = !_isPasswordObscured),
             ),
             filled: true,
             fillColor: _slate50,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isCompact ? 9 : 12),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _primaryBlue, width: 1.5)),
           ),
         ),
 
-        const SizedBox(height: 10),
+        SizedBox(height: isCompact ? 10 : 14),
 
         // Security Information Box
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: isCompact ? 8 : 10),
           decoration: BoxDecoration(
             color: const Color(0xFFF0F7FF),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFBAE6FD), width: 0.8),
           ),
-          child: const Row(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.shield_outlined, size: 14, color: Color(0xFF0284C7)),
-              SizedBox(width: 8),
+              const Icon(Icons.shield_outlined, size: 16, color: Color(0xFF0284C7)),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Supports DSO, Super Admin, State Auditor, and Field Loading Officer credentials.',
                   style: TextStyle(
-                    fontSize: 9.8,
+                    fontSize: isCompact ? 9.8 : 10.8,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF0369A1),
-                    height: 1.3,
+                    color: const Color(0xFF0369A1),
+                    height: 1.35,
                   ),
                 ),
               ),
@@ -717,7 +723,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ),
         ),
 
-        const SizedBox(height: 12),
+        SizedBox(height: isCompact ? 12 : 16),
 
         // PRIMARY BUTTON: Sign In as Official
         ElevatedButton(
@@ -726,26 +732,26 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             backgroundColor: _govNavy,
             foregroundColor: Colors.white,
             elevation: 1,
-            minimumSize: const Size(double.infinity, 42),
+            minimumSize: Size(double.infinity, isCompact ? 42 : 46),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.symmetric(vertical: 11),
           ),
           child: _isAdminLoggingIn
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.arrow_forward_rounded, size: 15, color: Colors.white),
-                    SizedBox(width: 6),
+                    Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.white),
+                    SizedBox(width: 8),
                     Text(
                       'Sign In as Official',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white),
                     ),
                   ],
                 ),
         ),
 
-        const SizedBox(height: 8),
+        SizedBox(height: isCompact ? 8 : 10),
 
         // SECONDARY BUTTON: System Diagnostics & Health Check
         OutlinedButton(
@@ -753,18 +759,18 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           style: OutlinedButton.styleFrom(
             backgroundColor: Colors.white,
             side: const BorderSide(color: _slate200),
-            minimumSize: const Size(double.infinity, 38),
+            minimumSize: Size(double.infinity, isCompact ? 38 : 42),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 9),
           ),
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.monitor_heart_outlined, size: 14, color: _slate600),
-              SizedBox(width: 6),
+              Icon(Icons.monitor_heart_outlined, size: 15, color: _slate600),
+              SizedBox(width: 8),
               Text(
                 'System Diagnostics & Health Check',
-                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: _slate700),
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _slate700),
               ),
             ],
           ),
