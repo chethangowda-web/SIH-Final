@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../models/admin_model.dart';
@@ -3499,28 +3500,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Matrix Data Table
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowHeight: 38,
-              dataRowMinHeight: 48,
-              dataRowMaxHeight: 52,
-              horizontalMargin: 12,
-              columnSpacing: 16,
-              headingRowColor: WidgetStateProperty.all(AppConstants.backgroundLight),
-              columns: const [
-                DataColumn(label: Text('FPS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
-                DataColumn(label: Text('Historical Demand', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
-                DataColumn(label: Text('Intent', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
-                DataColumn(label: Text('Forecast', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
-                DataColumn(label: Text('Inventory', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
-                DataColumn(label: Text('Recommended Dispatch', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
-                DataColumn(label: Text('Risk', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
-                DataColumn(label: Text('Confidence', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
-                DataColumn(label: Text('Status', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
-                DataColumn(label: Text('Actions', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
-              ],
+          // Matrix Data Table (Stretched across full width with ZERO blank white space)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final calcSpacing = max(16.0, (constraints.maxWidth - 820) / 10);
+
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: DataTable(
+                    headingRowHeight: 40,
+                    dataRowMinHeight: 50,
+                    dataRowMaxHeight: 54,
+                    horizontalMargin: 16,
+                    columnSpacing: calcSpacing,
+                    headingRowColor: WidgetStateProperty.all(AppConstants.backgroundLight),
+                    columns: const [
+                      DataColumn(label: Text('FPS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
+                      DataColumn(label: Text('Historical Demand', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
+                      DataColumn(label: Text('Intent', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
+                      DataColumn(label: Text('Forecast', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
+                      DataColumn(label: Text('Inventory', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
+                      DataColumn(label: Text('Recommended Dispatch', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
+                      DataColumn(label: Text('Risk', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
+                      DataColumn(label: Text('Confidence', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
+                      DataColumn(label: Text('Status', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
+                      DataColumn(label: Text('Actions', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy))),
+                    ],
               rows: filteredList.map((fps) {
                 final isSelected = _selectedDrawerFps?.fpsId == fps.fpsId;
                 return DataRow(
@@ -3607,6 +3614,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               }).toList(),
             ),
           ),
+        );
+      },
+    ),
         ],
       ),
     );
