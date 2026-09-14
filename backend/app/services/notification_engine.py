@@ -464,4 +464,5 @@ class NotificationEngine:
 
 
 notification_engine = NotificationEngine()
+notification_service = NotificationService()
 
