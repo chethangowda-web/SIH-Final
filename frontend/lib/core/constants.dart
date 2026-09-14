@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class AppConstants {
   // App Branding
@@ -23,7 +23,12 @@ class AppConstants {
     if (kIsWeb) {
       final origin = Uri.base.origin;
       if (origin.contains('localhost') || origin.contains('127.0.0.1')) {
-        return '$origin/api';
+        // If loaded via FastAPI static app (port 8000), use origin
+        if (Uri.base.port == 8000) {
+          return '$origin/api';
+        }
+        // If loaded via standalone Chrome dev server (port 50000+), connect to FastAPI backend on port 8000
+        return 'http://127.0.0.1:8000/api';
       }
       return '$origin/api';
     }
@@ -32,8 +37,8 @@ class AppConstants {
   }
   static String get healthEndpoint => '$apiBaseUrl/health';
 
-  // Centralized Request Timeout for Cloud API Requests (prevents premature TimeoutException)
-  static const Duration apiTimeout = Duration(seconds: 45);
+  // Fast, responsive Request Timeout (12s prevents UI freezing)
+  static const Duration apiTimeout = Duration(seconds: 12);
 
 
   // Modern Government Digital Infrastructure Color Palette
