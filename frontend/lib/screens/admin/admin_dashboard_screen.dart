@@ -3660,6 +3660,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  String _getLowInventoryAlertText() {
+    final list = _dashboardData?.fpsList;
+    if (list != null && list.isNotEmpty) {
+      final sortedByUtil = List<AdminFpsRow>.from(list)..sort((a, b) => a.inventoryUtilizationPct.compareTo(b.inventoryUtilizationPct));
+      final lowest = sortedByUtil.first;
+      final name = lowest.name.replaceAll(RegExp(r'\s*\(Demo\)\s*'), '');
+      final pct = lowest.inventoryUtilizationPct.toStringAsFixed(0);
+      return '$name below $pct% buffer';
+    }
+    return 'Bellandur Outer Ring Road below 25% buffer';
+  }
+
+  String _getPortabilitySurgeAlertText() {
+    final topShifts = _dashboardData?.topIntentShiftFps;
+    if (topShifts != null && topShifts.isNotEmpty) {
+      final top = topShifts.first;
+      final name = (top['name'] as String? ?? top['fps_id'] as String? ?? 'Portability Hub').replaceAll(RegExp(r'\s*\(Demo\)\s*'), '');
+      final shiftKg = (top['intent_shift_kg'] as num?)?.toDouble() ?? (top['shift_kg'] as num?)?.toDouble() ?? 0.0;
+      return 'ONORC portability influx +${shiftKg.toStringAsFixed(0)} kg detected at $name';
+    }
+    return 'ONORC portability influx +180 kg detected';
+  }
+
   // SECTION 3: OPERATIONAL HEALTH & LIVE ATTENTION ITEMS (Pre-Dispatch Incident Alerts + 2x2 Grid)
   Widget _buildOperationalHealthAndAlerts() {
     return Column(
@@ -3681,21 +3704,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   _buildAlertItem(
                     badge: 'HIGH RISK FPS',
                     color: AppConstants.dangerRed,
-                    desc: '2 shops exceed 75% stockout threshold',
+                    desc: '${_dashboardData?.highRiskFpsCount ?? 2} shops exceed 75% stockout threshold',
                     onTap: () => setState(() => _selectedFilter = 'HIGH_RISK'),
                   ),
                   const SizedBox(width: 8),
                   _buildAlertItem(
                     badge: 'LOW INVENTORY',
                     color: const Color(0xFFB45309),
-                    desc: 'Bellandur Outer Ring Road below 25% buffer',
+                    desc: _getLowInventoryAlertText(),
                     onTap: () => setState(() => _selectedFilter = 'LOW_INVENTORY'),
                   ),
                   const SizedBox(width: 8),
                   _buildAlertItem(
                     badge: 'MIGRANT SURGE',
                     color: AppConstants.accentBlue,
-                    desc: 'ONORC portability influx +180 kg detected',
+                    desc: _getPortabilitySurgeAlertText(),
                     onTap: () => setState(() => _selectedFilter = 'PORTABILITY'),
                   ),
                 ],
@@ -3728,7 +3751,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 SizedBox(width: 6),
                                 Text(
                                   'OPERATIONAL ATTENTION ITEMS',
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppConstants.textPrimary,
+                                    letterSpacing: 0.5,
+                                  ),
                                 ),
                               ],
                             ),
@@ -3741,18 +3769,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     )
                   : Row(
                       children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 18),
-                            SizedBox(width: 8),
-                            Text(
-                              'OPERATIONAL ATTENTION ITEMS',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
-                            ),
-                          ],
+                        const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 16),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'OPERATIONAL ATTENTION ITEMS',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppConstants.textPrimary,
+                            letterSpacing: 0.5,
+                          ),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 12),
                         Expanded(child: alertItems),
+                        const SizedBox(width: 8),
                         viewAllBtn,
                       ],
                     ),
@@ -3766,31 +3796,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           builder: (context, constraints) {
             final isWide = constraints.maxWidth > 780;
 
+            final surgePct = _dashboardData != null && _dashboardData!.totalHistoricalDemandKg > 0
+                ? (((_dashboardData!.totalForecastDemandKg - _dashboardData!.totalHistoricalDemandKg) / _dashboardData!.totalHistoricalDemandKg) * 100).toStringAsFixed(1)
+                : '12.8';
+
             final cardA = _buildVisualCard(
               title: 'District Demand Trend',
               subtitle: 'Historical baseline vs Intent vs Forecast across cycles',
-              insight: 'Key insight: Forecast demand incorporates +12.8% surge from migration corridors.',
+              insight: 'Key insight: Forecast demand incorporates +$surgePct% surge from migration corridors.',
               child: _buildDemandTrendChart(),
             );
+
+            final topHubsStr = _dashboardData != null && _dashboardData!.topIntentShiftFps.isNotEmpty
+                ? (_dashboardData!.topIntentShiftFps.take(2).map((e) => (e['name'] as String? ?? e['fps_id'] as String? ?? '').replaceAll(RegExp(r'\s*\(Demo\)\s*'), '')).where((s) => s.isNotEmpty).join(' & '))
+                : 'Bellandur & Peenya';
 
             final cardB = _buildVisualCard(
               title: 'Intent Shift / Portability',
               subtitle: 'Geographic demand migration across urban FPS clusters',
-              insight: 'Key insight: Intent demand is shifting toward portability hubs in Bellandur & Peenya.',
+              insight: 'Key insight: Intent demand is shifting toward portability hubs in $topHubsStr.',
               child: _buildPortabilityShiftChart(),
             );
 
+            final highCount = _dashboardData?.highRiskFpsCount ?? 3;
             final cardC = _buildVisualCard(
               title: 'Inventory vs Forecast',
               subtitle: 'Current buffer headroom vs projected monthly consumption',
-              insight: 'Key insight: 3 shops require immediate buffer replenishment before cycle opening.',
+              insight: 'Key insight: $highCount shops require immediate buffer replenishment before cycle opening.',
               child: _buildInventoryVsForecastChart(),
             );
 
+            final totalFps = _dashboardData?.totalFps ?? 620;
             final cardD = _buildVisualCard(
               title: 'FPS Risk Distribution',
               subtitle: 'AI stockout probability classification for district shops',
-              insight: 'Key insight: Stockout risk concentrated in high-migration industrial zones.',
+              insight: 'Key insight: Stockout risk classified across $totalFps district shops.',
               child: _buildRiskDistributionChart(),
             );
 
@@ -4235,6 +4275,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildDemandTrendChart() {
+    final trendList = _dashboardData?.historicalCyclesTrend ?? [];
+
+    if (trendList.isEmpty) {
+      return Container(
+        height: 110,
+        alignment: Alignment.center,
+        child: const Text('Loading cycle trend data...', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
+      );
+    }
+
+    final maxVal = trendList.fold<double>(0.0, (max, item) => item.totalKg > max ? item.totalKg : max);
+
     return Container(
       height: 110,
       padding: const EdgeInsets.all(8),
@@ -4245,12 +4297,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          _buildTrendBar('Cycle 4', 0.65, '55.2 MT', AppConstants.textSecondary),
-          _buildTrendBar('Cycle 5', 0.72, '58.4 MT', AppConstants.textSecondary),
-          _buildTrendBar('Cycle 6', 0.78, '60.1 MT', AppConstants.accentBlue),
-          _buildTrendBar('Cycle 7 (D̂)', 0.88, '62.7 MT', AppConstants.primaryNavy, isCurrent: true),
-        ],
+        children: trendList.map((item) {
+          final isCurrent = item.cycleId == (_dashboardData?.activeCycle ?? '2026-09');
+          final heightFraction = maxVal > 0 ? (item.totalKg / maxVal).clamp(0.25, 1.0) : 0.5;
+          final valMt = (item.totalKg / 1000.0).toStringAsFixed(1);
+          final label = isCurrent ? 'Cycle ${item.cycleId} (D̂)' : 'Cycle ${item.cycleId}';
+          final color = isCurrent
+              ? AppConstants.primaryNavy
+              : (trendList.indexOf(item) == trendList.length - 2 ? AppConstants.accentBlue : AppConstants.textSecondary);
+
+          return _buildTrendBar(label, heightFraction, '$valMt MT', color, isCurrent: isCurrent);
+        }).toList(),
       ),
     );
   }
@@ -4276,6 +4333,49 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildPortabilityShiftChart() {
+    final topShift = _dashboardData?.topIntentShiftFps ?? [];
+    List<Widget> shiftRows = [];
+
+    if (topShift.isNotEmpty) {
+      final maxAbsShift = topShift.fold<double>(1.0, (max, item) {
+        final shift = (item['shift_kg'] as num?)?.toDouble() ?? 0.0;
+        return shift.abs() > max ? shift.abs() : max;
+      });
+
+      shiftRows = topShift.take(3).map((item) {
+        final name = (item['name'] as String? ?? 'FPS').replaceAll(RegExp(r'\s*\(Demo\)\s*'), '');
+        final shift = (item['shift_kg'] as num?)?.toDouble() ?? 0.0;
+        final isPositive = shift >= 0;
+        final stat = '${isPositive ? "+" : ""}${shift.toStringAsFixed(0)} kg ${isPositive ? "Inflow" : "Shift Out"}';
+        final fill = (shift.abs() / maxAbsShift).clamp(0.15, 1.0);
+        final color = isPositive ? const Color(0xFF15803D) : AppConstants.accentAmber;
+
+        return _buildShiftRow(name, stat, fill, color);
+      }).toList();
+    } else {
+      final fpsList = _dashboardData?.fpsList ?? [];
+      final sortedByShift = List<AdminFpsRow>.from(fpsList)..sort((a, b) => b.intentShiftKg.abs().compareTo(a.intentShiftKg.abs()));
+
+      shiftRows = sortedByShift.take(3).map((fps) {
+        final name = fps.name.replaceAll(RegExp(r'\s*\(Demo\)\s*'), '');
+        final shift = fps.intentShiftKg;
+        final isPositive = shift >= 0;
+        final stat = '${isPositive ? "+" : ""}${shift.toStringAsFixed(0)} kg ${isPositive ? "Inflow" : "Shift Out"}';
+        final fill = (shift.abs() / 500.0).clamp(0.15, 1.0);
+        final color = isPositive ? const Color(0xFF15803D) : AppConstants.accentAmber;
+
+        return _buildShiftRow(name, stat, fill, color);
+      }).toList();
+    }
+
+    if (shiftRows.isEmpty) {
+      return Container(
+        height: 110,
+        alignment: Alignment.center,
+        child: const Text('Loading portability shifts...', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
+      );
+    }
+
     return Container(
       height: 110,
       padding: const EdgeInsets.all(10),
@@ -4285,11 +4385,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildShiftRow('Bellandur Hub', '+180 kg Inflow', 0.85, const Color(0xFF15803D)),
-          _buildShiftRow('Peenya Hub', '+140 kg Inflow', 0.65, const Color(0xFF15803D)),
-          _buildShiftRow('Malleshwaram Resident', '-80 kg Shift Out', 0.40, AppConstants.accentAmber),
-        ],
+        children: shiftRows,
       ),
     );
   }
@@ -4297,7 +4393,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget _buildShiftRow(String label, String stat, double fill, Color color) {
     return Row(
       children: [
-        SizedBox(width: 110, child: Text(label, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600))),
+        SizedBox(width: 120, child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600))),
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(4),
@@ -4305,12 +4401,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        Text(stat, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+        Text(stat, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: color)),
       ],
     );
   }
 
   Widget _buildInventoryVsForecastChart() {
+    final fpsList = _dashboardData?.fpsList ?? [];
+
+    if (fpsList.isEmpty) {
+      return Container(
+        height: 110,
+        alignment: Alignment.center,
+        child: const Text('Loading inventory forecast ratio...', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
+      );
+    }
+
+    final sortedByUtil = List<AdminFpsRow>.from(fpsList)..sort((a, b) => a.inventoryUtilizationPct.compareTo(b.inventoryUtilizationPct));
+    final sampleShops = sortedByUtil.take(3).toList();
+
     return Container(
       height: 110,
       padding: const EdgeInsets.all(10),
@@ -4320,11 +4429,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildInvForecastRow('Malleshwaram', 'Inventory: 4.0 MT', 'Forecast: 5.2 MT', 0.77),
-          _buildInvForecastRow('Bellandur ORR', 'Inventory: 8.0 MT', 'Forecast: 7.9 MT', 1.0),
-          _buildInvForecastRow('Peenya Ind.', 'Inventory: 7.0 MT', 'Forecast: 9.4 MT', 0.74),
-        ],
+        children: sampleShops.map((fps) {
+          final name = fps.name.replaceAll(RegExp(r'\s*\(Demo\)\s*'), '');
+          final invMt = (fps.inventoryKg / 1000.0).toStringAsFixed(1);
+          final fcastMt = (fps.forecastKg / 1000.0).toStringAsFixed(1);
+          final ratio = fps.inventoryKg / (fps.forecastKg > 0 ? fps.forecastKg : 1.0);
+
+          return _buildInvForecastRow(name, 'Inventory: $invMt MT', 'Forecast: $fcastMt MT', ratio);
+        }).toList(),
       ),
     );
   }
@@ -4333,7 +4445,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final isLow = ratio < 0.8;
     return Row(
       children: [
-        SizedBox(width: 90, child: Text(label, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600))),
+        SizedBox(width: 110, child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600))),
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(4),
