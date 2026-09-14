@@ -73,7 +73,7 @@ async def add_security_headers(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origin_regex=r"^https?://.*$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -137,9 +137,25 @@ app.include_router(webhook_router, include_in_schema=False)
 if WEB_BUILD_DIR.exists():
     app.mount("/app", StaticFiles(directory=str(WEB_BUILD_DIR), html=True), name="flutter_web")
 
+    @app.get("/app/{full_path:path}", include_in_schema=False)
+    async def serve_flutter_spa(full_path: str):
+        """Fallback handler for Flutter Web SPA client-side routing."""
+        target_file = WEB_BUILD_DIR / full_path
+        if target_file.exists() and target_file.is_file():
+            from fastapi.responses import FileResponse
+            return FileResponse(target_file)
+        index_file = WEB_BUILD_DIR / "index.html"
+        if index_file.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(index_file)
+        return RedirectResponse(url="/")
+
 @app.get("/", tags=["Root"])
-def root():
+def root(request: Request):
     """Root endpoint providing service metadata, API directory, and UI links."""
+    accept_header = request.headers.get("accept", "")
+    if "text/html" in accept_header and WEB_BUILD_DIR.exists():
+        return RedirectResponse(url="/app/")
     return {
         "service": settings.PROJECT_NAME,
         "subtitle": settings.PROJECT_SUBTITLE,

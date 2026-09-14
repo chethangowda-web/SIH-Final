@@ -31,8 +31,10 @@ COPY backend/ ./backend/
 # Copy the built Flutter web files from the frontend-builder stage
 COPY --from=frontend-builder /app/frontend/build/web ./frontend/build/web
 
-# Set the working directory to backend so server.py/uvicorn runs correctly
+# Set working directory to backend
 WORKDIR /app/backend
 
-# Let Railway inject its own PORT at runtime
-CMD python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+EXPOSE 8000
+
+# Launch Uvicorn server using shell execution format for dynamic PORT evaluation
+CMD sh -c "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
