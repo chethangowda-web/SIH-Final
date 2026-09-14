@@ -481,47 +481,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     );
   }
 
-  Widget _buildBeneficiaryChip(String cardId, String name, String aadhaar, String phone) {
-    final isSelected = _citizenCardController.text.trim() == cardId;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _citizenCardController.text = cardId;
-          _citizenAadhaarController.text = aadhaar;
-          _citizenPhoneController.text = phone;
-        });
-      },
-      borderRadius: BorderRadius.circular(20),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? _govGreenBg : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? _govGreen : _slate200, width: isSelected ? 1.5 : 1.0),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isSelected ? Icons.check_circle_rounded : Icons.person_pin_rounded,
-              size: 13,
-              color: isSelected ? _govGreen : _slate500,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              '$cardId ($name)',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                color: isSelected ? _govGreen : _slate700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
 
   // ================================================================
@@ -579,29 +538,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ),
         ),
         const SizedBox(height: 12),
-
-        // Pre-Verified Dataset Selector
-        Text(
-          'Select Official NFSA Beneficiary Record (Master Dataset):',
-          style: TextStyle(fontSize: isSmall ? 10.5 : 11, fontWeight: FontWeight.w700, color: _slate700),
-        ),
-        const SizedBox(height: 6),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: Row(
-            children: [
-              _buildBeneficiaryChip('BEN-KA-0001', 'Deepa Reddy (PHH)', '548912345678', '+918050442666'),
-              const SizedBox(width: 6),
-              _buildBeneficiaryChip('BEN-KA-0002', 'Ramesh Kumar (PHH)', '987654321098', '+919876543210'),
-              const SizedBox(width: 6),
-              _buildBeneficiaryChip('RC-KA-000001', 'Deepa Reddy (RC)', '548912345678', '+918050442666'),
-              const SizedBox(width: 6),
-              _buildBeneficiaryChip('BEN-KA-0003', 'Savitri Devi (AAY)', '432187650987', '+919123456789'),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
 
         // Field 1: Ration Card Number
         Text(tr('login.ration_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
