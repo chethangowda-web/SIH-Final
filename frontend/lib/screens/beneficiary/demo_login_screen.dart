@@ -766,8 +766,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Supports DSO, Super Admin, State Auditor, and Field Loading Officer credentials.',
-                  style: TextStyle(fontSize: isSmall ? 10 : 11, color: _slate700, fontWeight: FontWeight.w500),
+                  'Official Credentials: admin_user (pass: admin1234 / admin_pass) • field_officer_user (pass: field_pass) • dso_user (pass: dso_pass) • auditor_user (pass: auditor_pass)',
+                  style: TextStyle(fontSize: isSmall ? 10 : 11, color: _slate700, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
