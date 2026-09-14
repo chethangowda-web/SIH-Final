@@ -1310,16 +1310,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: bannerBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor, width: 1.2),
+        gradient: LinearGradient(
+          colors: [bannerBg, bannerBg.withValues(alpha: 0.85)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: titleColor.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: titleColor.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -1329,55 +1333,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: titleColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: titleColor.withValues(alpha: 0.2)),
                 ),
-                child: Icon(icon, color: titleColor, size: 22),
+                child: Icon(icon, color: titleColor, size: 26),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 10,
+                      runSpacing: 4,
                       children: [
-                        Flexible(
-                          child: Text(
-                            roleName,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: titleColor,
-                            ),
+                        Text(
+                          roleName,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: titleColor,
+                            letterSpacing: -0.3,
                           ),
                         ),
-                        const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: titleColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
+                            color: titleColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: titleColor.withValues(alpha: 0.25)),
                           ),
                           child: Text(
                             'User: $username',
                             style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
                               color: titleColor,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       badgeText,
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: titleColor.withValues(alpha: 0.85),
+                        color: titleColor.withValues(alpha: 0.9),
                       ),
                     ),
                   ],
@@ -1385,36 +1392,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           Text(
             description,
-            style: TextStyle(
-              fontSize: 12.5,
-              height: 1.4,
-              color: Colors.black.withValues(alpha: 0.75),
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF1E293B),
             ),
           ),
           if (actions.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 12,
+              runSpacing: 10,
               children: actions.map((act) {
                 final color = act['color'] as Color;
                 return ElevatedButton.icon(
                   onPressed: act['onTap'] as VoidCallback?,
-                  icon: Icon(act['icon'] as IconData, size: 15, color: Colors.white),
+                  icon: Icon(act['icon'] as IconData, size: 17, color: Colors.white),
                   label: Text(
                     act['label'] as String,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 0.2,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: color,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    elevation: 1,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: 2,
+                    shadowColor: color.withValues(alpha: 0.4),
                   ),
                 );
               }).toList(),
