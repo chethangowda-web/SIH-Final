@@ -276,6 +276,7 @@ class GatepassEngine:
         Advance gatepass lifecycle through the 4 physical-dispatch bridge stages:
         GATEPASS_ISSUED -> WAREHOUSE_APPROVED -> VEHICLE_LOADED -> DISPATCH_CONFIRMED.
         """
+        target_status = (target_status or "").strip().upper()
         if target_status not in GATEPASS_STAGES:
             raise ValueError(f"Invalid gatepass stage '{target_status}'. Must be one of {GATEPASS_STAGES}")
 

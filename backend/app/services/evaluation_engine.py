@@ -9,7 +9,19 @@ Implements SIH 2026 Phase 6 Closed-Loop Supply Chain Intelligence:
 import sqlite3
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
-from sklearn.linear_model import Ridge
+try:
+    from sklearn.linear_model import Ridge
+except ImportError:
+    class Ridge:
+        def __init__(self, alpha=1.0, fit_intercept=False):
+            self.alpha = alpha
+            self.fit_intercept = fit_intercept
+            self.coef_ = np.array([0.65])
+        def fit(self, X, y):
+            denom = float(np.sum(X * X) + self.alpha)
+            numer = float(np.sum(X.flatten() * y))
+            self.coef_ = np.array([numer / denom if denom > 0 else 0.65])
+            return self
 from app.core.config import settings
 
 DEMO_NOTICE = "DEMO DATA — NOT GOVERNMENT DATA (SIMULATION & EVALUATION)"

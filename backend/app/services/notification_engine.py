@@ -17,6 +17,7 @@ import random
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
+from app.services.sms_provider import send_beneficiary_sms, mask_phone
 
 DEMO_NOTICE = "DEMO DATA — NOT GOVERNMENT DATA (SIMULATED PRE-DISPATCH ALERTS)"
 
@@ -91,21 +92,28 @@ class NotificationService:
         }
 
     def send_sms(self, recipient_phone: str, recipient_name: str, message: str, ref_id: str = "") -> Dict[str, Any]:
-        """Send SMS message using Twilio API (Fallback to simulation if credentials absent)."""
-        message_id = f"SMS-GW-{random.randint(100000, 999999)}"
-        status = "DELIVERED"
-        
-        clean_phone = recipient_phone.replace(" ", "").replace("-", "").strip()
-        if len(clean_phone) == 10 and clean_phone.isdigit():
-            target_phone = f"+91{clean_phone}"
-        elif clean_phone.startswith("+91") and len(clean_phone) == 13:
-            target_phone = clean_phone
-        elif clean_phone.startswith("91") and len(clean_phone) == 12:
-            target_phone = f"+{clean_phone}"
-        else:
-            target_phone = self.twilio_phone_number or "+918050442666"
+        """Send SMS via configured provider (Fast2SMS / MSG91 / Twilio / Demo mock)."""
+        if getattr(settings, "SMS_ENABLED", False) and getattr(settings, "SMS_PROVIDER_API_KEY", None):
+            return send_beneficiary_sms(
+                recipient_phone=recipient_phone,
+                recipient_name=recipient_name,
+                message=message,
+                ref_id=ref_id
+            )
 
         if self.client:
+            message_id = f"SMS-GW-{random.randint(100000, 999999)}"
+            status = "DELIVERED"
+            clean_phone = recipient_phone.replace(" ", "").replace("-", "").strip()
+            if len(clean_phone) == 10 and clean_phone.isdigit():
+                target_phone = f"+91{clean_phone}"
+            elif clean_phone.startswith("+91") and len(clean_phone) == 13:
+                target_phone = clean_phone
+            elif clean_phone.startswith("91") and len(clean_phone) == 12:
+                target_phone = f"+{clean_phone}"
+            else:
+                target_phone = self.twilio_phone_number or "+918050442666"
+
             try:
                 tw_message = self.client.messages.create(
                     body=message,
@@ -117,19 +125,23 @@ class NotificationService:
             except TwilioRestException as e:
                 logger.error(f"Twilio SMS Error: {e}")
                 status = "FAILED"
-        else:
-            logger.info(f"[SIMULATED TWILIO SMS] To {recipient_phone}: {message}")
 
+            return {
+                "channel": "SMS",
+                "recipient_phone": recipient_phone,
+                "recipient_name": recipient_name,
+                "status": status,
+                "message_id": message_id,
+                "delivered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "telecom_circle": "KARNATAKA_DO_TRAI"
+            }
 
-        return {
-            "channel": "SMS",
-            "recipient_phone": recipient_phone,
-            "recipient_name": recipient_name,
-            "status": status,
-            "message_id": message_id,
-            "delivered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "telecom_circle": "KARNATAKA_DO_TRAI"
-        }
+        return send_beneficiary_sms(
+            recipient_phone=recipient_phone,
+            recipient_name=recipient_name,
+            message=message,
+            ref_id=ref_id
+        )
 
     def send_ivr(self, recipient_phone: str, recipient_name: str, message: str, ref_id: str = "") -> Dict[str, Any]:
         """Trigger IVR voice call using Twilio API (Fallback to simulation if credentials absent)."""
@@ -247,6 +259,14 @@ class NotificationEngine:
                 f"Please ensure readiness for unloading and weighment verification."
             )
 
+            # Idempotency guard: avoid duplicate dealer alerts in the same cycle
+            cursor.execute("""
+            SELECT id FROM notifications
+            WHERE cycle_id = ? AND recipient_type = 'DEALER' AND recipient_id = ? AND channel = 'WHATSAPP';
+            """, (cycle_id, dealer_id))
+            if cursor.fetchone():
+                continue
+
             # Invoke Notification Service abstraction
             res_wa = self.service.send_whatsapp(dealer_phone, dealer_name, wa_body, ref_id=fid)
 
@@ -272,11 +292,12 @@ class NotificationEngine:
 
         # 3. Generate Beneficiary Household Notification Group Alerts (SMS + IVR Fallback)
         cursor.execute("""
-        SELECT b.pseudonymous_beneficiary_id, b.name_for_demo, b.registered_fps_id, b.language,
+        SELECT b.pseudonymous_beneficiary_id, b.name_for_demo, b.registered_fps_id, b.language, b.phone,
                p.name as fps_name
         FROM beneficiaries b
         JOIN fps p ON b.registered_fps_id = p.fps_id
-        LIMIT 25;
+        ORDER BY b.id ASC
+        LIMIT 50;
         """)
         sample_bens = cursor.fetchall()
 
@@ -285,8 +306,17 @@ class NotificationEngine:
             ben_name = b["name_for_demo"]
             fid = b["registered_fps_id"]
             fname = b["fps_name"]
-            phone = f"+91-9123{random.randint(100000, 999999)}"
-            channel = "SMS" if random.random() > 0.35 else "IVR"
+            raw_phone = b["phone"] if ("phone" in b.keys() and b["phone"]) else None
+            phone = raw_phone or f"+91-9123{random.randint(100000, 999999)}"
+            channel = "SMS" if (raw_phone or random.random() > 0.35) else "IVR"
+
+            # Idempotency guard: prevent duplicate SMS/IVR to same beneficiary in same cycle
+            cursor.execute("""
+            SELECT id FROM notifications
+            WHERE cycle_id = ? AND recipient_type = 'BENEFICIARY' AND recipient_id = ? AND channel = ?;
+            """, (cycle_id, ben_id, channel))
+            if cursor.fetchone():
+                continue
 
             slot_date = "01-Sep to 05-Sep (08:30 AM - 12:30 PM)"
             sms_title = f"PDS Entitlement Ready — Cycle {cycle_id}"
@@ -377,7 +407,10 @@ class NotificationEngine:
     ) -> Dict[str, Any]:
         """Dispatch official government stock shortage delay notification to beneficiary."""
         cursor = db.cursor()
-        phone = f"+91-9845{random.randint(100000, 999999)}"
+        cursor.execute("SELECT phone FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;", (beneficiary_id.strip(),))
+        b_row = cursor.fetchone()
+        raw_phone = b_row["phone"] if (b_row and "phone" in b_row.keys() and b_row["phone"]) else None
+        phone = raw_phone or f"+91-9845{random.randint(100000, 999999)}"
         channel = "SMS"
         message_title = "⏳ Delivery Delayed — Stock Replenishment Pending"
         message_body = custom_message or (

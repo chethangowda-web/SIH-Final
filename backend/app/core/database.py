@@ -153,6 +153,10 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
         FOREIGN KEY (registered_fps_id) REFERENCES fps (fps_id)
     );
     """)
+    try:
+        cursor.execute("ALTER TABLE beneficiaries ADD COLUMN phone TEXT;")
+    except Exception:
+        pass
 
     # Seed fallback master records for default citizen users if absent
     cursor.execute("""
@@ -970,6 +974,32 @@ def _migration_008_sih_v2_features(cursor: sqlite3.Cursor) -> None:
     """)
 
 
+def _migration_009_beneficiary_phone(cursor: sqlite3.Cursor) -> None:
+    """009: Add phone field to beneficiaries and seed first 50 entries."""
+    try:
+        cursor.execute("ALTER TABLE beneficiaries ADD COLUMN phone TEXT;")
+    except Exception:
+        pass
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_beneficiaries_phone ON beneficiaries (phone);")
+
+    # Seed phone numbers for the first 50 beneficiaries
+    cursor.execute("SELECT id, pseudonymous_beneficiary_id FROM beneficiaries ORDER BY id ASC LIMIT 50;")
+    rows = cursor.fetchall()
+    demo_phone_override = getattr(settings, "SMS_DEMO_RECIPIENT_PHONE", None)
+
+    for idx, r in enumerate(rows):
+        row_id = r[0] if isinstance(r, (list, tuple)) else r["id"]
+        # If demo phone override is set, use it for the primary demo card BEN-KA-0001
+        if idx == 0 and demo_phone_override:
+            phone_val = demo_phone_override.strip()
+        else:
+            # Deterministic standard Indian mobile numbers
+            phone_val = f"+9198450{idx + 10000:05d}"
+            
+        cursor.execute("UPDATE beneficiaries SET phone = ? WHERE id = ?;", (phone_val, row_id))
+
+
 # Migration Registry
 MIGRATIONS = [
     (1, "001_core_supply_chain_schema", _migration_001_core_supply_chain),
@@ -980,6 +1010,7 @@ MIGRATIONS = [
     (6, "006_beneficiary_cycle_receipts", _migration_006_beneficiary_cycle_receipts),
     (7, "007_planning_cycle_tables", _migration_007_planning_cycle_tables),
     (8, "008_sih_v2_features", _migration_008_sih_v2_features),
+    (9, "009_beneficiary_phone", _migration_009_beneficiary_phone),
 ]
 
 

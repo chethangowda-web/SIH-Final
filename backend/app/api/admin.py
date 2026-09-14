@@ -1444,12 +1444,13 @@ def advance_gatepass_stage(
         row = cursor.fetchone()
         cycle_id = row[0] if row else settings.CURRENT_CYCLE
 
-        res = gatepass_engine.advance_gatepass_status(db, gatepass_id, target_status)
+        clean_status = (target_status or "").strip().upper()
+        res = gatepass_engine.advance_gatepass_status(db, gatepass_id, clean_status)
 
         actor_name = current_user.get("username", "field_officer_user")
         actor_role = current_user.get("role", "FIELD_OFFICER")
 
-        if target_status == "DISPATCH_CONFIRMED":
+        if clean_status == "DISPATCH_CONFIRMED":
             workflow_manager.transition_state(
                 db, cycle_id, WorkflowState.DISPATCHED,
                 actor_name, actor_role,

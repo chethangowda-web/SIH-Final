@@ -30,6 +30,7 @@ class BeneficiaryOut(BaseModel):
     registered_fps_id: str
     language: str
     status: str
+    phone: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -41,6 +42,7 @@ class BeneficiaryDetailOut(BaseModel):
     registered_fps_name: Optional[str] = None
     language: str
     status: str
+    phone: Optional[str] = None
     active_intents: List[Dict[str, Any]] = []
     demo_notice: str = DEMO_NOTICE
 

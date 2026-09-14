@@ -16,7 +16,7 @@ from app.core.logging_config import get_logger
 logger = get_logger("auth_guard")
 
 # Reuse standard OAuth2 password bearer flow
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=False)
 
 def is_auth_mock_enabled() -> bool:
     """

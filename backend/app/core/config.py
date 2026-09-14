@@ -1,7 +1,7 @@
 """Application Configuration."""
 import os
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Optional
 from pydantic import ConfigDict, field_validator
 from pydantic_settings import BaseSettings
 
@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     # Deterministic Demand Forecasting Parameters
     INTENT_WEIGHT: float = 0.65       # Parameter w: Weight given to verified beneficiary intent
     SAFETY_BUFFER_PCT: float = 0.05   # 5% safety buffer for operational dispatch
+
+    # SMS Gateway Configuration (India Fast2SMS / MSG91)
+    SMS_PROVIDER_API_KEY: Optional[str] = None
+    SMS_SENDER_ID: str = "DEMAND"
+    SMS_ENABLED: bool = False
+    SMS_PROVIDER: str = "fast2sms"
+    SMS_DEMO_RECIPIENT_PHONE: Optional[str] = None
 
     model_config = ConfigDict(case_sensitive=True, extra="ignore")
 

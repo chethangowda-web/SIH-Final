@@ -2,6 +2,7 @@ import sqlite3
 import random
 import time
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -110,7 +111,7 @@ def login(
     if not user_row or not verify_password(payload.password, user_row["password_hash"]):
         logger.warning(
             "Authentication failed for username='%s': invalid credentials or user not found",
-            payload.username.strip()
+            u_clean
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -145,11 +146,11 @@ def login(
 
 @router.post("/auth/token", response_model=UserLoginOut, include_in_schema=False)
 def login_oauth2_form(
-    payload: LoginPayload,
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: sqlite3.Connection = Depends(get_db)
 ):
-    """OAuth2 JSON token endpoint for authentication."""
-    return login(payload, db=db)
+    """OAuth2 Password Request Form endpoint for Swagger UI Authorization."""
+    return login(LoginPayload(username=form_data.username, password=form_data.password), db=db)
 
 
 @router.post("/auth/citizen/send-otp")

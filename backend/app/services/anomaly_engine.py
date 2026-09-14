@@ -8,7 +8,20 @@ import sqlite3
 import numpy as np
 from typing import List, Dict, Any, Tuple
 from datetime import datetime
-from sklearn.ensemble import IsolationForest
+try:
+    from sklearn.ensemble import IsolationForest
+except ImportError:
+    class IsolationForest:
+        def __init__(self, contamination=0.08, random_state=42):
+            self.contamination = contamination
+        def fit(self, X):
+            return self
+        def predict(self, X):
+            mean = np.mean(X, axis=0)
+            std = np.std(X, axis=0) + 1e-6
+            z_scores = np.abs((X - mean) / std)
+            max_z = np.max(z_scores, axis=1) if hasattr(X, "ndim") and X.ndim > 1 else z_scores
+            return np.where(max_z > 2.5, -1, 1)
 from app.core.logging_config import get_logger
 
 logger = get_logger("anomaly_engine")
