@@ -20,10 +20,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   late final ApiService _apiService;
   int _selectedTabIndex = 0; // 0: Citizen OTP, 1: Department
 
-  // Controllers for Custom Citizen OTP Login (Ration Card + Aadhaar + Phone Number)
+  // Controllers for Citizen Login (Ration Card Number + Home FPS Center ID)
   final TextEditingController _citizenCardController = TextEditingController();
-  final TextEditingController _citizenAadhaarController = TextEditingController();
-  final TextEditingController _citizenPhoneController = TextEditingController();
+  final TextEditingController _citizenFpsIdController = TextEditingController();
   final TextEditingController _citizenOtpController = TextEditingController();
   bool _otpSent = false;
   bool _isSendingOtp = false;
@@ -75,8 +74,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   void dispose() {
     _countdownTimer?.cancel();
     _citizenCardController.dispose();
-    _citizenAadhaarController.dispose();
-    _citizenPhoneController.dispose();
+    _citizenFpsIdController.dispose();
     _citizenOtpController.dispose();
     _adminUsernameController.dispose();
     _adminPasswordController.dispose();
@@ -104,24 +102,17 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   // Action: Send Real OTP to Citizen via Twilio SMS
   Future<void> _handleSendOtp() async {
     final cardId = _citizenCardController.text.trim();
-    final aadhaar = _citizenAadhaarController.text.trim();
-    final phone = _citizenPhoneController.text.trim();
+    final homeFpsId = _citizenFpsIdController.text.trim();
 
     if (cardId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('login.enter_valid_card'))),
+        const SnackBar(content: Text('Please enter your Ration Card Number (e.g. RC-KA-000001)')),
       );
       return;
     }
-    if (aadhaar.isEmpty || aadhaar.replaceAll(' ', '').length < 12) {
+    if (homeFpsId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('login.enter_valid_aadhaar'))),
-      );
-      return;
-    }
-    if (phone.isEmpty || phone.replaceAll(RegExp(r'\D'), '').length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('login.enter_valid_phone'))),
+        const SnackBar(content: Text('Please enter your Home FPS Center ID (e.g. FPS-KA-BAG-0001)')),
       );
       return;
     }
@@ -130,8 +121,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     try {
       final res = await _apiService.sendCitizenOtp(
         cardId,
-        phoneNumber: phone,
-        aadhaarNumber: aadhaar,
+        homeFpsId: homeFpsId,
       );
       setState(() {
         _otpSent = true;
@@ -530,7 +520,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Anti-Fraud Enforcement Active: All entries are cross-verified against the official NFSA Master Dataset.',
+                  'Anti-Fraud Enforcement Active: Ration Card Number and Home FPS Center ID are cross-verified against the official NFSA Master Dataset.',
                   style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF1E40AF), height: 1.3),
                 ),
               ),
@@ -546,7 +536,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           controller: _citizenCardController,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: tr('login.ration_card_hint_full'),
+            hintText: 'e.g. RC-KA-000001',
             prefixIcon: Icon(Icons.credit_card_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
@@ -559,37 +549,15 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
         const SizedBox(height: 10),
 
-        // Field 2: Aadhaar Number
-        Text(tr('login.aadhaar_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
+        // Field 2: Home FPS Center ID
+        Text('Home Fair Price Shop (FPS) Center ID', style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
         const SizedBox(height: 4),
         TextField(
-          controller: _citizenAadhaarController,
-          keyboardType: TextInputType.number,
+          controller: _citizenFpsIdController,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: tr('login.aadhaar_hint'),
-            prefixIcon: Icon(Icons.fingerprint_rounded, size: isSmall ? 16 : 18, color: _slate500),
-            filled: true,
-            fillColor: _slate50,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.5)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
-          ),
-        ),
-
-        const SizedBox(height: 10),
-
-        // Field 3: Registered Phone / Mobile Number
-        Text(tr('login.phone_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
-        const SizedBox(height: 4),
-        TextField(
-          controller: _citizenPhoneController,
-          keyboardType: TextInputType.phone,
-          style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
-          decoration: InputDecoration(
-            hintText: tr('login.phone_hint'),
-            prefixIcon: Icon(Icons.phone_android_rounded, size: isSmall ? 16 : 18, color: _slate500),
+            hintText: 'e.g. FPS-KA-BAG-0001',
+            prefixIcon: Icon(Icons.storefront_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),

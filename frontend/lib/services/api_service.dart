@@ -151,10 +151,14 @@ class ApiService {
   /// Request a 6-digit OTP for a citizen Ration Card Number with real phone dispatch.
   Future<Map<String, dynamic>> sendCitizenOtp(
     String cardId, {
+    String? homeFpsId,
     String? phoneNumber,
     String? aadhaarNumber,
   }) async {
     final Map<String, dynamic> body = {'card_id': cardId.trim()};
+    if (homeFpsId != null && homeFpsId.trim().isNotEmpty) {
+      body['home_fps_id'] = homeFpsId.trim();
+    }
     if (phoneNumber != null && phoneNumber.trim().isNotEmpty) {
       body['phone_number'] = phoneNumber.trim();
     }

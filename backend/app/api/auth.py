@@ -46,12 +46,13 @@ class LoginPayload(BaseModel):
     password: str = Field(..., max_length=128)
 
 class OTPSendIn(BaseModel):
-    card_id: str = Field(..., description="Beneficiary Ration Card ID e.g. BEN-KA-0001 or RC-KA-000001")
+    card_id: str = Field(..., description="Beneficiary Ration Card ID e.g. RC-KA-000001")
+    home_fps_id: Optional[str] = Field(None, description="Home Fair Price Shop ID e.g. FPS-KA-BAG-0001")
     phone_number: Optional[str] = Field(None, description="Registered 10-digit mobile number")
     aadhaar_number: Optional[str] = Field(None, description="12-digit Aadhaar number")
 
 class OTPVerifyIn(BaseModel):
-    card_id: str = Field(..., description="Beneficiary Ration Card ID e.g. BEN-KA-0001")
+    card_id: str = Field(..., description="Beneficiary Ration Card ID e.g. BEN-KA-0001 or RC-KA-000001")
     otp_code: str = Field(..., min_length=4, max_length=6, description="Verification OTP e.g. 123456")
 
 class RefreshTokenIn(BaseModel):
@@ -160,7 +161,7 @@ def citizen_send_otp(
 ):
     """
     Sends a 6-digit OTP via SMS to the mobile phone linked with the specified Ration Card / Citizen.
-    Strictly verifies existence against NFSA Master Dataset. Anti-fraud enforcement active.
+    Strictly verifies existence & Home FPS ID against NFSA Master Dataset.
     """
     from app.services.notification_engine import notification_engine
     from app.core.config import settings
@@ -168,17 +169,27 @@ def citizen_send_otp(
     cursor = db.cursor()
     card_clean = payload.card_id.strip()
     cursor.execute(
-        "SELECT pseudonymous_beneficiary_id, name_for_demo, phone FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;",
+        "SELECT pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, phone FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;",
         (card_clean,)
     )
     ben = cursor.fetchone()
     if not ben:
-        # Anti-fraud protection: Do not auto-create fake beneficiaries
         logger.warning("Anti-fraud trigger: Card ID '%s' not found in NFSA dataset.", card_clean)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset. Anti-fraud verification active."
+            detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset. Access denied."
         )
+
+    # Cross-verify Home FPS ID if provided
+    if payload.home_fps_id and payload.home_fps_id.strip():
+        fps_clean = payload.home_fps_id.strip()
+        db_fps = ben["registered_fps_id"] if ("registered_fps_id" in ben.keys() and ben["registered_fps_id"]) else None
+        if db_fps and db_fps.upper() != fps_clean.upper():
+            logger.warning("Anti-fraud trigger: Provided FPS '%s' does not match registered FPS '%s' for '%s'", fps_clean, db_fps, card_clean)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Security Check Failed: Home FPS Center ID '{fps_clean}' does not match government PDS record for Ration Card '{card_clean}'."
+            )
 
     # Cross-verify phone number if provided and present in record
     db_phone = ben["phone"] if ("phone" in ben.keys() and ben["phone"]) else None
