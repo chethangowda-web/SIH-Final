@@ -700,6 +700,76 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     );
   }
 
+  String _selectedOfficialRole = 'DSO';
+
+  Widget _buildRoleCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+    required Color borderColor,
+    required String username,
+    required String password,
+    required String role,
+    required bool isSmall,
+  }) {
+    final isSelected = _selectedOfficialRole == role || _adminUsernameController.text.trim() == username;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedOfficialRole = role;
+          _adminUsernameController.text = username;
+          _adminPasswordController.text = password;
+        });
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? bgColor : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? color : _slate200,
+            width: isSelected ? 1.8 : 1,
+          ),
+          boxShadow: isSelected
+              ? [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 4, offset: const Offset(0, 2))]
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: isSmall ? 14 : 15, color: color),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(fontSize: isSmall ? 10.5 : 11.5, fontWeight: FontWeight.w800, color: color),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isSelected)
+                  Icon(Icons.check_circle_rounded, size: 12, color: color),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(fontSize: isSmall ? 8.5 : 9.5, fontWeight: FontWeight.w600, color: _slate500, height: 1.2),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ================================================================
   // DEPARTMENT LOGIN TAB (Responsive)
   // ================================================================
@@ -708,11 +778,77 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       key: const ValueKey('dept_login'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 4 Specialized Official Role Window Cards
+        Text(
+          'Select Official Role Window:',
+          style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w800, color: _slate900),
+        ),
+        const SizedBox(height: 8),
+        GridView.count(
+          crossAxisCount: isSmall ? 2 : 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: isSmall ? 2.5 : 2.8,
+          children: [
+            _buildRoleCard(
+              title: '🏛️ DSO (Command)',
+              subtitle: 'Planning & Decision Authority',
+              icon: Icons.account_balance_outlined,
+              color: const Color(0xFF166534),
+              bgColor: const Color(0xFFF0FDF4),
+              borderColor: const Color(0xFF86EFAC),
+              username: 'dso_user',
+              password: 'dso_pass',
+              role: 'DSO',
+              isSmall: isSmall,
+            ),
+            _buildRoleCard(
+              title: '🚚 Field Officer',
+              subtitle: 'Physical Execution & Gatepass',
+              icon: Icons.local_shipping_outlined,
+              color: const Color(0xFF92400E),
+              bgColor: const Color(0xFFFFFBEB),
+              borderColor: const Color(0xFFFDE68A),
+              username: 'field_officer_user',
+              password: 'field_pass',
+              role: 'FIELD_OFFICER',
+              isSmall: isSmall,
+            ),
+            _buildRoleCard(
+              title: '🔍 Vigilance Auditor',
+              subtitle: 'Read-Only Governance Layer',
+              icon: Icons.verified_user_outlined,
+              color: const Color(0xFF6B21A8),
+              bgColor: const Color(0xFFF3E8FF),
+              borderColor: const Color(0xFFE9D5FF),
+              username: 'auditor_user',
+              password: 'auditor_pass',
+              role: 'AUDITOR',
+              isSmall: isSmall,
+            ),
+            _buildRoleCard(
+              title: '⚡ System Admin',
+              subtitle: 'Master Platform Management',
+              icon: Icons.admin_panel_settings_rounded,
+              color: const Color(0xFF0F172A),
+              bgColor: const Color(0xFFF1F5F9),
+              borderColor: const Color(0xFFCBD5E1),
+              username: 'admin_user',
+              password: 'admin1234',
+              role: 'ADMIN',
+              isSmall: isSmall,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
         Text(
           tr('login.official_user_label'),
-          style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
+          style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700, color: _slate900),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         TextField(
           controller: _adminUsernameController,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
@@ -724,16 +860,16 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govNavy, width: 1.5)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 10 : 12),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
           ),
         ),
-        SizedBox(height: isSmall ? 10 : 14),
+        SizedBox(height: isSmall ? 8 : 10),
 
         Text(
           tr('login.password_label'),
-          style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
+          style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700, color: _slate900),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         TextField(
           controller: _adminPasswordController,
           obscureText: _isPasswordObscured,
@@ -750,7 +886,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govNavy, width: 1.5)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 10 : 12),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
           ),
         ),
 
@@ -776,7 +912,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ),
         ),
 
-        SizedBox(height: isSmall ? 14 : 18),
+        SizedBox(height: isSmall ? 12 : 14),
 
         ElevatedButton(
           onPressed: _isAdminLoggingIn ? null : _handleDepartmentLogin,
@@ -789,7 +925,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ),
           child: _isAdminLoggingIn
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : Text(tr('login.signin_official_btn'), style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
+              : Text('Sign In to ${_selectedOfficialRole.replaceAll('_', ' ')} Workspace', style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
         ),
       ],
     );
