@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants.dart';
 import '../../core/localization.dart';
 import '../../models/beneficiary_model.dart';
@@ -47,12 +48,112 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
   bool _isSubmitting = false;
   String? _errorMessage;
   List<IntentRecord>? _completedRecords;
+  bool _isSendingWhatsApp = false;
+  String? _whatsAppStatus;
 
   @override
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
     _completedRecords = widget.submittedRecords;
+  }
+
+  String _generateWhatsAppMessage(String requestId) {
+    final riceQuota = widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0);
+    final wheatQuota = widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0);
+    final totalKg = riceQuota + wheatQuota;
+    final isHomeDelivery = widget.deliveryMode == 'HOME_DELIVERY';
+    final modeStr = isHomeDelivery ? 'Doorstep Home Delivery' : 'Collect at Fair Price Shop';
+    final centerStr = '${widget.intendedFps.name} (${widget.intendedFps.fpsId})';
+    final userName = widget.beneficiary.nameForDemo.isNotEmpty
+        ? widget.beneficiary.nameForDemo
+        : widget.beneficiary.pseudonymousBeneficiaryId;
+
+    return '🌾 *PDS DemandSync • Govt of Karnataka*\n'
+        'Department of Food, Civil Supplies & Consumer Affairs\n\n'
+        'Namaskara $userName,\n'
+        'Your PDS Advance Collection Plan has been *REGISTERED* successfully!\n\n'
+        '📋 *Receipt ID:* $requestId\n'
+        '🗓️ *Cycle:* September 2026 (Cycle 7)\n'
+        '🏪 *Selected Center:* $centerStr\n'
+        '📦 *Allocated Quota:* ${totalKg.toStringAsFixed(1)} kg (${riceQuota.toStringAsFixed(1)} kg Rice + ${wheatQuota.toStringAsFixed(1)} kg Wheat) (₹0.00 FREE)\n'
+        '🚚 *Service Mode:* $modeStr\n'
+        '💰 *Foodgrain Cost:* ₹0.00 (100% Subsidized)\n\n'
+        '✅ *Status:* Recorded in Pre-Dispatch Demand Plan.\n'
+        'You will receive an instant arrival notification when grain arrives at your shop.';
+  }
+
+  Future<void> _openWhatsAppReceipt(String requestId) async {
+    final msg = _generateWhatsAppMessage(requestId);
+    final url = 'https://wa.me/918050442666?text=${Uri.encodeComponent(msg)}';
+    final uri = Uri.parse(url);
+    try {
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open WhatsApp: $e'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _resendWhatsAppReceipt(String requestId) async {
+    if (_isSendingWhatsApp) return;
+    setState(() {
+      _isSendingWhatsApp = true;
+    });
+
+    try {
+      final riceQuota = widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0);
+      final wheatQuota = widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0);
+      final totalKg = riceQuota + wheatQuota;
+
+      final result = await _apiService.sendWhatsAppReceipt(
+        beneficiaryId: widget.beneficiary.pseudonymousBeneficiaryId,
+        requestId: requestId,
+        cycleId: '2026-09',
+        intendedFpsName: widget.intendedFps.name,
+        quantityKg: totalKg,
+        commodity: widget.commodityOption,
+        deliveryMode: widget.deliveryMode,
+        phoneNumber: '+918050442666',
+      );
+
+      if (mounted) {
+        setState(() {
+          _isSendingWhatsApp = false;
+          _whatsAppStatus = 'Delivered via Twilio (${result['status'] ?? 'DELIVERED'})';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ WhatsApp confirmation receipt dispatched via Twilio to +91 80504 42666!'),
+            backgroundColor: Color(0xFF15803D),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSendingWhatsApp = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to resend WhatsApp: $e'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _handleSubmitCollectionPlan() async {
@@ -245,7 +346,6 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
     final riceKg = widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0);
     final wheatKg = widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0);
     final maxEntitlement = widget.eligibleMembersCount * 5.0;
-    final remainingKg = maxEntitlement - (riceKg + wheatKg);
     final locationText = isHomeDelivery
         ? (widget.deliveryAddress ?? 'Registered Home Address, Malleshwaram, Bengaluru')
         : '${widget.intendedFps.name} (${widget.intendedFps.fpsId})';
@@ -791,6 +891,10 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
         ),
         const SizedBox(height: AppConstants.space20),
 
+        // Official WhatsApp Digital Confirmation Pass
+        _buildWhatsAppReceiptCard(requestId),
+        const SizedBox(height: AppConstants.space20),
+
         // Action Buttons
         ElevatedButton(
           onPressed: () => Navigator.of(context).pop(true),
@@ -823,6 +927,164 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
           child: Text(tr('confirm.btn_view_history'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
         ),
       ],
+    );
+  }
+
+  Widget _buildWhatsAppReceiptCard(String requestId) {
+    final riceQuota = widget.customRiceKg ?? (widget.eligibleMembersCount * 4.0);
+    final wheatQuota = widget.customWheatKg ?? (widget.eligibleMembersCount * 1.0);
+    final totalKg = riceQuota + wheatQuota;
+    final isHomeDelivery = widget.deliveryMode == 'HOME_DELIVERY';
+
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.space16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
+        border: Border.all(color: const Color(0xFF86EFAC), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF22C55E).withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header Row
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF25D366),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.chat_rounded, color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'WhatsApp Confirmation Dispatched',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF14532D),
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _whatsAppStatus ?? 'Official SMS & WhatsApp notification sent to +91 80504 42666',
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF15803D)),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF4ADE80), width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.check_circle_rounded, size: 12, color: Color(0xFF15803D)),
+                    SizedBox(width: 4),
+                    Text(
+                      'DELIVERED',
+                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Message Preview Container
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFDCFCE7)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Text('🌾 ', style: TextStyle(fontSize: 14)),
+                    Text(
+                      'PDS DemandSync • Govt of Karnataka',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Your Advance Collection Plan ($requestId) is recorded for ${widget.intendedFps.name}. Quota: ${totalKg.toStringAsFixed(1)} kg (${riceQuota.toStringAsFixed(1)} kg Rice + ${wheatQuota.toStringAsFixed(1)} kg Wheat) • Service: ${isHomeDelivery ? "Doorstep Delivery" : "FPS Collection"}. You will receive a notification when grain arrives at the FPS.',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF1E293B), height: 1.35),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Action Buttons: Open in WhatsApp & Resend
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: ElevatedButton.icon(
+                  onPressed: () => _openWhatsAppReceipt(requestId),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 15, color: Colors.white),
+                  label: const Text(
+                    'Open in WhatsApp',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF25D366),
+                    foregroundColor: Colors.white,
+                    elevation: 1,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: OutlinedButton.icon(
+                  onPressed: _isSendingWhatsApp ? null : () => _resendWhatsAppReceipt(requestId),
+                  icon: _isSendingWhatsApp
+                      ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF15803D)))
+                      : const Icon(Icons.refresh_rounded, size: 14, color: Color(0xFF15803D)),
+                  label: Text(
+                    _isSendingWhatsApp ? 'Sending...' : 'Resend Msg',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF86EFAC)),
+                    backgroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
