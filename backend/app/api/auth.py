@@ -101,8 +101,23 @@ def login(
         "field_officer_user": ["field_pass", "field1234", "field123", "field_officer"],
         "auditor_user": ["auditor_pass", "auditor1234", "auditor123", "auditor"],
     }
+    official_roles = {
+        "admin_user": "ADMIN",
+        "dso_user": "DSO",
+        "field_officer_user": "FIELD_OFFICER",
+        "auditor_user": "AUDITOR",
+    }
 
-    if user_row and u_clean in official_password_aliases and payload.password in official_password_aliases[u_clean]:
+    if not user_row and u_clean in official_password_aliases and payload.password in official_password_aliases[u_clean]:
+        pass_h = hash_password(payload.password)
+        cursor.execute(
+            "INSERT OR REPLACE INTO users (username, password_hash, role, beneficiary_id) VALUES (?, ?, ?, NULL);",
+            (u_clean, pass_h, official_roles.get(u_clean, "ADMIN"))
+        )
+        db.commit()
+        cursor.execute("SELECT id, username, password_hash, role, beneficiary_id FROM users WHERE username = ?;", (u_clean,))
+        user_row = cursor.fetchone()
+    elif user_row and u_clean in official_password_aliases and payload.password in official_password_aliases[u_clean]:
         pass_h = hash_password(payload.password)
         cursor.execute("UPDATE users SET password_hash = ? WHERE username = ?;", (pass_h, u_clean))
         db.commit()

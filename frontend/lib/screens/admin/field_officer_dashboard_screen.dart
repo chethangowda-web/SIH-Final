@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
+import '../../models/admin_model.dart';
 import '../../services/api_service.dart';
 import 'digital_gatepass_dialog.dart';
 import 'fps_predispatch_inspector_dialog.dart';
@@ -21,22 +22,27 @@ class FieldOfficerDashboardScreen extends StatefulWidget {
 
 class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScreen> {
   late final ApiService _apiService;
-  int _activeGatepassStage = 1; // 1: Driver Auth, 2: Bay Assignment, 3: Weight Loading, 4: Exit QR
-  String _selectedTruckId = 'TRK-KA-01-EA-9912';
+  bool _isLoading = true;
+  bool _isAdvancing = false;
+  List<DigitalGatepass> _gatepasses = [];
+  int _selectedIdx = 0;
 
-  final List<Map<String, dynamic>> _truckQueue = [
+  // Fallback demo queue if API returns empty
+  final List<Map<String, dynamic>> _fallbackQueue = [
     {
+      'gatepassId': 'GP-2026-09-001',
       'truckId': 'TRK-KA-01-EA-9912',
-      'driverName': 'Ramesh Kumar',
+      'driverName': 'Ramesh Kumar (DL-KA01-2018-9912)',
       'fpsDestination': 'FPS-KA-BLR-001 (Malleshwaram Center 1)',
       'commodity': 'Wheat (15.0 MT)',
       'bay': 'Bay #3',
-      'status': 'LOADING',
+      'status': 'LOADING_IN_PROGRESS',
       'stageIndex': 3,
     },
     {
+      'gatepassId': 'GP-2026-09-002',
       'truckId': 'TRK-KA-02-FB-4410',
-      'driverName': 'Suresh Gowda',
+      'driverName': 'Suresh Gowda (DL-KA02-2015-4410)',
       'fpsDestination': 'FPS-KA-BLR-002 (Rajajinagar Store)',
       'commodity': 'Rice (20.0 MT)',
       'bay': 'Bay #1',
@@ -44,12 +50,13 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
       'stageIndex': 2,
     },
     {
+      'gatepassId': 'GP-2026-09-003',
       'truckId': 'TRK-KA-05-MC-1104',
-      'driverName': 'Venkatesh Naidu',
+      'driverName': 'Venkatesh Naidu (DL-KA05-2020-1104)',
       'fpsDestination': 'FPS-KA-BLR-005 (Indiranagar Shop)',
       'commodity': 'Wheat (10.0 MT) + Rice (10.0 MT)',
-      'bay': 'Pending',
-      'status': 'AUTHENTICATED',
+      'bay': 'Pending Assignment',
+      'status': 'DRIVER_AUTHENTICATED',
       'stageIndex': 1,
     },
   ];
@@ -58,6 +65,24 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
+    _loadGatepasses();
+  }
+
+  Future<void> _loadGatepasses() async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await _apiService.fetchAllGatepasses(cycleId: '2026-09');
+      if (mounted) {
+        setState(() {
+          _gatepasses = res;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   void _showRestrictedActionAlert(String actionName) {
@@ -73,7 +98,7 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
           ],
         ),
         content: Text(
-          'Separation of Duties Enforced:\n\nAs a Field Officer, your operational authority is strictly limited to physical loading bay operations and Digital Gatepass clearance.\n\n$actionName is a policy level decision restricted to the District Supply Officer (DSO).',
+          'Separation of Duties Enforced:\n\nAs a Field Officer, your operational authority is strictly limited to physical loading bay operations and Digital Gatepass clearance.\n\n$actionName is a policy-level planning decision restricted to the District Supply Officer (DSO).',
           style: const TextStyle(fontSize: 13, height: 1.4),
         ),
         actions: [
@@ -86,29 +111,94 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
     );
   }
 
-  void _advanceGatepass() {
-    setState(() {
-      if (_activeGatepassStage < 4) {
-        _activeGatepassStage++;
+  Future<void> _advanceActiveGatepass() async {
+    if (_gatepasses.isNotEmpty && _selectedIdx < _gatepasses.length) {
+      final gp = _gatepasses[_selectedIdx];
+      String nextStatus;
+      if (gp.status == 'CREATED' || gp.status == 'PENDING') {
+        nextStatus = 'DRIVER_AUTHENTICATED';
+      } else if (gp.status == 'DRIVER_AUTHENTICATED') {
+        nextStatus = 'BAY_ASSIGNED';
+      } else if (gp.status == 'BAY_ASSIGNED') {
+        nextStatus = 'LOAD_VERIFIED';
+      } else if (gp.status == 'LOAD_VERIFIED' || gp.status == 'LOADING_IN_PROGRESS') {
+        nextStatus = 'DISPATCH_CONFIRMED';
       } else {
-        _activeGatepassStage = 1;
+        nextStatus = 'DISPATCH_CONFIRMED';
       }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Gatepass Stage advanced to Stage $_activeGatepassStage for $_selectedTruckId'),
-        backgroundColor: const Color(0xFFD97706),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+
+      setState(() => _isAdvancing = true);
+      try {
+        final updated = await _apiService.advanceGatepassStage(gp.gatepassId, nextStatus);
+        if (mounted) {
+          setState(() {
+            _gatepasses[_selectedIdx] = updated;
+            _isAdvancing = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Gatepass ${gp.gatepassId} advanced to $nextStatus!'),
+              backgroundColor: const Color(0xFF15803D),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isAdvancing = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } else {
+      // Fallback local advance
+      final item = _fallbackQueue[_selectedIdx % _fallbackQueue.length];
+      int currentStage = item['stageIndex'] as int;
+      setState(() {
+        if (currentStage < 4) {
+          item['stageIndex'] = currentStage + 1;
+          item['status'] = currentStage == 1 ? 'BAY_ASSIGNED' : (currentStage == 2 ? 'LOADING_IN_PROGRESS' : 'DISPATCH_CONFIRMED');
+        } else {
+          item['stageIndex'] = 1;
+          item['status'] = 'DRIVER_AUTHENTICATED';
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gatepass advanced for ${item['truckId']}'),
+          backgroundColor: const Color(0xFFD97706),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  int _getStageIndex(String status) {
+    switch (status) {
+      case 'DRIVER_AUTHENTICATED':
+        return 1;
+      case 'BAY_ASSIGNED':
+        return 2;
+      case 'LOAD_VERIFIED':
+      case 'LOADING_IN_PROGRESS':
+        return 3;
+      case 'DISPATCH_CONFIRMED':
+      case 'EXITED':
+        return 4;
+      default:
+        return 1;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final activeTruck = _truckQueue.firstWhere(
-      (t) => t['truckId'] == _selectedTruckId,
-      orElse: () => _truckQueue.first,
-    );
+    final bool hasLive = _gatepasses.isNotEmpty;
+    final String activeTruckId = hasLive ? _gatepasses[_selectedIdx].truckId : _fallbackQueue[_selectedIdx % _fallbackQueue.length]['truckId'] as String;
+    final String activeDriver = hasLive ? _gatepasses[_selectedIdx].driverName : _fallbackQueue[_selectedIdx % _fallbackQueue.length]['driverName'] as String;
+    final String activeBay = hasLive ? _gatepasses[_selectedIdx].loadingBay : _fallbackQueue[_selectedIdx % _fallbackQueue.length]['bay'] as String;
+    final String activeStatus = hasLive ? _gatepasses[_selectedIdx].status : _fallbackQueue[_selectedIdx % _fallbackQueue.length]['status'] as String;
+    final int activeStage = _getStageIndex(activeStatus);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -137,6 +227,11 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Refresh Queue',
+            icon: const Icon(Icons.refresh, size: 20),
+            onPressed: _loadGatepasses,
+          ),
           TextButton.icon(
             onPressed: () {
               Navigator.of(context).push(
@@ -201,7 +296,7 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
-                        onPressed: () => _showRestrictedActionAlert('Triggering AI Forecast'),
+                        onPressed: () => _showRestrictedActionAlert('Triggering AI Forecast Pipeline'),
                         icon: const Icon(Icons.lock_outline, size: 14, color: Color(0xFF92400E)),
                         label: const Text('AI Forecast (Restricted)', style: TextStyle(fontSize: 12, color: Color(0xFF92400E))),
                       ),
@@ -239,7 +334,7 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
                           border: Border.all(color: const Color(0xFFFDE68A)),
                         ),
                         child: Text(
-                          'ACTIVE TRUCK: $_selectedTruckId',
+                          'ACTIVE TRUCK: $activeTruckId',
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF92400E)),
                         ),
                       ),
@@ -250,13 +345,13 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
                   // 4-Stage Visual Stepper
                   Row(
                     children: [
-                      _buildGatepassStep(1, 'Auth', 'Driver Identity', _activeGatepassStage >= 1),
-                      _buildStepLine(_activeGatepassStage > 1),
-                      _buildGatepassStep(2, 'Bay Assign', 'Bay #3', _activeGatepassStage >= 2),
-                      _buildStepLine(_activeGatepassStage > 2),
-                      _buildGatepassStep(3, 'Loading', 'Grain Seal', _activeGatepassStage >= 3),
-                      _buildStepLine(_activeGatepassStage > 3),
-                      _buildGatepassStep(4, 'Exit QR', 'Dispatch Clear', _activeGatepassStage >= 4),
+                      _buildGatepassStep(1, 'Auth', 'Driver Identity', activeStage >= 1),
+                      _buildStepLine(activeStage > 1),
+                      _buildGatepassStep(2, 'Bay Assign', activeBay, activeStage >= 2),
+                      _buildStepLine(activeStage > 2),
+                      _buildGatepassStep(3, 'Loading', 'Grain Seal', activeStage >= 3),
+                      _buildStepLine(activeStage > 3),
+                      _buildGatepassStep(4, 'Exit QR', 'Dispatch Clear', activeStage >= 4),
                     ],
                   ),
 
@@ -268,15 +363,15 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
                   Row(
                     children: [
                       Expanded(
-                        child: _buildInfoCard('Driver Name', activeTruck['driverName'] as String, Icons.person_outline),
+                        child: _buildInfoCard('Driver Name', activeDriver, Icons.person_outline),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _buildInfoCard('Assigned Bay', activeTruck['bay'] as String, Icons.warehouse_outlined),
+                        child: _buildInfoCard('Assigned Bay', activeBay, Icons.warehouse_outlined),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _buildInfoCard('Commodity', activeTruck['commodity'] as String, Icons.inventory_2_outlined),
+                        child: _buildInfoCard('Current Status', activeStatus, Icons.local_shipping_outlined),
                       ),
                     ],
                   ),
@@ -285,10 +380,12 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
                   Row(
                     children: [
                       ElevatedButton.icon(
-                        onPressed: _advanceGatepass,
-                        icon: const Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.white),
+                        onPressed: _isAdvancing ? null : _advanceActiveGatepass,
+                        icon: _isAdvancing
+                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.white),
                         label: Text(
-                          _activeGatepassStage < 4 ? 'Advance Gatepass to Stage ${_activeGatepassStage + 1}' : 'Reset Gatepass Cycle',
+                          activeStage < 4 ? 'Advance Gatepass to Stage ${activeStage + 1}' : 'Re-verify Exit Clearance',
                           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                         style: ElevatedButton.styleFrom(
@@ -326,9 +423,16 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Godown Loading Bay Dispatch Queue',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppConstants.textPrimary),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Godown Loading Bay Dispatch Queue',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppConstants.textPrimary),
+                      ),
+                      if (_isLoading)
+                        const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   const Text(
@@ -336,76 +440,140 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
                     style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
                   ),
                   const SizedBox(height: 12),
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _truckQueue.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, idx) {
-                      final item = _truckQueue[idx];
-                      final isSelected = item['truckId'] == _selectedTruckId;
-                      return InkWell(
-                        onTap: () {
-                          setState(() {
-                            _selectedTruckId = item['truckId'] as String;
-                            _activeGatepassStage = item['stageIndex'] as int;
-                          });
-                        },
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isSelected ? const Color(0xFFFFFBEB) : const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isSelected ? const Color(0xFFD97706) : AppConstants.cardBorder,
-                              width: isSelected ? 1.5 : 1,
+
+                  if (hasLive)
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _gatepasses.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, idx) {
+                        final gp = _gatepasses[idx];
+                        final isSelected = idx == _selectedIdx;
+                        final stage = _getStageIndex(gp.status);
+                        return InkWell(
+                          onTap: () => setState(() => _selectedIdx = idx),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFFFFFBEB) : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFFD97706) : AppConstants.cardBorder,
+                                width: isSelected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.local_shipping_rounded,
+                                  color: isSelected ? const Color(0xFFD97706) : AppConstants.textSecondary,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${gp.truckId} • ${gp.driverName}',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: isSelected ? const Color(0xFF92400E) : AppConstants.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Gatepass: ${gp.gatepassId} • Bay: ${gp.loadingBay}',
+                                        style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'STAGE $stage: ${gp.status}',
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.local_shipping_rounded,
-                                color: isSelected ? const Color(0xFFD97706) : AppConstants.textSecondary,
+                        );
+                      },
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _fallbackQueue.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, idx) {
+                        final item = _fallbackQueue[idx];
+                        final isSelected = idx == _selectedIdx;
+                        return InkWell(
+                          onTap: () => setState(() => _selectedIdx = idx),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFFFFFBEB) : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFFD97706) : AppConstants.cardBorder,
+                                width: isSelected ? 1.5 : 1,
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${item['truckId']} • ${item['driverName']}',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: isSelected ? const Color(0xFF92400E) : AppConstants.textPrimary,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.local_shipping_rounded,
+                                  color: isSelected ? const Color(0xFFD97706) : AppConstants.textSecondary,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${item['truckId']} • ${item['driverName']}',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: isSelected ? const Color(0xFF92400E) : AppConstants.textPrimary,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Destination: ${item['fpsDestination']}',
-                                      style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
-                                    ),
-                                  ],
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Destination: ${item['fpsDestination']}',
+                                        style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFEF3C7),
-                                  borderRadius: BorderRadius.circular(6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'STAGE ${item['stageIndex']}: ${item['status']}',
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                                  ),
                                 ),
-                                child: Text(
-                                  'STAGE ${item['stageIndex']}: ${item['status']}',
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
+                        );
+                      },
+                    ),
                 ],
               ),
             ),
@@ -443,6 +611,7 @@ class _FieldOfficerDashboardScreenState extends State<FieldOfficerDashboardScree
           Text(
             subtitle,
             style: const TextStyle(fontSize: 9.5, color: AppConstants.textSecondary),
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
