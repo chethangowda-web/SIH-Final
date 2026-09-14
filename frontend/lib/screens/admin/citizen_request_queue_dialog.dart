@@ -163,12 +163,16 @@ class _CitizenRequestQueueDialogState extends State<CitizenRequestQueueDialog> w
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = (screenSize.width * 0.95).clamp(340.0, 1180.0);
+    final dialogHeight = (screenSize.height * 0.92).clamp(480.0, 880.0);
+
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 1160,
-        height: 840,
+        width: dialogWidth,
+        height: dialogHeight,
         decoration: BoxDecoration(
           color: const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(16),
@@ -510,7 +514,7 @@ class _CitizenRequestQueueDialogState extends State<CitizenRequestQueueDialog> w
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 48),
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 14),
       itemBuilder: (context, index) {
@@ -537,7 +541,7 @@ class _CitizenRequestQueueDialogState extends State<CitizenRequestQueueDialog> w
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 48),
       itemCount: _disputes.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
@@ -1113,67 +1117,104 @@ class _CitizenRequestQueueDialogState extends State<CitizenRequestQueueDialog> w
     );
   }
 
+  void _selectDecision(CitizenRequestModel item, String decisionKey) {
+    setState(() {
+      _selectedDecisions[item.requestId] = decisionKey;
+      final ctrl = _justificationControllers.putIfAbsent(item.requestId, () => TextEditingController());
+      if (ctrl.text.isEmpty || ctrl.text.startsWith('Approved') || ctrl.text.startsWith('Partial') || ctrl.text.startsWith('Redirected') || ctrl.text.startsWith('Deferred')) {
+        if (decisionKey == 'APPROVE') {
+          ctrl.text = 'Approved as per verified household quota & shop inventory headroom.';
+        } else if (decisionKey == 'PARTIAL_ALLOCATION') {
+          ctrl.text = 'Partial allocation authorized to balance shop inventory before next replenishment.';
+        } else if (decisionKey == 'REDIRECT_ALTERNATIVE_FPS') {
+          ctrl.text = 'Redirected to nearby alternative FPS to prevent local stockout.';
+        } else if (decisionKey == 'DEFER_TO_CYCLE') {
+          ctrl.text = 'Deferred to upcoming cycle dispatch slot.';
+        }
+      }
+    });
+  }
+
   Widget _buildOfficerActionSheet(CitizenRequestModel item) {
-    final currentDecision = _selectedDecisions[item.requestId] ?? 'APPROVE';
-    final isBusy = _isSubmitting[item.requestId] == true;
+    final currentDecision = _selectedDecisions[item.requestId] ?? (item.aiRecommendation ?? 'APPROVE');
+    final isBusy = _isSubmitting[item.requestId] ?? false;
+
+    // Ensure controllers have default values
+    _justificationControllers.putIfAbsent(item.requestId, () => TextEditingController(
+      text: item.officerJustification?.isNotEmpty == true
+          ? item.officerJustification!
+          : 'Approved as per verified household quota & shop inventory headroom.'
+    ));
+    _customQtyControllers.putIfAbsent(item.requestId, () => TextEditingController(text: item.aiRecommendedQtyKg.toStringAsFixed(1)));
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFFFFBEB),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.amber.shade300),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.amber.shade300, width: 1.2),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Top Row: Title + Decision Selector Buttons
           Row(
             children: [
-              const Icon(Icons.admin_panel_settings, size: 16, color: Colors.amber),
+              const Icon(Icons.admin_panel_settings_rounded, size: 17, color: Color(0xFFB45309)),
               const SizedBox(width: 6),
-              const Text('Authorized Government Action:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87)),
+              const Text(
+                'Authorized Government Action:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF78350F)),
+              ),
               const Spacer(),
-              // Decision Selector Buttons
-              _buildDecisionButton(item, 'APPROVE', 'Full Quota', Colors.green),
-              const SizedBox(width: 6),
-              _buildDecisionButton(item, 'PARTIAL_ALLOCATION', 'Partial (${item.aiRecommendedQtyKg.toStringAsFixed(0)}kg)', Colors.indigo),
-              const SizedBox(width: 6),
-              _buildDecisionButton(item, 'REDIRECT_ALTERNATIVE_FPS', 'Redirect FPS', Colors.purple),
-              const SizedBox(width: 6),
-              _buildDecisionButton(item, 'DEFER_TO_CYCLE', 'Defer', Colors.orange),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  _buildDecisionButton(item, 'APPROVE', 'Full Quota', Colors.green.shade700),
+                  _buildDecisionButton(item, 'PARTIAL_ALLOCATION', 'Partial (${item.aiRecommendedQtyKg.toStringAsFixed(0)}kg)', Colors.indigo.shade700),
+                  _buildDecisionButton(item, 'REDIRECT_ALTERNATIVE_FPS', 'Redirect FPS', Colors.purple.shade700),
+                  _buildDecisionButton(item, 'DEFER_TO_CYCLE', 'Defer', Colors.orange.shade800),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
 
           // Action input controls
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // If partial allocation, show custom qty input
               if (currentDecision == 'PARTIAL_ALLOCATION') ...[
                 SizedBox(
-                  width: 140,
+                  width: 130,
                   child: TextField(
                     controller: _customQtyControllers[item.requestId],
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
                       labelText: 'Allocated (kg)',
+                      labelStyle: const TextStyle(fontSize: 11),
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.indigo)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.indigo, width: 1.5)),
                     ),
                   ),
                 ),
                 const SizedBox(width: 10),
               ],
-
-              // Officer Justification Field
               Expanded(
                 child: TextField(
                   controller: _justificationControllers[item.requestId],
+                  style: const TextStyle(fontSize: 12),
                   decoration: InputDecoration(
-                    hintText: 'Mandatory: Enter official justification / statutory rationale...',
+                    labelText: 'Official Government Justification / Directive *',
+                    labelStyle: const TextStyle(fontSize: 11),
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                     filled: true,
                     fillColor: Colors.white,
@@ -1181,39 +1222,47 @@ class _CitizenRequestQueueDialogState extends State<CitizenRequestQueueDialog> w
                 ),
               ),
               const SizedBox(width: 10),
-
-              // Officer Role / Name
-              DropdownButton<String>(
-                value: _officerNames[item.requestId] ?? 'K. Srinivas Murthy (DSO)',
-                isDense: true,
-                items: const [
-                  DropdownMenuItem(value: 'K. Srinivas Murthy (DSO)', child: Text('K. Srinivas Murthy (DSO)', style: TextStyle(fontSize: 11))),
-                  DropdownMenuItem(value: 'Basavaraj V. (Depot Mgr)', child: Text('Basavaraj V. (Depot Mgr)', style: TextStyle(fontSize: 11))),
-                  DropdownMenuItem(value: 'District Admin', child: Text('District Admin', style: TextStyle(fontSize: 11))),
-                ],
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() {
-                      _officerNames[item.requestId] = val;
-                      _officerRoles[item.requestId] = val.contains('Depot') ? 'DEPOT_MANAGER' : 'DISTRICT_SUPPLY_OFFICER';
-                    });
-                  }
-                },
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _officerNames[item.requestId] ?? 'K. Srinivas Murthy (DSO)',
+                    isDense: true,
+                    style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w600),
+                    items: const [
+                      DropdownMenuItem(value: 'K. Srinivas Murthy (DSO)', child: Text('K. Srinivas Murthy (DSO)')),
+                      DropdownMenuItem(value: 'Basavaraj V. (Depot Mgr)', child: Text('Basavaraj V. (Depot Mgr)')),
+                      DropdownMenuItem(value: 'District Supply Admin', child: Text('District Supply Admin')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _officerNames[item.requestId] = val;
+                          _officerRoles[item.requestId] = val.contains('Depot') ? 'DEPOT_MANAGER' : 'DISTRICT_SUPPLY_OFFICER';
+                        });
+                      }
+                    },
+                  ),
+                ),
               ),
               const SizedBox(width: 10),
-
-              // Submit Button
               ElevatedButton.icon(
                 onPressed: isBusy ? null : () => _submitAuthorization(item),
                 icon: isBusy
                     ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.check_circle_outline, size: 14),
-                label: const Text('Authorize', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    : const Icon(Icons.check_circle_rounded, size: 15),
+                label: const Text('Authorize & Commit', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppConstants.primaryNavy,
+                  backgroundColor: const Color(0xFF0F172A),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  elevation: 0,
                 ),
               ),
             ],
@@ -1226,23 +1275,21 @@ class _CitizenRequestQueueDialogState extends State<CitizenRequestQueueDialog> w
   Widget _buildDecisionButton(CitizenRequestModel item, String decisionKey, String label, Color color) {
     final isSelected = (_selectedDecisions[item.requestId] ?? (item.aiRecommendation ?? 'APPROVE')) == decisionKey;
     return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedDecisions[item.requestId] = decisionKey;
-        });
-      },
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      onTap: () => _selectDecision(item, decisionKey),
+      borderRadius: BorderRadius.circular(6),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected ? color : Colors.white,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: color),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color, width: isSelected ? 1.5 : 1),
+          boxShadow: isSelected ? [BoxShadow(color: color.withValues(alpha: 0.25), blurRadius: 4, offset: const Offset(0, 1))] : null,
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: FontWeight.bold,
             color: isSelected ? Colors.white : color,
           ),

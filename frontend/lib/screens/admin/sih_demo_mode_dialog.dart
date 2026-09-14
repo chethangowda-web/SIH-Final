@@ -159,12 +159,16 @@ class _SihDemoModeDialogState extends State<SihDemoModeDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = (screenSize.width * 0.95).clamp(340.0, 1180.0);
+    final dialogHeight = (screenSize.height * 0.92).clamp(480.0, 880.0);
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Container(
-        width: 1180,
-        height: 840,
+        width: dialogWidth,
+        height: dialogHeight,
         padding: const EdgeInsets.all(22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
