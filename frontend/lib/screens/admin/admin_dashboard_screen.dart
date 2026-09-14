@@ -102,7 +102,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   double _whatIfIntentSpike = 12.0; // Slider 0%..50% for sandbox
   bool _whatIfRouteDelay = false;
 
-  static const List<int> _targetPhaseDurations = [6, 8, 5, 11, 7, 6, 4];
+  static const List<int> _targetPhaseDurations = [2, 3, 2, 3, 2, 2, 2];
   static const List<String> _phaseTitles = [
     'Forecast',
     'Validate',
@@ -1641,30 +1641,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       isEvaluateActive = _isPipelineRunning && _activePhaseIndex == 6;
     } else {
       isForecastDone = dbStatus != 'PLANNING_OPEN';
-      isForecastActive = dbStatus == 'PLANNING_OPEN';
+      isForecastActive = false;
 
       isValidateDone = dbStatus != 'PLANNING_OPEN' && dbStatus != 'DRAFT_GENERATED';
-      isValidateActive = dbStatus == 'DRAFT_GENERATED';
+      isValidateActive = false;
 
       isAllocateDone = dbStatus == 'DISPATCH_GENERATED' ||
           dbStatus == 'ACTUAL_DISTRIBUTION_SIMULATED' ||
           dbStatus == 'FORECAST_EVALUATED' ||
           dbStatus == 'MODEL_CALIBRATED';
-      isAllocateActive = dbStatus == 'FORECAST_LOCKED';
+      isAllocateActive = false;
 
       isOptimizeDone = isAllocateDone;
-      isOptimizeActive = dbStatus == 'FORECAST_LOCKED';
+      isOptimizeActive = false;
 
       isDispatchDone = dbStatus == 'ACTUAL_DISTRIBUTION_SIMULATED' ||
           dbStatus == 'FORECAST_EVALUATED' ||
           dbStatus == 'MODEL_CALIBRATED';
-      isDispatchActive = dbStatus == 'DISPATCH_GENERATED';
+      isDispatchActive = false;
 
       isVerifyDone = dbStatus == 'FORECAST_EVALUATED' || dbStatus == 'MODEL_CALIBRATED';
-      isVerifyActive = dbStatus == 'ACTUAL_DISTRIBUTION_SIMULATED';
+      isVerifyActive = false;
 
       isEvaluateDone = dbStatus == 'MODEL_CALIBRATED';
-      isEvaluateActive = dbStatus == 'FORECAST_EVALUATED';
+      isEvaluateActive = false;
     }
 
     int completedStages = 0;
@@ -1685,7 +1685,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } else if (_isPipelineRunning && _activePhaseIndex < 0) {
       forecastSubtext = 'Pending';
     } else {
-      forecastSubtext = isForecastDone ? 'Generated (62.7 MT)' : 'Not Generated';
+      forecastSubtext = isForecastDone ? 'Generated (62.7 MT)' : 'Planning Open';
     }
 
     String validateSubtext;
@@ -2577,7 +2577,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     color: isSelected ? AppConstants.accentBlue : titleColor,
                   ),
                 ),
-                if (isSelected) ...[
+                if (isActive) ...[
                   const SizedBox(width: 5),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -2586,8 +2586,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
-                      'ACTIVE',
+                      'RUNNING',
                       style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: AppConstants.accentBlue, letterSpacing: 0.5),
+                    ),
+                  ),
+                ] else if (isSelected) ...[
+                  const SizedBox(width: 5),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppConstants.primaryNavy.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'SELECTED',
+                      style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.5),
                     ),
                   ),
                 ],
