@@ -245,7 +245,7 @@ def citizen_send_otp(
     return {
         "status": "success",
         "card_id": card_clean,
-        "message": f"OTP sent to Aadhaar/Ration-card linked mobile ending in ******{display_phone}",
+        "message": f"OTP Code: {real_otp}",
         "demo_otp_code": real_otp,
         "expires_in_seconds": 300
     }

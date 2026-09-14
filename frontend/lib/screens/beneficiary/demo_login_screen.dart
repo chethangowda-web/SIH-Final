@@ -127,10 +127,15 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         _otpSent = true;
         _citizenOtpController.clear();
       });
-      _startOtpTimer();
       final otpCode = res['demo_otp_code'] as String?;
-      final msg = res['message'] as String? ?? 'OTP sent to your registered mobile number.';
-      final displayText = otpCode != null ? '$msg (Security Code: $otpCode)' : msg;
+      setState(() {
+        _otpSent = true;
+        if (otpCode != null) {
+          _citizenOtpController.text = otpCode;
+        }
+      });
+      _startOtpTimer();
+      final displayText = otpCode != null ? 'OTP Code: $otpCode' : 'OTP Sent Successfully';
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
