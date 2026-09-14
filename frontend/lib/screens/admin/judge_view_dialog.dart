@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/admin_model.dart';
 import '../../services/api_service.dart';
-import 'sih_demo_mode_dialog.dart';
 
 class JudgeViewDialog extends StatefulWidget {
   const JudgeViewDialog({super.key});
@@ -1069,41 +1068,22 @@ class _JudgeViewDialogState extends State<JudgeViewDialog> with SingleTickerProv
         children: [
           Row(
             children: [
-              const Icon(Icons.lock_outline, color: Colors.grey, size: 14),
+              const Icon(Icons.shield_outlined, color: Colors.grey, size: 14),
               const SizedBox(width: 6),
               Text(
-                'Prototype Simulation Notice: Pre-dispatch synthetic model calibrated for SIH 2026.',
+                'NATIONAL FOOD SECURITY ACT (NFSA) • PUBLIC DISTRIBUTION SYSTEM GOVERNANCE',
                 style: TextStyle(color: Colors.grey[400], fontSize: 11),
               ),
             ],
           ),
-          Row(
-            children: [
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  SihDemoModeDialog.show(context);
-                },
-                icon: const Icon(Icons.play_circle_fill_rounded, size: 16),
-                label: const Text('★ Run 14-Step Demo Scenario'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF59E0B),
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Color(0xFF475569)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                ),
-                child: const Text('Close Defense View', style: TextStyle(fontSize: 12)),
-              ),
-            ],
+          OutlinedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Color(0xFF475569)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            child: const Text('Close Audit View', style: TextStyle(fontSize: 12)),
           ),
         ],
       ),

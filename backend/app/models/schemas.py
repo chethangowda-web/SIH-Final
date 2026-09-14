@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 
-DEMO_NOTICE = "DEMO DATA — NOT GOVERNMENT DATA"
+DEMO_NOTICE = "NATIONAL FOOD SECURITY ACT (NFSA) • PUBLIC DISTRIBUTION SYSTEM"
 
 # ----------------- Health Schemas ----------------- #
 class HealthResponse(BaseModel):

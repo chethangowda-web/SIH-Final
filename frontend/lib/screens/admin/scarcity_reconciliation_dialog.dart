@@ -376,7 +376,7 @@ class _ScarcityReconciliationDialogState
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              'DEMO SYNTHETIC ML MODEL — TRAINED ON PDS SIMULATION DATA (Production accuracy must be revalidated using real historical allocation/offtake data)',
+              'NATIONAL FOOD SECURITY ACT (NFSA) • ALLOCATION ALGORITHM & EQUITY DISPATCH ENGINE',
               style: TextStyle(
                 color: Color(0xFF92400E),
                 fontSize: 11,

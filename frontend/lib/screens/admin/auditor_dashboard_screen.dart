@@ -3,7 +3,6 @@ import '../../core/constants.dart';
 import '../../models/admin_model.dart';
 import '../../services/api_service.dart';
 import 'manifest_management_dialog.dart';
-import 'judge_view_dialog.dart';
 import '../beneficiary/demo_login_screen.dart';
 
 class AuditorDashboardScreen extends StatefulWidget {
@@ -154,12 +153,6 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                           'INDEPENDENT READ-ONLY AUDIT MODE: Operational write actions (Forecast triggering, Quota editing, Gatepass advancing) are restricted to guarantee audit impartiality.',
                           style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF581C87)),
                         ),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () => showDialog(context: context, builder: (_) => const JudgeViewDialog()),
-                        icon: const Icon(Icons.gavel_rounded, size: 14, color: Colors.white),
-                        label: const Text('Integrity Defense', style: TextStyle(fontSize: 11, color: Colors.white)),
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF7E22CE), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
                       ),
                     ],
                   ),

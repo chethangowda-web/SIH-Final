@@ -3,7 +3,6 @@ import '../../core/constants.dart';
 import '../../models/health_model.dart';
 import '../../services/api_service.dart';
 import 'citizen_request_queue_dialog.dart';
-import 'sih_demo_mode_dialog.dart';
 import '../beneficiary/demo_login_screen.dart';
 
 class SystemAdminDashboardScreen extends StatefulWidget {
@@ -80,7 +79,7 @@ class _SystemAdminDashboardScreenState extends State<SystemAdminDashboardScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Reset Operational Workflow?'),
-        content: const Text('This will reset the planning cycle state back to PLANNING_OPEN for demonstration purposes.'),
+        content: const Text('This will reset the planning cycle state back to PLANNING_OPEN for the active dispatch period.'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
           ElevatedButton(
@@ -210,22 +209,16 @@ class _SystemAdminDashboardScreenState extends State<SystemAdminDashboardScreen>
                     runSpacing: 8,
                     children: [
                       ElevatedButton.icon(
-                        onPressed: () => showDialog(context: context, builder: (_) => const SihDemoModeDialog()),
-                        icon: const Icon(Icons.analytics_outlined, size: 16, color: Colors.white),
-                        label: const Text('System Diagnostics Suite', style: TextStyle(fontSize: 12, color: Colors.white)),
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
-                      ),
-                      ElevatedButton.icon(
                         onPressed: () => showDialog(context: context, builder: (_) => const CitizenRequestQueueDialog()),
                         icon: const Icon(Icons.inbox_outlined, size: 16, color: Colors.white),
-                        label: const Text('Citizen Request Queue', style: TextStyle(fontSize: 12, color: Colors.white)),
+                        label: const Text('Citizen Request & Preference Queue', style: TextStyle(fontSize: 12, color: Colors.white)),
                         style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
                       ),
                       ElevatedButton.icon(
-                        onPressed: _isResetting ? null : _handleResetDemo,
-                        icon: const Icon(Icons.restart_alt_rounded, size: 16, color: Colors.white),
-                        label: const Text('Reset Workflow Cycle', style: TextStyle(fontSize: 12, color: Colors.white)),
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                        onPressed: _loadHealthData,
+                        icon: const Icon(Icons.refresh, size: 16, color: Colors.white),
+                        label: const Text('Run Database Integrity Check', style: TextStyle(fontSize: 12, color: Colors.white)),
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
                       ),
                     ],
                   ),

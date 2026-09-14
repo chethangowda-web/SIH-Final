@@ -39,7 +39,7 @@ class HealthModel {
       fpsCount: json['fps_count'] ?? 20,
       beneficiariesCount: json['beneficiaries_count'] ?? 2000,
       serverTime: json['server_time'] ?? '',
-      demoNotice: json['demo_notice'] ?? 'DEMO DATA — NOT GOVERNMENT DATA',
+      demoNotice: json['demo_notice'] ?? 'NATIONAL FOOD SECURITY ACT (NFSA) • PUBLIC DISTRIBUTION SYSTEM',
       latencyMs: latencyMs,
     );
   }

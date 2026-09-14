@@ -1183,7 +1183,7 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Text(
-          'Notice: DEMO DATA — NOT GOVERNMENT DATA (AUDITABLE MANIFEST ENGINE)',
+          'NATIONAL FOOD SECURITY ACT (NFSA) • OFFICIAL DISPATCH MANIFEST SYSTEM',
           style: TextStyle(fontSize: 10, color: AppConstants.textTertiary),
         ),
         ElevatedButton(

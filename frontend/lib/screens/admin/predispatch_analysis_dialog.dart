@@ -289,7 +289,7 @@ class _PreDispatchAnalysisDialogState extends State<PreDispatchAnalysisDialog> {
               Icon(Icons.tune_rounded, size: 16, color: AppConstants.primaryNavy),
               SizedBox(width: 6),
               Text(
-                'DEMO SCENARIO:',
+                'PRE-DISPATCH RATIONALE:',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.4),
               ),
             ],
