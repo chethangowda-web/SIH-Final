@@ -1044,24 +1044,24 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
     _migration_008_sih_v2_features(cursor)
     conn.commit()
 
-    # Automatically populate full 620 Fair Price Shops dataset if not present
+    # Automatically populate full imported CSV master datasets (FPS, Beneficiaries, Historical Demand, Intents, Depots, Fleet)
     try:
         cursor.execute("SELECT COUNT(*) FROM fps;")
         fps_count = cursor.fetchone()[0]
-        if fps_count < 600:
+        cursor.execute("SELECT COUNT(*) FROM historical_demand;")
+        hist_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM intent;")
+        intent_count = cursor.fetchone()[0]
+
+        if fps_count < 600 or hist_count == 0 or intent_count == 0:
             import logging
             logger = logging.getLogger(__name__)
             try:
-                from app.data.seed_data import seed_fps, seed_beneficiaries
-                seeded_count = seed_fps(cursor)
-                logger.info(f"Auto-seeded {seeded_count} Fair Price Shops into database.")
-                try:
-                    seed_beneficiaries(cursor)
-                except Exception as b_err:
-                    logger.warning(f"Beneficiaries seed warning: {b_err}")
-                conn.commit()
+                from app.data.seed_data import seed_all_data
+                logger.info("Seeding full CSV datasets into database (621 FPS, 10K Beneficiaries, 22K History, 10K Intents)...")
+                seed_all_data(recreate=False)
             except Exception as s_err:
-                logger.warning(f"Auto seed FPS failed: {s_err}")
+                logger.warning(f"Auto seed all data failed: {s_err}")
     except Exception as e:
         pass
 

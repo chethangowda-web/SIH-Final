@@ -20,8 +20,10 @@ import sqlite3
 from pathlib import Path
 from app.core.database import get_db_connection, recreate_db, init_db
 
+from app.core.config import settings
+
 DEMO_NOTICE = "Govt. of Karnataka • Statewide PDS Operations (31 Districts • NFSA Compliant)"
-CURRENT_CYCLE = "2026-10"
+CURRENT_CYCLE = getattr(settings, "CURRENT_CYCLE", "2026-09")
 
 # Resolve CSV directory across various repository/deployment layouts
 POSSIBLE_CSV_DIRS = [
@@ -204,17 +206,11 @@ def seed_intents(cursor):
     seen = set()
     for row in rows:
         card_id = row["card_id"].strip()
-        cycle_id = row.get("cycle_id", CURRENT_CYCLE).strip()
         intended_fps = row["intended_fps_id"].strip()
         commodity = row.get("commodity", "Rice").strip()
 
         if commodity not in ("Rice", "Wheat"):
             commodity = "Rice"
-
-        key = (card_id, cycle_id, commodity)
-        if key in seen:
-            continue
-        seen.add(key)
 
         # Get entitlement for this beneficiary
         ent = ben_entitlements.get(card_id, {"rice": 20.0, "wheat": 5.0})
@@ -223,7 +219,11 @@ def seed_intents(cursor):
             qty = 5.0
 
         confidence = round(random.uniform(0.80, 0.99), 2)
-        records.append((card_id, cycle_id, intended_fps, commodity, qty, confidence, "SUBMITTED"))
+        for cid in ["2026-09", "2026-10"]:
+            key = (card_id, cid, commodity)
+            if key not in seen:
+                seen.add(key)
+                records.append((card_id, cid, intended_fps, commodity, qty, confidence, "SUBMITTED"))
 
     cursor.executemany("""
     INSERT OR REPLACE INTO intent (beneficiary_id, cycle_id, intended_fps_id, commodity, declared_quantity_kg, confidence, status)
@@ -467,17 +467,21 @@ def seed_all_data(recreate=False):
     """
     if recreate:
         recreate_db()
-    else:
-        init_db()
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Check if already seeded
+    # Check if full master datasets are already seeded across all tables
     cursor.execute("SELECT COUNT(*) FROM fps;")
-    if cursor.fetchone()[0] > 0 and not recreate:
+    fps_cnt = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM historical_demand;")
+    hist_cnt = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM intent;")
+    intent_cnt = cursor.fetchone()[0]
+
+    if fps_cnt >= 600 and hist_cnt > 1000 and intent_cnt > 1000 and not recreate:
         conn.close()
-        return {"status": "already_seeded", "message": "Database already contains seed data."}
+        return {"status": "already_seeded", "message": "Database already contains complete seed data."}
 
     random.seed(42)
 
