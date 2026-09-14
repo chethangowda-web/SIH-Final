@@ -216,11 +216,18 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
     setState(() => _isAdminLoggingIn = true);
     try {
-      await _apiService.login(username, password);
+      final authRes = await _apiService.login(username, password);
+      final role = (authRes['role'] as String? ?? 'DSO').toUpperCase();
+      final uName = authRes['username'] as String? ?? username;
+
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => AdminDashboardScreen(apiService: _apiService),
+          builder: (context) => AdminDashboardScreen(
+            apiService: _apiService,
+            userRole: role,
+            username: uName,
+          ),
         ),
       );
     } catch (e) {

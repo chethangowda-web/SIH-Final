@@ -71,8 +71,15 @@ class _WorkflowStageMeta {
 
 class AdminDashboardScreen extends StatefulWidget {
   final ApiService? apiService;
+  final String? userRole;
+  final String? username;
 
-  const AdminDashboardScreen({super.key, this.apiService});
+  const AdminDashboardScreen({
+    super.key,
+    this.apiService,
+    this.userRole,
+    this.username,
+  });
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
@@ -125,6 +132,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
+    if (widget.userRole != null && widget.userRole!.isNotEmpty) {
+      _apiService.authSession.setSession(
+        token: _apiService.authSession.token ?? 'demo_token',
+        userId: widget.username ?? _apiService.authSession.userId ?? 'official_1',
+        role: widget.userRole!,
+        cardId: _apiService.authSession.cardId,
+      );
+    }
     _loadDashboardData();
   }
 
@@ -335,7 +350,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _lockForecast() async {
-    if (_apiService.authSession.role == 'FIELD_OFFICER') {
+    if (_apiService.authSession.role == 'FIELD_OFFICER' || _apiService.authSession.role == 'AUDITOR') {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -347,9 +362,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               Text('Access Restricted (RBAC)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ],
           ),
-          content: const Text(
-            'Separation of Duties Enforced:\n\nField Officers are limited to physical loading bay & gatepass clearance operations. Policy decisions like Locking Aggregated Demand or Overriding Quotas require District Supply Officer (DSO) or Admin credentials.',
-            style: TextStyle(fontSize: 13, height: 1.4),
+          content: Text(
+            'Separation of Duties Enforced:\n\n${_apiService.authSession.role == 'AUDITOR' ? 'Auditors operate with read-only permissions.' : 'Field Officers are limited to physical loading bay & gatepass clearance operations.'} Policy decisions like Locking Aggregated Demand require District Supply Officer (DSO) or Admin credentials.',
+            style: const TextStyle(fontSize: 13, height: 1.4),
           ),
           actions: [
             TextButton(
@@ -1059,6 +1074,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            // ROLE WORKSPACE WINDOW BANNER
+                            _buildRoleWorkspaceBanner(),
+                            const SizedBox(height: AppConstants.space16),
+
                             // EXECUTIVE KPI SUMMARY ROW (Always visible at top)
                             _buildExecutiveKpiRow(),
                             const SizedBox(height: AppConstants.space16),
@@ -1149,6 +1168,260 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ],
                   ],
                 ),
+    );
+  }
+
+  // ROLE WORKSPACE WINDOW BANNER
+  Widget _buildRoleWorkspaceBanner() {
+    final role = _apiService.authSession.role;
+    final username = widget.username ?? _apiService.authSession.userId ?? 'Official User';
+
+    Color bannerBg;
+    Color borderColor;
+    Color titleColor;
+    IconData icon;
+    String roleName;
+    String badgeText;
+    String description;
+    List<Map<String, dynamic>> actions = [];
+
+    if (role == 'FIELD_OFFICER') {
+      bannerBg = const Color(0xFFFFFBEB);
+      borderColor = const Color(0xFFFDE68A);
+      titleColor = const Color(0xFF92400E);
+      icon = Icons.local_shipping_outlined;
+      roleName = 'Field Officer Workspace';
+      badgeText = 'Physical Execution Authority • Godown & Loading Bay';
+      description =
+          'On-the-ground physical execution authority. Operates digital QR gatepass clearance stages (Auth → Bay Assignment → Loading → Exit) and confirms physical loading against sealed manifests. Policy decisions (Forecast locking, Quota overrides) are restricted to maintain separation of duties controls against diversion.';
+      actions = [
+        {
+          'label': 'Open Gatepass Clearance',
+          'icon': Icons.qr_code_2_rounded,
+          'color': const Color(0xFFD97706),
+          'onTap': _showGatepassDialog,
+        },
+        {
+          'label': 'Loading Bay Inspection',
+          'icon': Icons.fact_check_outlined,
+          'color': const Color(0xFF2563EB),
+          'onTap': () => _inspectFps('FPS-KA-BLR-001'),
+        },
+        {
+          'label': 'View Incident Alerts',
+          'icon': Icons.warning_amber_rounded,
+          'color': const Color(0xFFDC2626),
+          'onTap': () => setState(() => _selectedMainTab = 0),
+        },
+      ];
+    } else if (role == 'AUDITOR') {
+      bannerBg = const Color(0xFFF3E8FF);
+      borderColor = const Color(0xFFE9D5FF);
+      titleColor = const Color(0xFF6B21A8);
+      icon = Icons.verified_user_outlined;
+      roleName = 'State Vigilance Auditor Workspace';
+      badgeText = 'Independent Oversight • Read-Only Governance Layer';
+      description =
+          'Independent read-only governance portal. Operates with strict read-only access to audit SHA-256 sealed manifests, digital gatepass logs, MAPE error rates, and evaluation records after the fact. Operational write actions (Forecast triggering, Quota overrides, Gatepass advancement) are restricted.';
+      actions = [
+        {
+          'label': 'Review Sealed Manifests',
+          'icon': Icons.lock_outlined,
+          'color': const Color(0xFF7E22CE),
+          'onTap': _showManifestDialog,
+        },
+        {
+          'label': 'Forecast vs Actual Evaluation',
+          'icon': Icons.query_stats_rounded,
+          'color': const Color(0xFF2563EB),
+          'onTap': _showEvaluationModal,
+        },
+        {
+          'label': 'Security & Audit Trail',
+          'icon': Icons.gavel_rounded,
+          'color': const Color(0xFF059669),
+          'onTap': _showJudgeViewDialog,
+        },
+      ];
+    } else if (role == 'ADMIN') {
+      bannerBg = const Color(0xFFF1F5F9);
+      borderColor = const Color(0xFFCBD5E1);
+      titleColor = const Color(0xFF0F172A);
+      icon = Icons.admin_panel_settings_rounded;
+      roleName = 'System Administrator Workspace';
+      badgeText = 'Master System Management & Platform Configuration';
+      description =
+          'Master administration console. Configures user roles, manages master dataset synchronization, inspects infrastructure health diagnostics, and controls system-level workflow states.';
+      actions = [
+        {
+          'label': 'System Health & Diagnostics',
+          'icon': Icons.health_and_safety_outlined,
+          'color': const Color(0xFF0F172A),
+          'onTap': _showSihDemoModeDialog,
+        },
+        {
+          'label': 'Citizen Request Queue',
+          'icon': Icons.inbox_outlined,
+          'color': const Color(0xFF2563EB),
+          'onTap': _showCitizenRequestQueueDialog,
+        },
+        {
+          'label': 'Reset Operational Workflow',
+          'icon': Icons.restart_alt_rounded,
+          'color': const Color(0xFFDC2626),
+          'onTap': _resetDemoWorkflow,
+        },
+      ];
+    } else {
+      bannerBg = const Color(0xFFF0FDF4);
+      borderColor = const Color(0xFFBBF7D0);
+      titleColor = const Color(0xFF166534);
+      icon = Icons.account_balance_outlined;
+      roleName = 'District Supply Officer (DSO) Workspace';
+      badgeText = 'Planning & Decision Authority • 7-Stage Workflow Stepper';
+      description =
+          'Desk-based command dashboard. Operates the 7-stage workflow stepper (Forecast → Validate → Allocate → Optimize → Dispatch → Verify → Evaluate). Authorized to trigger AI forecasts, lock demand quota baselines, review pre-dispatch incidents, manually override AI quotas, and inspect XAI causal decision traces.';
+      actions = [
+        {
+          'label': 'Trigger AI Forecast Pipeline',
+          'icon': Icons.auto_awesome_rounded,
+          'color': const Color(0xFF166534),
+          'onTap': () => _startPreDispatchPipeline(isRerun: true),
+        },
+        {
+          'label': 'Lock Demand Quota Baseline',
+          'icon': Icons.lock_clock_outlined,
+          'color': const Color(0xFF2563EB),
+          'onTap': _lockForecast,
+        },
+        {
+          'label': 'What-If Sensitivity Sandbox',
+          'icon': Icons.science_outlined,
+          'color': const Color(0xFFD97706),
+          'onTap': () => _showForecastWhatIfDialog('FPS-KA-BLR-001'),
+        },
+        {
+          'label': 'XAI Causal Decision Trace',
+          'icon': Icons.alt_route_rounded,
+          'color': const Color(0xFF7E22CE),
+          'onTap': () => _inspectFps('FPS-KA-BLR-001'),
+        },
+      ];
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bannerBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: titleColor.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: titleColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: titleColor, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            roleName,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: titleColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: titleColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'User: $username',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: titleColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      badgeText,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: titleColor.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            description,
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.4,
+              color: Colors.black.withValues(alpha: 0.75),
+            ),
+          ),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: actions.map((act) {
+                final color = act['color'] as Color;
+                return ElevatedButton.icon(
+                  onPressed: act['onTap'] as VoidCallback?,
+                  icon: Icon(act['icon'] as IconData, size: 15, color: Colors.white),
+                  label: Text(
+                    act['label'] as String,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: color,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    elevation: 1,
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

@@ -1475,6 +1475,11 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
       );
     }
 
+    final hasPlanLocked = _activeIntents.isNotEmpty || _deliveryRecords.isNotEmpty;
+    final activeFpsName = _activeIntents.isNotEmpty
+        ? _activeIntents.first.intendedFpsName
+        : (_deliveryRecords.isNotEmpty ? (_deliveryRecords.first.intendedFpsName ?? _deliveryRecords.first.registeredFpsName ?? homeFpsName) : homeFpsName);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1489,26 +1494,46 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          tr('service.plan_subtitle'),
-          style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+          hasPlanLocked
+              ? 'Collection plan registered. Further modifications are locked for Cycle 2026-09.'
+              : tr('service.plan_subtitle'),
+          style: TextStyle(
+            fontSize: 12,
+            color: hasPlanLocked ? const Color(0xFF15803D) : AppConstants.textSecondary,
+            fontWeight: hasPlanLocked ? FontWeight.w600 : FontWeight.normal,
+          ),
         ),
         const SizedBox(height: AppConstants.space12),
 
         // Official Fair Price Shop Collection Card
         _buildServiceChoiceCard(
-          title: tr('service.fps_choice_title'),
-          icon: Icons.storefront_outlined,
-          iconColor: AppConstants.primaryNavy,
-          iconBg: const Color(0xFFEFF6FF),
-          badgeText: tr('service.fps_choice_badge'),
-          badgeColor: AppConstants.accentBlue,
-          description: tr('service.fps_choice_desc'),
-          contextDetail: tr('service.fps_choice_detail', params: {'fpsName': homeFpsName}),
+          title: hasPlanLocked ? 'Collect at Fair Price Shop (Locked)' : tr('service.fps_choice_title'),
+          icon: hasPlanLocked ? Icons.lock_outline_rounded : Icons.storefront_outlined,
+          iconColor: hasPlanLocked ? const Color(0xFF15803D) : AppConstants.primaryNavy,
+          iconBg: hasPlanLocked ? const Color(0xFFF0FDF4) : const Color(0xFFEFF6FF),
+          badgeText: hasPlanLocked ? '🔒 PLAN LOCKED FOR CYCLE' : tr('service.fps_choice_badge'),
+          badgeColor: hasPlanLocked ? const Color(0xFF15803D) : AppConstants.accentBlue,
+          description: hasPlanLocked
+              ? 'Your collection plan has been recorded and locked in pre-dispatch logistics for $activeFpsName.'
+              : tr('service.fps_choice_desc'),
+          contextDetail: tr('service.fps_choice_detail', params: {'fpsName': activeFpsName ?? homeFpsName}),
           priceTag: tr('service.fps_choice_price'),
-          buttonLabel: tr('service.fps_choice_btn'),
-          buttonIcon: Icons.store_rounded,
-          isPrimary: true,
-          onTap: () => _navigateToIntentSelection(initialMode: 'FPS_COLLECTION'),
+          buttonLabel: hasPlanLocked ? '✓ Plan Locked ($activeFpsName)' : tr('service.fps_choice_btn'),
+          buttonIcon: hasPlanLocked ? Icons.lock_rounded : Icons.store_rounded,
+          isPrimary: !hasPlanLocked,
+          onTap: () {
+            if (hasPlanLocked) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Your collection plan for $activeFpsName (Cycle 2026-09) is registered and locked in pre-dispatch logistics.'),
+                  backgroundColor: const Color(0xFF15803D),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            } else {
+              _navigateToIntentSelection(initialMode: 'FPS_COLLECTION');
+            }
+          },
         ),
       ],
     );
