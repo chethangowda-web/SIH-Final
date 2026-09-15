@@ -14,12 +14,13 @@
 
 ### 🔑 Demo Credentials for Live Evaluation
 
-| Portal / Persona | Access Path | Credentials |
-|---|---|---|
-| **District Supply Officer (DSO)** | Department Login Tab | Username: `admin_user`<br>Password: `admin_pass` |
-| **Field Supply Officer** | Department Login Tab | Username: `dso_user`<br>Password: `dso_pass` |
-| **Citizen / Beneficiary OTP** | Citizen OTP Tab | Ration Card ID: `BEN-KA-0001`<br>Demo OTP: `123456` |
-| **1-Click Demo Personas** | Demo Personas Tab | Resident / Migrant Worker Personas |
+| Portal / Persona | Access Mode | Role Identifier | Credentials |
+|---|---|---|---|
+| **🏛️ DSO (Command)** | Official Role Portal | `DSO` | Username: `dso_user`<br>Password: `dso_pass` |
+| **🔍 Field Food Inspector** | Official Role Portal | `FIELD_FOOD_INSPECTOR` | Username: `inspector_user`<br>Password: `inspector_pass` |
+| **🏪 FPS Owner (Fair Price Shop)** | Official Role Portal | `FPS_OWNER` | Username: `fps_user`<br>Password: `fps_pass` |
+| **⚡ System Administrator** | Official Role Portal | `ADMIN` | Username: `admin_user`<br>Password: `admin_pass` / `admin1234` |
+| **🇮🇳 Citizen / Beneficiary** | Citizen Aadhaar/Card OTP | `BENEFICIARY` | Card: `RC-KA-000001` to `RC-KA-010000`<br>Demo OTP: `123456` |
 
 ---
 
