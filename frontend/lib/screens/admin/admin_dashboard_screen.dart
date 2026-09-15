@@ -1126,29 +1126,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // ROLE WORKSPACE WINDOW BANNER
-                            _buildRoleWorkspaceBanner(),
+                            // SECTION 1: ENTERPRISE COMMAND BAR & 7-STAGE PRIMARY WORKFLOW STEPPER
+                            _buildEnterpriseCommandBar(),
                             const SizedBox(height: AppConstants.space16),
 
-                            // EXECUTIVE KPI SUMMARY ROW (Always visible at top)
+                            // SECTION 2: EXECUTIVE KPI ROW (5 Polished KPI Cards)
                             _buildExecutiveKpiRow(),
-                            const SizedBox(height: AppConstants.space16),
+                            const SizedBox(height: AppConstants.space20),
 
-                            // MAIN NAVIGATION TAB SWITCHER
-                            _buildMainTabSwitcher(),
-                            const SizedBox(height: AppConstants.space16),
+                            // SECTION 3: OPERATIONAL HEALTH & ATTENTION ITEMS (2x2 Grid + Live Alerts)
+                            _buildOperationalHealthAndAlerts(),
+                            const SizedBox(height: AppConstants.space20),
 
-                            // TAB CONTENT
-                            if (_selectedMainTab == 0) ...[
-                              // TAB 0: OVERVIEW & OPERATIONAL INCIDENTS
-                              _buildOperationalHealthAndAlerts(),
-                            ] else if (_selectedMainTab == 1) ...[
-                              // TAB 1: ALL 620 FAIR PRICE SHOPS MATRIX
-                              _buildFpsOperationsMatrix(),
-                            ] else ...[
-                              // TAB 2: AI PIPELINE & DECISION TRACE TOOLS
-                              _buildEnterpriseCommandBar(),
-                            ],
+                            // SECTION 4: FAIR PRICE SHOP OPERATIONS MATRIX
+                            _buildFpsOperationsMatrix(),
 
                             const SizedBox(height: AppConstants.space20),
 
@@ -1823,77 +1814,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ),
         const SizedBox(width: 8),
 
-        // Official Role Badge (DSO, Field Officer, Auditor)
-        Builder(
-          builder: (context) {
-            final role = _apiService.authSession.role;
-            if (role == 'FIELD_OFFICER') {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFFF59E0B)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.local_shipping_outlined, size: 12, color: Color(0xFFB45309)),
-                    SizedBox(width: 4),
-                    Text(
-                      'FIELD OFFICER (LOADING BAY)',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF92400E)),
-                    ),
-                  ],
-                ),
-              );
-            } else if (role == 'DSO') {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDCFCE7),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFF22C55E)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.admin_panel_settings_outlined, size: 12, color: Color(0xFF15803D)),
-                    SizedBox(width: 4),
-                    Text(
-                      'DSO (DISTRICT COMMAND)',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF166534)),
-                    ),
-                  ],
-                ),
-              );
-            } else if (role == 'AUDITOR') {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF3E8FF),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFFA855F7)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.verified_user_outlined, size: 12, color: Color(0xFF7E22CE)),
-                    SizedBox(width: 4),
-                    Text(
-                      'STATE VIGILANCE AUDITOR',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF6B21A8)),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          },
-        ),
-        const SizedBox(width: 8),
-
-
         // Refresh
         IconButton(
           tooltip: 'Refresh Telemetry',
@@ -1910,6 +1830,110 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           },
           icon: const Icon(Icons.people_alt_outlined, size: 16, color: Colors.white),
           label: const Text('Citizen Portal', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700)),
+        ),
+        const SizedBox(width: 4),
+
+        // Operations ▾ Secondary Actions Menu
+        PopupMenuButton<String>(
+          tooltip: 'More Operations & Tools',
+          onSelected: (value) {
+            if (value == 'WHAT_IF') _showForecastWhatIfDialog('FPS-KA-BLR-001');
+            if (value == 'CITIZEN_QUEUE') _showCitizenRequestQueueDialog();
+            if (value == 'SCARCITY') _showScarcityDialog();
+            if (value == 'EVALUATION') _showEvaluationModal();
+            if (value == 'GATEPASS') _showGatepassDialog();
+            if (value == 'LOCK_FORECAST') _lockForecast();
+            if (value == 'RESET') _resetDemoWorkflow();
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.more_horiz_rounded, size: 16, color: Colors.white),
+                SizedBox(width: 4),
+                Text('Operations ▾', style: TextStyle(fontSize: 11.5, color: Colors.white, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'WHAT_IF',
+              child: Row(
+                children: [
+                  Icon(Icons.science_outlined, color: AppConstants.accentBlue, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('What-If Sensitivity Sandbox', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'CITIZEN_QUEUE',
+              child: Row(
+                children: [
+                  Icon(Icons.inbox_outlined, color: AppConstants.accentBlue, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Citizen Request Queue', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'SCARCITY',
+              child: Row(
+                children: [
+                  Icon(Icons.balance_outlined, color: AppConstants.accentAmber, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Scarcity & Fair-Share', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'EVALUATION',
+              child: Row(
+                children: [
+                  Icon(Icons.analytics_outlined, color: AppConstants.successGreen, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Closed-Loop Evaluation', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'GATEPASS',
+              child: Row(
+                children: [
+                  Icon(Icons.qr_code_scanner_outlined, color: AppConstants.accentBlue, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Verify Gatepass QR', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'LOCK_FORECAST',
+              child: Row(
+                children: [
+                  Icon(Icons.lock_clock_outlined, color: AppConstants.primaryNavy, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Lock Demand Baseline', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                ],
+              ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: 'RESET',
+              child: Row(
+                children: [
+                  Icon(Icons.restart_alt_rounded, color: AppConstants.dangerRed, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Reset Demo Workflow', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppConstants.dangerRed))),
+                ],
+              ),
+            ),
+          ],
         ),
         const SizedBox(width: 4),
 
@@ -2417,89 +2441,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
             ),
 
-          // 2. PRIMARY 7-STAGE WORKFLOW STEPPER WITH LIVE TIMERS & INTERACTIVE STAGE SELECTOR
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            margin: const EdgeInsets.only(bottom: 10),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-              ),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF334155)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF34D399),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(color: Color(0xFF34D399), blurRadius: 6, spreadRadius: 1),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'PRE-DISPATCH 7-STAGE INTELLIGENCE PIPELINE',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.22),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: const Color(0xFF60A5FA).withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        'STAGE 0${_selectedWorkflowStage + 1} OF 07 ACTIVE',
-                        style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: Color(0xFF93C5FD), letterSpacing: 0.3),
-                      ),
-                    ),
-                  ],
-                ),
-                Wrap(
-                  spacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    const Icon(Icons.touch_app_outlined, size: 13, color: Color(0xFF94A3B8)),
-                    Text(
-                      'Click any stage card to inspect live telemetry & solver variables',
-                      style: TextStyle(fontSize: 10.5, color: Colors.white.withValues(alpha: 0.7), fontStyle: FontStyle.italic),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          // 2. PRIMARY 7-STAGE WORKFLOW STEPPER WITH LIVE TIMERS
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                // TRIGGER: BENEFICIARY DEMAND CONFIRMATION STEP
-                _buildBeneficiaryTriggerStepCard(_dashboardData?.isDemandLocked ?? false),
-                _buildStepConnector(isDone: _dashboardData?.isDemandLocked ?? false),
-
                 _buildWorkflowStep(
                   1,
                   'Forecast',
@@ -2580,18 +2526,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ],
             ),
           ),
-          const SizedBox(height: AppConstants.space16),
-
-          // 3. ENTERPRISE STAGE INTELLIGENCE & OPERATIONS WORKBENCH
-          _buildStageIntelligenceWorkbench(
-            isForecastDone: isForecastDone,
-            isValidateDone: isValidateDone,
-            isAllocateDone: isAllocateDone,
-            isOptimizeDone: isOptimizeDone,
-            isDispatchDone: isDispatchDone,
-            isVerifyDone: isVerifyDone,
-            isEvaluateDone: isEvaluateDone,
-          ),
         ],
       ),
     );
@@ -2613,13 +2547,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             Container(
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: isLocked ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                color: isLocked ? const Color(0xFFE2E8F0) : const Color(0xFFDCFCE7),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(
-                isLocked ? Icons.verified_user_rounded : Icons.pending_actions_rounded,
+                isLocked ? Icons.lock_rounded : Icons.schedule_rounded,
                 size: 18,
-                color: isLocked ? const Color(0xFF15803D) : const Color(0xFFB45309),
+                color: isLocked ? AppConstants.primaryNavy : const Color(0xFF15803D),
               ),
             ),
             const SizedBox(width: 10),
@@ -2632,25 +2566,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   Text(
                     'PDS PLANNING CYCLE: DAY $planningDay OF 30',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w900,
-                      color: isLocked ? const Color(0xFF15803D) : AppConstants.primaryNavy,
+                      color: isLocked ? AppConstants.primaryNavy : const Color(0xFF15803D),
                       letterSpacing: 0.4,
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: isLocked ? const Color(0xFFDCFCE7) : const Color(0xFFEFF6FF),
+                      color: isLocked ? const Color(0xFFEFF6FF) : const Color(0xFFDCFCE7),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: isLocked ? const Color(0xFF86EFAC) : const Color(0xFF93C5FD)),
+                      border: Border.all(color: isLocked ? const Color(0xFF93C5FD) : const Color(0xFF86EFAC)),
                     ),
                     child: Text(
-                      isLocked ? '✓ BENEFICIARY DEMAND CONFIRMED & LOCKED' : '⚡ AWAITING BENEFICIARY DEMAND CONFIRMATION',
+                      isLocked ? '🔒 DEMAND BASELINE LOCKED' : 'CHOICE WINDOW OPEN (DAY 21–24)',
                       style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        color: isLocked ? const Color(0xFF15803D) : const Color(0xFF1D4ED8),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: isLocked ? const Color(0xFF1D4ED8) : const Color(0xFF15803D),
                       ),
                     ),
                   ),
@@ -2676,8 +2610,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
         Widget descriptionText = Text(
           isLocked
-              ? 'Beneficiary demand has been confirmed & locked. The 7-stage Pre-Dispatch Intelligence Pipeline is active and executing on this locked baseline.'
-              : 'Beneficiaries are confirming their demand preferences. Once beneficiary confirms demand, the 7-stage intelligence cycle initiates automatically.',
+              ? 'Beneficiary demand has been locked for this cycle. Pre-dispatch pipeline is executing on this baseline.'
+              : 'Beneficiaries are submitting preferred FPS / doorstep requests. District Supply Officer locks demand on Day 25 to initiate pre-dispatch allocation.',
           style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary, height: 1.3),
         );
 
@@ -2699,18 +2633,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ),
               ElevatedButton.icon(
-                onPressed: _isActionExecuting ? null : () async {
-                  await _lockForecast();
-                  // Trigger full 7-stage cycle simulation when beneficiary demand is confirmed!
-                  _startPreDispatchPipeline(isRerun: true);
-                },
-                icon: const Icon(Icons.play_circle_fill_rounded, size: 16),
-                label: const Text('Confirm Demand & Start 7 Cycle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+                onPressed: _isActionExecuting ? null : _lockForecast,
+                icon: const Icon(Icons.lock_outline_rounded, size: 14),
+                label: const Text('Lock Demand', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF16A34A),
+                  backgroundColor: AppConstants.primaryNavy,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  elevation: 2,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
             ],
