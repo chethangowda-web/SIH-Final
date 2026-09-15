@@ -140,6 +140,47 @@ app.include_router(officer_router, include_in_schema=False)
 if WEB_BUILD_DIR.exists():
     app.mount("/app", StaticFiles(directory=str(WEB_BUILD_DIR), html=True), name="flutter_web")
 
+    if (WEB_BUILD_DIR / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(WEB_BUILD_DIR / "assets")), name="flutter_assets")
+    if (WEB_BUILD_DIR / "canvaskit").exists():
+        app.mount("/canvaskit", StaticFiles(directory=str(WEB_BUILD_DIR / "canvaskit")), name="flutter_canvaskit")
+
+    @app.get("/flutter_bootstrap.js", include_in_schema=False)
+    async def serve_bootstrap_root():
+        f = WEB_BUILD_DIR / "flutter_bootstrap.js"
+        if f.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(f, media_type="application/javascript")
+        from fastapi import Response
+        return Response(status_code=404)
+
+    @app.get("/main.dart.js", include_in_schema=False)
+    async def serve_main_dart_root():
+        f = WEB_BUILD_DIR / "main.dart.js"
+        if f.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(f, media_type="application/javascript")
+        from fastapi import Response
+        return Response(status_code=404)
+
+    @app.get("/manifest.json", include_in_schema=False)
+    async def serve_manifest_root():
+        f = WEB_BUILD_DIR / "manifest.json"
+        if f.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(f, media_type="application/json")
+        from fastapi import Response
+        return Response(status_code=404)
+
+    @app.get("/favicon.png", include_in_schema=False)
+    async def serve_favicon_root():
+        f = WEB_BUILD_DIR / "favicon.png"
+        if f.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(f, media_type="image/png")
+        from fastapi import Response
+        return Response(status_code=404)
+
     @app.get("/app/{full_path:path}", include_in_schema=False)
     async def serve_flutter_spa(full_path: str):
         """Fallback handler for Flutter Web SPA client-side routing."""
