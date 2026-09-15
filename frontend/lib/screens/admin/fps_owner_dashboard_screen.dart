@@ -254,7 +254,6 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
           ],
         ),
       );
-    });
   }
 
   @override
@@ -291,9 +290,11 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
         children: [
           // Sub Nav Tabs
           Container(
-            color: Colors.white,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            border: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
             child: Row(
               children: [
                 _buildTabButton(0, '📦 Current Stock', Icons.inventory_2_outlined),

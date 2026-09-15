@@ -1060,6 +1060,41 @@ def _migration_008_sih_v2_features(cursor: sqlite3.Cursor) -> None:
     );
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS truck_route_tracking (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tracking_id TEXT NOT NULL UNIQUE,
+        truck_id TEXT NOT NULL UNIQUE,
+        gatepass_id TEXT NOT NULL,
+        cycle_id TEXT NOT NULL DEFAULT '2026-09',
+        driver_name TEXT NOT NULL,
+        driver_phone TEXT NOT NULL,
+        source_depot_id TEXT NOT NULL,
+        source_depot_name TEXT NOT NULL,
+        destination_fps_id TEXT NOT NULL,
+        destination_fps_name TEXT NOT NULL,
+        assigned_route_id TEXT NOT NULL,
+        route_name TEXT NOT NULL,
+        current_status TEXT NOT NULL DEFAULT 'DISPATCH_CLEARED',
+        checkpoints_json TEXT NOT NULL,
+        current_checkpoint_idx INTEGER NOT NULL DEFAULT 0,
+        current_checkpoint_name TEXT NOT NULL,
+        next_checkpoint_name TEXT NOT NULL,
+        distance_travelled_km REAL NOT NULL DEFAULT 0.0,
+        distance_remaining_km REAL NOT NULL DEFAULT 14.5,
+        total_route_distance_km REAL NOT NULL DEFAULT 14.5,
+        eta_minutes INTEGER NOT NULL DEFAULT 35,
+        expected_arrival_time TEXT NOT NULL,
+        delay_status TEXT NOT NULL DEFAULT 'ON_TIME',
+        delay_minutes INTEGER NOT NULL DEFAULT 0,
+        delay_reason TEXT,
+        route_deviation_flag INTEGER NOT NULL DEFAULT 0,
+        deviation_reason TEXT,
+        last_telemetry_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
 
 def _migration_009_beneficiary_phone(cursor: sqlite3.Cursor) -> None:
     """009: Add phone field to beneficiaries and seed first 50 entries."""

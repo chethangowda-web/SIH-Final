@@ -2702,7 +2702,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 onPressed: _isActionExecuting ? null : () async {
                   await _lockForecast();
                   // Trigger full 7-stage cycle simulation when beneficiary demand is confirmed!
-                  _runFullPipelineSimulation();
+                  _startPreDispatchPipeline(isRerun: true);
                 },
                 icon: const Icon(Icons.play_circle_fill_rounded, size: 16),
                 label: const Text('Confirm Demand & Start 7 Cycle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
@@ -3376,13 +3376,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
                           const Row(
                             children: [
                               Icon(Icons.account_tree_rounded, size: 15, color: AppConstants.primaryNavy),
@@ -3520,9 +3526,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ],
             ),
           ),
-        ],
-      ),
-    );
+        );
   }
 
   Widget _buildExecutionStepCard(int stepNum, String title, String detail, String tag, Color accent) {

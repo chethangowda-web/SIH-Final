@@ -124,3 +124,106 @@ def verify_truck_arrival(
         "telemetry_status": arrival_status,
         "message": f"Truck '{payload.truck_id}' is {round(dist_meters, 1)}m from '{fps_name}'. Status: {arrival_status}"
     }
+
+
+# =====================================================================
+# Phase 14A: Live Truck Route Tracking & Checkpoint Movement Endpoints
+# =====================================================================
+
+class DelayReportIn(BaseModel):
+    delay_minutes: int = Field(15, description="Reported delay duration in minutes")
+    reason: str = Field("Traffic Congestion on Highway Bypass", description="Operational reason for delay")
+
+class DeviationReportIn(BaseModel):
+    reason: str = Field("Unscheduled detour due to road maintenance", description="Deviation rationale")
+
+
+@router.get("/tracking/active")
+def get_active_truck_tracking_list(
+    cycle_id: str = Query("2026-09", description="Planning cycle ID"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Retrieve all active en-route and dispatched trucks with checkpoint tracking metrics."""
+    from app.services.truck_tracking_service import truck_tracking_service
+    return truck_tracking_service.get_all_active_trackings(db, cycle_id=cycle_id)
+
+
+@router.get("/tracking/{truck_id}")
+def get_truck_tracking_detail(
+    truck_id: str,
+    cycle_id: str = Query("2026-09", description="Planning cycle ID"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Retrieve live persistent route, telemetry, and checkpoint history for a specific truck."""
+    from app.services.truck_tracking_service import truck_tracking_service
+    return truck_tracking_service.get_truck_tracking(db, truck_id=truck_id, cycle_id=cycle_id)
+
+
+@router.post("/tracking/{truck_id}/advance")
+def advance_truck_checkpoint_api(
+    truck_id: str,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Field Officer Operation: Advance truck to the next sequential route checkpoint.
+    Updates distance travelled, remaining distance, ETA, and persists state in SQLite.
+    """
+    from app.services.truck_tracking_service import truck_tracking_service
+    return truck_tracking_service.advance_checkpoint(db, truck_id=truck_id)
+
+
+@router.post("/tracking/{truck_id}/report-delay")
+def report_truck_delay_api(
+    truck_id: str,
+    payload: DelayReportIn,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Field Officer Operation: Report operational delay and update dynamic arrival ETA.
+    """
+    from app.services.truck_tracking_service import truck_tracking_service
+    return truck_tracking_service.report_delay(
+        db, truck_id=truck_id,
+        delay_minutes=payload.delay_minutes,
+        reason=payload.reason
+    )
+
+
+@router.post("/tracking/{truck_id}/report-deviation")
+def report_truck_deviation_api(
+    truck_id: str,
+    payload: DeviationReportIn,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Field Officer Operation: Flag route deviation with active warning banner.
+    """
+    from app.services.truck_tracking_service import truck_tracking_service
+    return truck_tracking_service.report_route_deviation(
+        db, truck_id=truck_id,
+        reason=payload.reason
+    )
+
+
+@router.post("/tracking/{truck_id}/confirm-arrival")
+def confirm_truck_arrival_api(
+    truck_id: str,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Field Officer Operation: Confirm physical arrival of truck at target FPS.
+    """
+    from app.services.truck_tracking_service import truck_tracking_service
+    return truck_tracking_service.confirm_arrival(db, truck_id=truck_id)
+
+
+@router.post("/tracking/{truck_id}/confirm-delivery")
+def confirm_truck_delivery_api(
+    truck_id: str,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Field Officer Operation: Confirm goods unloaded and mark dispatch lifecycle complete.
+    """
+    from app.services.truck_tracking_service import truck_tracking_service
+    return truck_tracking_service.confirm_delivery(db, truck_id=truck_id)

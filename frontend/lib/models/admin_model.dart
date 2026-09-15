@@ -3586,13 +3586,126 @@ class OperationalIncident {
   }
 }
 
+class RouteCheckpoint {
+  final int index;
+  final String name;
+  final String type; // 'ORIGIN', 'TOUCHPOINT', 'DESTINATION'
+  final double distanceKm;
+  final String status; // 'COMPLETED', 'IN_PROGRESS', 'PENDING'
+  final String? estimatedTime;
+  final String? actualTime;
 
+  RouteCheckpoint({
+    required this.index,
+    required this.name,
+    required this.type,
+    required this.distanceKm,
+    required this.status,
+    this.estimatedTime,
+    this.actualTime,
+  });
 
+  factory RouteCheckpoint.fromJson(Map<String, dynamic> json) {
+    return RouteCheckpoint(
+      index: json['index'] ?? 0,
+      name: json['name'] ?? '',
+      type: json['type'] ?? 'TOUCHPOINT',
+      distanceKm: (json['distance_km'] as num?)?.toDouble() ?? 0.0,
+      status: json['status'] ?? 'PENDING',
+      estimatedTime: json['estimated_time'],
+      actualTime: json['actual_time'],
+    );
+  }
 
+  Map<String, dynamic> toJson() => {
+    'index': index,
+    'name': name,
+    'type': type,
+    'distance_km': distanceKm,
+    'status': status,
+    'estimated_time': estimatedTime,
+    'actual_time': actualTime,
+  };
+}
 
+class TruckRouteTracking {
+  final String truckId;
+  final String driverName;
+  final String gatepassId;
+  final String originGodown;
+  final String destinationFps;
+  final String assignedRoute;
+  final String currentStatus;
+  final String currentCheckpoint;
+  final String nextCheckpoint;
+  final double totalDistanceKm;
+  final double distanceTravelledKm;
+  final double distanceRemainingKm;
+  final String eta;
+  final String lastLocation;
+  final String lastUpdated;
+  final int delayMinutes;
+  final String delayStatus; // 'ON_TIME', 'DELAYED'
+  final String? delayReason;
+  final String routeDeviationStatus; // 'NORMAL', 'DEVIATED'
+  final String? deviationReason;
+  final List<RouteCheckpoint> checkpoints;
+  final bool isSimulated;
 
+  TruckRouteTracking({
+    required this.truckId,
+    required this.driverName,
+    required this.gatepassId,
+    required this.originGodown,
+    required this.destinationFps,
+    required this.assignedRoute,
+    required this.currentStatus,
+    required this.currentCheckpoint,
+    required this.nextCheckpoint,
+    required this.totalDistanceKm,
+    required this.distanceTravelledKm,
+    required this.distanceRemainingKm,
+    required this.eta,
+    required this.lastLocation,
+    required this.lastUpdated,
+    required this.delayMinutes,
+    required this.delayStatus,
+    this.delayReason,
+    required this.routeDeviationStatus,
+    this.deviationReason,
+    required this.checkpoints,
+    this.isSimulated = true,
+  });
 
+  factory TruckRouteTracking.fromJson(Map<String, dynamic> json) {
+    final checkpointsList = (json['checkpoints'] as List<dynamic>?)
+            ?.map((e) => RouteCheckpoint.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [];
 
-
-
-
+    return TruckRouteTracking(
+      truckId: json['truck_id'] ?? '',
+      driverName: json['driver_name'] ?? '',
+      gatepassId: json['gatepass_id'] ?? '',
+      originGodown: json['origin_godown'] ?? '',
+      destinationFps: json['destination_fps'] ?? '',
+      assignedRoute: json['assigned_route'] ?? '',
+      currentStatus: json['current_status'] ?? 'EN_ROUTE',
+      currentCheckpoint: json['current_checkpoint'] ?? '',
+      nextCheckpoint: json['next_checkpoint'] ?? '',
+      totalDistanceKm: (json['total_distance_km'] as num?)?.toDouble() ?? 0.0,
+      distanceTravelledKm: (json['distance_travelled_km'] as num?)?.toDouble() ?? 0.0,
+      distanceRemainingKm: (json['distance_remaining_km'] as num?)?.toDouble() ?? 0.0,
+      eta: json['eta'] ?? '',
+      lastLocation: json['last_location'] ?? '',
+      lastUpdated: json['last_updated'] ?? '',
+      delayMinutes: json['delay_minutes'] ?? 0,
+      delayStatus: json['delay_status'] ?? 'ON_TIME',
+      delayReason: json['delay_reason'],
+      routeDeviationStatus: json['route_deviation_status'] ?? 'NORMAL',
+      deviationReason: json['deviation_reason'],
+      checkpoints: checkpointsList,
+      isSimulated: json['is_simulated'] ?? true,
+    );
+  }
+}
