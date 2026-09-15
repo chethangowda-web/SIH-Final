@@ -3,10 +3,6 @@ import 'package:flutter/material.dart';
 import '../../core/localization.dart';
 import '../../services/api_service.dart';
 import 'beneficiary_home_screen.dart';
-import '../admin/dso_dashboard_screen.dart';
-import '../admin/field_food_inspector_dashboard_screen.dart';
-import '../admin/fps_owner_dashboard_screen.dart';
-import '../admin/auditor_dashboard_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
 
 class DemoLoginScreen extends StatefulWidget {
@@ -234,22 +230,15 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       final role = (authRes['role'] as String? ?? 'DSO').toUpperCase();
       final uName = authRes['username'] as String? ?? username;
 
-      Widget targetScreen;
-      if (role == 'FIELD_FOOD_INSPECTOR' || uName == 'inspector_user' || uName.startsWith('INSP-')) {
-        targetScreen = FieldFoodInspectorDashboardScreen(apiService: _apiService, username: uName);
-      } else if (role == 'FPS_OWNER' || uName.startsWith('FPS') || uName == 'fps_user') {
-        targetScreen = FpsOwnerDashboardScreen(apiService: _apiService, username: uName);
-      } else if (role == 'AUDITOR' || uName == 'auditor_user') {
-        targetScreen = AuditorDashboardScreen(apiService: _apiService, username: uName);
-      } else if (role == 'ADMIN' && uName == 'admin_user') {
-        targetScreen = AdminDashboardScreen(apiService: _apiService, userRole: 'ADMIN', username: uName);
-      } else {
-        targetScreen = DsoDashboardScreen(apiService: _apiService, username: uName);
-      }
-
       if (!mounted) return;
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => targetScreen),
+        MaterialPageRoute(
+          builder: (context) => AdminDashboardScreen(
+            apiService: _apiService,
+            userRole: role,
+            username: uName,
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -815,7 +804,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           children: [
             _buildRoleCard(
               title: '🏛️ DSO (Command)',
-              subtitle: 'High-Level Dashboard & Grain Charts',
+              subtitle: 'Planning & Decision Authority',
               icon: Icons.account_balance_outlined,
               color: const Color(0xFF166534),
               bgColor: const Color(0xFFF0FDF4),
@@ -826,45 +815,44 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               isSmall: isSmall,
             ),
             _buildRoleCard(
-              title: '🔍 Field Food Inspector',
-              subtitle: 'Assigned Shops & Digital Checklist',
-              icon: Icons.assignment_turned_in_outlined,
+              title: '🚚 Field Officer',
+              subtitle: 'Physical Execution & Gatepass',
+              icon: Icons.local_shipping_outlined,
               color: const Color(0xFF92400E),
               bgColor: const Color(0xFFFFFBEB),
               borderColor: const Color(0xFFFDE68A),
-              username: 'inspector_user',
-              password: 'inspector_pass',
-              role: 'FIELD_FOOD_INSPECTOR',
+              username: 'field_officer_user',
+              password: 'field_pass',
+              role: 'FIELD_OFFICER',
               isSmall: isSmall,
             ),
             _buildRoleCard(
-              title: '🏪 FPS Owner',
-              subtitle: 'Current Stock, Register & e-PoS',
-              icon: Icons.storefront_outlined,
+              title: '🔍 Vigilance Auditor',
+              subtitle: 'Read-Only Governance Layer',
+              icon: Icons.verified_user_outlined,
               color: const Color(0xFF6B21A8),
               bgColor: const Color(0xFFF3E8FF),
               borderColor: const Color(0xFFE9D5FF),
-              username: 'fps_user',
-              password: 'fps_pass',
-              role: 'FPS_OWNER',
-              isSmall: isSmall,
-            ),
-            _buildRoleCard(
-              title: '🛡️ Vigilance Auditor',
-              subtitle: 'Audit Ledger & Cross-Reconciliation',
-              icon: Icons.verified_user_outlined,
-              color: const Color(0xFF0F172A),
-              bgColor: const Color(0xFFF1F5F9),
-              borderColor: const Color(0xFFCBD5E1),
               username: 'auditor_user',
               password: 'auditor_pass',
               role: 'AUDITOR',
               isSmall: isSmall,
             ),
+            _buildRoleCard(
+              title: '⚡ System Admin',
+              subtitle: 'Master Platform & Diagnostics',
+              icon: Icons.admin_panel_settings_rounded,
+              color: const Color(0xFF0F172A),
+              bgColor: const Color(0xFFF1F5F9),
+              borderColor: const Color(0xFFCBD5E1),
+              username: 'admin_user',
+              password: 'admin_pass',
+              role: 'ADMIN',
+              isSmall: isSmall,
+            ),
           ],
         ),
         const SizedBox(height: 12),
-
         Text(
           tr('login.official_user_label'),
           style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700, color: _slate900),
