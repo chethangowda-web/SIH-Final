@@ -103,6 +103,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   double _distributedQuantityKg = 0.0;
   double _remainingBalanceKg = 0.0;
   bool _isBiometricVerified = false;
+  bool _userSubmittedChoice = false;
 
   // Active Request ETA Countdown State
   Timer? _etaCountdownTimer;
@@ -309,7 +310,10 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
       ),
     );
 
-    if (result == true || result == null) {
+    if (result == true) {
+      setState(() => _userSubmittedChoice = true);
+      _loadBeneficiaryData();
+    } else {
       _loadBeneficiaryData();
     }
   }
@@ -1170,9 +1174,14 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
 
   // 2. HERO: YOUR RATION ENTITLEMENT CARD (Monthly Quota Only)
   Widget _buildHeroRationEntitlementCard() {
-    final totalEntitlementKg = _eligibleMembersCount * 5.0;
-    final riceTotal = _eligibleMembersCount * 4.0;
-    final wheatTotal = _eligibleMembersCount * 1.0;
+    final riceTotal = _entitlement != null ? _entitlement!.statutoryEntitlementRiceKg : (_eligibleMembersCount * 4.0);
+    final wheatTotal = _entitlement != null ? _entitlement!.statutoryEntitlementWheatKg : (_eligibleMembersCount * 1.0);
+    final totalEntitlementKg = _entitlement != null && _entitlement!.totalEligibleBalanceKg > 0
+        ? _entitlement!.totalEligibleBalanceKg
+        : (riceTotal + wheatTotal);
+    final membersCount = _entitlement != null && _entitlement!.familyMembersCount > 0
+        ? _entitlement!.familyMembersCount
+        : _eligibleMembersCount;
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.space20),
@@ -1279,7 +1288,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${_eligibleMembersCount} Eligible Members',
+                      '$membersCount Eligible Members',
                       style: const TextStyle(fontSize: 10.5, color: Colors.white70),
                     ),
                   ],
@@ -1472,7 +1481,8 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
       );
     }
 
-    final hasPlanLocked = _deliveryRecords.isNotEmpty;
+    final hasCompletedDelivery = _deliveryRecords.any((r) => r.deliveryStatus == 'DELIVERY_CONFIRMED' || r.citizenConfirmedAt != null);
+    final hasPlanLocked = _entitlement?.rationReceivedForCycle == true || _userSubmittedChoice || hasCompletedDelivery;
     final activeFpsName = _deliveryRecords.isNotEmpty
         ? (_deliveryRecords.first.intendedFpsName ?? _deliveryRecords.first.registeredFpsName ?? homeFpsName)
         : (_activeIntents.isNotEmpty ? _activeIntents.first.intendedFpsName : homeFpsName);
