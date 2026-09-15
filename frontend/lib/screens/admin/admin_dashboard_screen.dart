@@ -1126,20 +1126,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // SECTION 1: ENTERPRISE COMMAND BAR & 7-STAGE PRIMARY WORKFLOW STEPPER
-                            _buildEnterpriseCommandBar(),
+                            // EXECUTIVE KPI SUMMARY ROW (Always visible at top)
+                            _buildExecutiveKpiRow(),
                             const SizedBox(height: AppConstants.space16),
 
-                            // SECTION 2: EXECUTIVE KPI ROW (5 Polished KPI Cards)
-                            _buildExecutiveKpiRow(),
-                            const SizedBox(height: AppConstants.space20),
+                            // MAIN NAVIGATION TAB SWITCHER
+                            _buildMainTabSwitcher(),
+                            const SizedBox(height: AppConstants.space16),
 
-                            // SECTION 3: OPERATIONAL HEALTH & ATTENTION ITEMS (2x2 Grid + Live Alerts)
-                            _buildOperationalHealthAndAlerts(),
-                            const SizedBox(height: AppConstants.space20),
-
-                            // SECTION 4: FAIR PRICE SHOP OPERATIONS MATRIX
-                            _buildFpsOperationsMatrix(),
+                            // TAB CONTENT
+                            if (_selectedMainTab == 0) ...[
+                              // TAB 0: OVERVIEW & OPERATIONAL INCIDENTS
+                              _buildOperationalHealthAndAlerts(),
+                            ] else if (_selectedMainTab == 1) ...[
+                              // TAB 1: ALL 620 FAIR PRICE SHOPS MATRIX
+                              _buildFpsOperationsMatrix(),
+                            ] else ...[
+                              // TAB 2: AI PIPELINE & DECISION TRACE TOOLS
+                              _buildEnterpriseCommandBar(),
+                            ],
 
                             const SizedBox(height: AppConstants.space20),
 
@@ -2525,6 +2530,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: AppConstants.space16),
+
+          // 3. ENTERPRISE STAGE INTELLIGENCE & OPERATIONS WORKBENCH
+          _buildStageIntelligenceWorkbench(
+            isForecastDone: isForecastDone,
+            isValidateDone: isValidateDone,
+            isAllocateDone: isAllocateDone,
+            isOptimizeDone: isOptimizeDone,
+            isDispatchDone: isDispatchDone,
+            isVerifyDone: isVerifyDone,
+            isEvaluateDone: isEvaluateDone,
           ),
         ],
       ),
