@@ -100,9 +100,15 @@ def submit_intent(
     # 4. Authoritative Server-Side Entitlement & Remaining Balance Calculation
     from app.services.ai_request_advisor import ai_request_advisor
     import json
-    entitlement = ai_request_advisor.get_beneficiary_entitlement(
-        db, payload.beneficiary_id.strip(), payload.commodity, payload.cycle_id.strip()
-    )
+    try:
+        entitlement = ai_request_advisor.get_beneficiary_entitlement(
+            db, payload.beneficiary_id.strip(), payload.commodity, payload.cycle_id.strip()
+        )
+    except ValueError as val_err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(val_err)
+        )
     statutory_quota = float(entitlement["statutory_entitlement_commodity_kg"])
     remaining_balance = float(entitlement["remaining_eligible_commodity_kg"])
 
@@ -275,7 +281,13 @@ def get_beneficiary_entitlement_summary(
     """
     verify_owner(current_user, beneficiary_id)
     from app.services.ai_request_advisor import ai_request_advisor
-    ent = ai_request_advisor.get_beneficiary_entitlement(db, beneficiary_id.strip(), "Rice", cycle_id.strip())
+    try:
+        ent = ai_request_advisor.get_beneficiary_entitlement(db, beneficiary_id.strip(), "Rice", cycle_id.strip())
+    except ValueError as val_err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(val_err)
+        )
     transport = ai_request_advisor.calculate_transport_fee(db, "FPS_COLLECTION", 0.0, ent["card_type"])
 
     total_remaining = ent["remaining_eligible_rice_kg"] + ent["remaining_eligible_wheat_kg"]

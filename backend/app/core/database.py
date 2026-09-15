@@ -201,11 +201,33 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
     );
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS epos_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transaction_id TEXT NOT NULL UNIQUE,
+        fps_id TEXT NOT NULL,
+        beneficiary_id TEXT NOT NULL,
+        cycle_id TEXT NOT NULL,
+        rice_kg REAL NOT NULL DEFAULT 0.0,
+        wheat_kg REAL NOT NULL DEFAULT 0.0,
+        auth_mode TEXT NOT NULL DEFAULT 'AADHAAR_BIOMETRIC',
+        status TEXT NOT NULL DEFAULT 'COMPLETED',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (fps_id) REFERENCES fps (fps_id),
+        FOREIGN KEY (beneficiary_id) REFERENCES beneficiaries (pseudonymous_beneficiary_id)
+    );
+    """)
+
     # Seed fallback master records for default citizen users if absent
     cursor.execute("""
     INSERT OR IGNORE INTO fps (fps_id, name, district, latitude, longitude, capacity_kg)
     VALUES ('FPS-KA-BAG-0001', 'Fair Price Shop 1 (Bagalkot)', 'Bagalkot', 16.185, 75.696, 5000.0);
     """)
+    for test_fps_id in ['FPS-KA-BLR-001', 'FPS-KA-BLR-002', 'FPS-KA-BLR-003', 'FPS-KA-BLR-004', 'FPS-KA-BLR-005']:
+        cursor.execute("""
+        INSERT OR IGNORE INTO fps (fps_id, name, district, latitude, longitude, capacity_kg)
+        VALUES (?, ?, 'Bengaluru Urban', 12.9716, 77.5946, 5000.0);
+        """, (test_fps_id, f"Fair Price Shop ({test_fps_id})"))
     cursor.execute("""
     INSERT OR IGNORE INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, scheme_type, members_count, monthly_entitlement_kg, monthly_rice_kg, monthly_wheat_kg)
     VALUES 
@@ -606,12 +628,14 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
         ("admin_user", hash_password("admin_pass"), "ADMIN", None),
         ("dso_user", hash_password("dso_pass"), "DSO", None),
         ("field_officer_user", hash_password("field_pass"), "FIELD_OFFICER", None),
+        ("inspector_user", hash_password("inspector_pass"), "FIELD_FOOD_INSPECTOR", None),
+        ("fps_user", hash_password("fps_pass"), "FPS_OWNER", None),
         ("auditor_user", hash_password("auditor_pass"), "AUDITOR", None),
         ("BEN-KA-0001", hash_password("citizen_pass"), "BENEFICIARY", "BEN-KA-0001"),
         ("RC-KA-000001", hash_password("citizen_pass"), "BENEFICIARY", "RC-KA-000001"),
     ]
     cursor.executemany("""
-    INSERT OR IGNORE INTO users (username, password_hash, role, beneficiary_id)
+    INSERT OR REPLACE INTO users (username, password_hash, role, beneficiary_id)
     VALUES (?, ?, ?, ?);
     """, default_system_users)
 
@@ -1016,6 +1040,23 @@ def _migration_008_sih_v2_features(cursor: sqlite3.Cursor) -> None:
         distance_to_target_km REAL NOT NULL,
         arrival_status TEXT NOT NULL DEFAULT 'EN_ROUTE',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS epos_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transaction_id TEXT NOT NULL UNIQUE,
+        fps_id TEXT NOT NULL,
+        beneficiary_id TEXT NOT NULL,
+        cycle_id TEXT NOT NULL,
+        rice_kg REAL NOT NULL DEFAULT 0.0,
+        wheat_kg REAL NOT NULL DEFAULT 0.0,
+        auth_mode TEXT NOT NULL DEFAULT 'AADHAAR_BIOMETRIC',
+        status TEXT NOT NULL DEFAULT 'COMPLETED',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (fps_id) REFERENCES fps (fps_id),
+        FOREIGN KEY (beneficiary_id) REFERENCES beneficiaries (pseudonymous_beneficiary_id)
     );
     """)
 

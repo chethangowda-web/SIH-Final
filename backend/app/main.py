@@ -26,6 +26,7 @@ from app.api.csv_import import router as csv_import_router
 from app.api.reports import router as reports_router
 from app.api.feedback import router as feedback_router
 from app.api.webhook import router as webhook_router
+from app.api.officer import router as officer_router
 
 # Initialize structured logging on application module load
 setup_logging(log_level=settings.LOG_LEVEL)
@@ -115,6 +116,7 @@ api_router.include_router(csv_import_router)
 api_router.include_router(reports_router)
 api_router.include_router(feedback_router)
 api_router.include_router(webhook_router)
+api_router.include_router(officer_router)
 app.include_router(api_router)
 
 # Register Root-level compatibility aliases (hidden from OpenAPI schema to prevent duplication)
@@ -132,6 +134,7 @@ app.include_router(csv_import_router, include_in_schema=False)
 app.include_router(reports_router, include_in_schema=False)
 app.include_router(feedback_router, include_in_schema=False)
 app.include_router(webhook_router, include_in_schema=False)
+app.include_router(officer_router, include_in_schema=False)
 
 # Mount Flutter Web app static assets if built
 if WEB_BUILD_DIR.exists():

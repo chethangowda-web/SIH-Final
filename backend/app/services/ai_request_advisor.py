@@ -56,32 +56,42 @@ class CitizenRequestAdvisor:
         """, (beneficiary_id,))
         row = cursor.fetchone()
 
-        # Extract authoritative master dataset records if available
-        if row and "members_count" in row.keys() and row["members_count"] is not None and row["members_count"] > 0:
-            card_type = (row["scheme_type"] or "PHH").strip()
-            members = int(row["members_count"])
-            rice_quota = float(row["monthly_rice_kg"] or 0.0)
-            wheat_quota = float(row["monthly_wheat_kg"] or 0.0)
-            card_label = "Antyodaya Anna Yojana (AAY)" if card_type == "AAY" else "Priority Household (PHH)"
-        else:
-            # Fallback derivation if record not seeded
-            try:
-                ben_num = int(beneficiary_id.split("-")[-1])
-            except Exception:
-                ben_num = 1
+        # Check normalized alternatives if not immediately matched (e.g. BEN-KA-0005 <-> RC-KA-000005)
+        if not row:
+            alt_id = None
+            if beneficiary_id.startswith("BEN-KA-"):
+                try:
+                    num_part = int(beneficiary_id.replace("BEN-KA-", ""))
+                    alt_id = f"RC-KA-{num_part:06d}"
+                except Exception:
+                    pass
+            elif beneficiary_id.startswith("RC-KA-"):
+                try:
+                    num_part = int(beneficiary_id.replace("RC-KA-", ""))
+                    alt_id = f"BEN-KA-{num_part:04d}"
+                except Exception:
+                    pass
+            if alt_id:
+                cursor.execute("""
+                SELECT b.id, b.pseudonymous_beneficiary_id, b.name_for_demo, b.registered_fps_id,
+                       b.language, b.status, b.scheme_type, b.members_count,
+                       b.monthly_entitlement_kg, b.monthly_rice_kg, b.monthly_wheat_kg,
+                       COALESCE(f.name, 'Registered FPS') as registered_fps_name
+                FROM beneficiaries b
+                LEFT JOIN fps f ON b.registered_fps_id = f.fps_id
+                WHERE b.pseudonymous_beneficiary_id = ?;
+                """, (alt_id,))
+                row = cursor.fetchone()
 
-            if ben_num % 10 == 0:
-                card_type = "AAY"
-                members = 1
-                card_label = "Antyodaya Anna Yojana (AAY)"
-                rice_quota = 25.0
-                wheat_quota = 10.0
-            else:
-                card_type = "PHH"
-                members = 4
-                card_label = "Priority Household (PHH)"
-                rice_quota = 15.0
-                wheat_quota = 5.0
+        if not row:
+            raise ValueError(f"Beneficiary data unavailable: Beneficiary record '{beneficiary_id}' not found in master database registry.")
+
+        # Extract authoritative master dataset records
+        card_type = (row["scheme_type"] or "PHH").strip()
+        members = int(row["members_count"]) if row["members_count"] is not None else 1
+        rice_quota = float(row["monthly_rice_kg"] or 0.0)
+        wheat_quota = float(row["monthly_wheat_kg"] or 0.0)
+        card_label = "Antyodaya Anna Yojana (AAY)" if card_type == "AAY" else "Priority Household (PHH)"
 
         # Query existing actual distribution / consumed balance for this cycle from confirmed citizen requests
         try:

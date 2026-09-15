@@ -2211,6 +2211,132 @@ class ApiService {
           'Failed to simulate intent shift causal trace: ${err['detail'] ?? response.statusCode}');
     }
   }
+
+  // ----------------- Officer & e-PoS Operational Workflows ----------------- //
+
+  /// Field Food Inspector: Submit 6-point physical verification inspection
+  Future<Map<String, dynamic>> submitFpsInspectionReport({
+    required String fpsId,
+    required int complianceScore,
+    required String notes,
+    String? orderId,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/submit'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'fps_id': fpsId,
+        'order_id': orderId,
+        'compliance_score': complianceScore.toDouble(),
+        'remarks': notes,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to submit inspection report: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// DSO: Trigger surprise inspection order
+  Future<Map<String, dynamic>> orderSurpriseInspection({
+    required String fpsId,
+    required String reason,
+    String priority = 'HIGH',
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/order'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'fps_id': fpsId,
+        'reason': reason,
+        'priority': priority,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to issue surprise inspection order: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// DSO & Inspector: List inspection orders and reports
+  Future<Map<String, dynamic>> fetchFpsInspections({String? fpsId}) async {
+    final query = fpsId != null ? '?fps_id=$fpsId' : '';
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspections$query'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to fetch inspections: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Dispense ration via e-PoS
+  Future<Map<String, dynamic>> dispenseEposRation({
+    required String fpsId,
+    required String beneficiaryId,
+    double riceKg = 0.0,
+    double wheatKg = 0.0,
+    String authMode = 'AADHAAR_BIOMETRIC',
+    String cycleId = '2026-09',
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/epos/dispense'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'fps_id': fpsId,
+        'beneficiary_id': beneficiaryId,
+        'cycle_id': cycleId,
+        'rice_kg': riceKg,
+        'wheat_kg': wheatKg,
+        'auth_mode': authMode,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'e-PoS dispensation failed: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Fetch persistent warehouse inventory
+  Future<Map<String, dynamic>> fetchFpsInventory(String fpsId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/inventory'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to fetch FPS inventory: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Fetch digital register of transactions
+  Future<List<dynamic>> fetchFpsTransactions(String fpsId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/transactions'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as List<dynamic>;
+    }
+    return [];
+  }
 }
 
 class CitizenRequestModel {

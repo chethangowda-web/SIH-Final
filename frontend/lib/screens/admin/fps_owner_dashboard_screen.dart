@@ -73,6 +73,35 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
     _cardSearchController.text = 'RC-KA-000001';
+    _loadLiveStockAndRegister();
+  }
+
+  Future<void> _loadLiveStockAndRegister() async {
+    try {
+      final inv = await _apiService.fetchFpsInventory('FPS-KA-BAG-0001');
+      final txs = await _apiService.fetchFpsTransactions('FPS-KA-BAG-0001');
+      if (mounted) {
+        setState(() {
+          _riceStockKg = (inv['rice_stock_kg'] as num?)?.toDouble() ?? _riceStockKg;
+          _wheatStockKg = (inv['wheat_stock_kg'] as num?)?.toDouble() ?? _wheatStockKg;
+          if (txs.isNotEmpty) {
+            _digitalRegister.clear();
+            for (final t in txs) {
+              _digitalRegister.add({
+                'time': t['created_at'] ?? 'Today',
+                'cardId': t['beneficiary_id'] ?? '',
+                'headName': t['name_for_demo'] ?? 'Citizen Holder',
+                'members': t['members_count'] ?? 1,
+                'riceKg': (t['rice_kg'] as num?)?.toDouble() ?? 0.0,
+                'wheatKg': (t['wheat_kg'] as num?)?.toDouble() ?? 0.0,
+                'authMode': t['auth_mode'] ?? 'Aadhaar e-KYC',
+                'status': 'SUCCESS_DISPENSED',
+              });
+            }
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -95,36 +124,31 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
       setState(() {
         _searchedBeneficiary = {
           'cardId': ben.pseudonymousBeneficiaryId,
-          'headName': 'Beneficiary (${ben.pseudonymousBeneficiaryId})',
-          'members': ent.familyMembersCount > 0 ? ent.familyMembersCount : 2,
-          'riceQuota': ent.statutoryEntitlementRiceKg > 0 ? ent.statutoryEntitlementRiceKg : 8.0,
-          'wheatQuota': ent.statutoryEntitlementWheatKg > 0 ? ent.statutoryEntitlementWheatKg : 2.0,
-          'fpsId': ben.registeredFpsId,
+          'headName': ben.nameForDemo.isNotEmpty ? ben.nameForDemo : 'Beneficiary (${ben.pseudonymousBeneficiaryId})',
+          'members': ent.familyMembersCount > 0 ? ent.familyMembersCount : 1,
+          'riceQuota': ent.statutoryEntitlementRiceKg,
+          'wheatQuota': ent.statutoryEntitlementWheatKg,
+          'fpsId': ben.registeredFpsId.isNotEmpty ? ben.registeredFpsId : 'FPS-KA-BAG-0001',
           'rationReceived': ent.rationReceivedForCycle,
         };
         _dispenseRiceKg = _searchedBeneficiary!['riceQuota'];
         _dispenseWheatKg = _searchedBeneficiary!['wheatQuota'];
       });
-    } catch (_) {
-      setState(() {
-        _searchedBeneficiary = {
-          'cardId': cardId,
-          'headName': 'Verified Citizen Holder',
-          'members': 4,
-          'riceQuota': 16.0,
-          'wheatQuota': 4.0,
-          'fpsId': 'FPS-KA-BAG-0001',
-          'rationReceived': false,
-        };
-        _dispenseRiceKg = 16.0;
-        _dispenseWheatKg = 4.0;
-      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Beneficiary lookup failed: $e'),
+            backgroundColor: const Color(0xFFB91C1C),
+          ),
+        );
+      }
     } finally {
       setState(() => _isSearching = false);
     }
   }
 
-  void _handleDispenseRation() {
+  Future<void> _handleDispenseRation() async {
     if (_searchedBeneficiary == null) return;
     if (!_isBiometricVerified) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -136,25 +160,58 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
       return;
     }
 
+    if (_searchedBeneficiary!['rationReceived'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Duplicate Dispensation Blocked: Beneficiary already collected ration for this cycle.'),
+          backgroundColor: Color(0xFFB91C1C),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isDispensing = true);
-    Future.delayed(const Duration(milliseconds: 1200), () {
-      if (!mounted) return;
-      setState(() {
-        _isDispensing = false;
-        _riceStockKg = (_riceStockKg - _dispenseRiceKg).clamp(0.0, 99999.0);
-        _wheatStockKg = (_wheatStockKg - _dispenseWheatKg).clamp(0.0, 99999.0);
-        _digitalRegister.insert(0, {
-          'time': 'Just Now',
-          'cardId': _searchedBeneficiary!['cardId'],
-          'headName': _searchedBeneficiary!['headName'],
-          'members': _searchedBeneficiary!['members'],
-          'riceKg': _dispenseRiceKg,
-          'wheatKg': _dispenseWheatKg,
-          'authMode': 'Aadhaar e-KYC Verified',
-          'status': 'SUCCESS_DISPENSED',
-        });
-        _searchedBeneficiary!['rationReceived'] = true;
+    String txId = 'TX-${DateTime.now().millisecondsSinceEpoch}';
+    try {
+      final resp = await _apiService.dispenseEposRation(
+        fpsId: _searchedBeneficiary!['fpsId'] ?? 'FPS-KA-BAG-0001',
+        beneficiaryId: _searchedBeneficiary!['cardId'],
+        riceKg: _dispenseRiceKg,
+        wheatKg: _dispenseWheatKg,
+        authMode: 'Aadhaar Biometric e-KYC',
+      );
+      txId = resp['transaction_id'] ?? txId;
+      if (resp['remaining_fps_rice_stock_kg'] != null) {
+        _riceStockKg = (resp['remaining_fps_rice_stock_kg'] as num).toDouble();
+      }
+      if (resp['remaining_fps_wheat_stock_kg'] != null) {
+        _wheatStockKg = (resp['remaining_fps_wheat_stock_kg'] as num).toDouble();
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Dispensation failed: $err'), backgroundColor: const Color(0xFFB91C1C)),
+        );
+      }
+      setState(() => _isDispensing = false);
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isDispensing = false;
+      _digitalRegister.insert(0, {
+        'time': 'Just Now',
+        'cardId': _searchedBeneficiary!['cardId'],
+        'headName': _searchedBeneficiary!['headName'],
+        'members': _searchedBeneficiary!['members'],
+        'riceKg': _dispenseRiceKg,
+        'wheatKg': _dispenseWheatKg,
+        'authMode': 'Aadhaar e-KYC Verified',
+        'status': 'SUCCESS_DISPENSED',
       });
+      _searchedBeneficiary!['rationReceived'] = true;
+    });
 
       showDialog(
         context: context,

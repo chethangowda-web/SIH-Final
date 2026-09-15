@@ -238,25 +238,25 @@ class BeneficiaryEntitlementSummary {
       beneficiaryId: json['beneficiary_id'] ?? '',
       name: json['name'] ?? '',
       cardType: json['card_type'] ?? 'PHH',
-      familyMembersCount: json['family_members_count'] ?? 4,
+      familyMembersCount: json['family_members_count'] ?? 1,
       cardLabel: json['card_label'] ?? '',
       cycleId: json['cycle_id'] ?? '2026-09',
       registeredFpsId: json['registered_fps_id'] ?? '',
       registeredFpsName: json['registered_fps_name'] ?? '',
       statutoryEntitlementRiceKg:
-          (json['statutory_entitlement_rice_kg'] as num?)?.toDouble() ?? 20.0,
+          (json['statutory_entitlement_rice_kg'] as num?)?.toDouble() ?? 0.0,
       statutoryEntitlementWheatKg:
-          (json['statutory_entitlement_wheat_kg'] as num?)?.toDouble() ?? 5.0,
+          (json['statutory_entitlement_wheat_kg'] as num?)?.toDouble() ?? 0.0,
       consumedRiceKg:
           (json['consumed_rice_kg'] as num?)?.toDouble() ?? 0.0,
       consumedWheatKg:
           (json['consumed_wheat_kg'] as num?)?.toDouble() ?? 0.0,
       remainingEligibleRiceKg:
-          (json['remaining_eligible_rice_kg'] as num?)?.toDouble() ?? 20.0,
+          (json['remaining_eligible_rice_kg'] as num?)?.toDouble() ?? 0.0,
       remainingEligibleWheatKg:
-          (json['remaining_eligible_wheat_kg'] as num?)?.toDouble() ?? 5.0,
+          (json['remaining_eligible_wheat_kg'] as num?)?.toDouble() ?? 0.0,
       totalEligibleBalanceKg:
-          (json['total_eligible_balance_kg'] as num?)?.toDouble() ?? 25.0,
+          (json['total_eligible_balance_kg'] as num?)?.toDouble() ?? 0.0,
       rationReceivedForCycle: json['ration_received_for_cycle'] ?? false,
       receiptConfirmedAt: json['receipt_confirmed_at'],
       receiptStatusLabel: json['receipt_status_label'],

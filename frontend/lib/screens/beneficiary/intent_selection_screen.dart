@@ -171,15 +171,15 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
     final selectedDist = _selectedFps != null ? _getCalculatedDistance(_selectedFps!) : 0.6;
     final transportFee = _calculateTransportFee(selectedDist);
 
-    final riceTotal = _entitlement?.statutoryEntitlementRiceKg ?? 20.0;
-    final wheatTotal = _entitlement?.statutoryEntitlementWheatKg ?? 5.0;
+    final riceTotal = _entitlement?.statutoryEntitlementRiceKg ?? 0.0;
+    final wheatTotal = _entitlement?.statutoryEntitlementWheatKg ?? 0.0;
     final totalMonthly = riceTotal + wheatTotal;
 
     final riceConsumed = _entitlement?.consumedRiceKg ?? 0.0;
     final wheatConsumed = _entitlement?.consumedWheatKg ?? 0.0;
     final totalConsumed = riceConsumed + wheatConsumed;
 
-    final remainingBalance = _entitlement?.totalEligibleBalanceKg ?? 25.0;
+    final remainingBalance = _entitlement?.totalEligibleBalanceKg ?? totalMonthly;
 
     return AnimatedBuilder(
       animation: LanguageController.instance,
