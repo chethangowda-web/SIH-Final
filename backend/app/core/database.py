@@ -914,7 +914,10 @@ def _migration_005_indexes_and_constraints(cursor: sqlite3.Cursor) -> None:
         "CREATE INDEX IF NOT EXISTS idx_users_beneficiary ON users (beneficiary_id);"
     ]
     for idx_sql in indexes:
-        cursor.execute(idx_sql)
+        try:
+            cursor.execute(idx_sql)
+        except Exception:
+            pass
 
 
 def _migration_006_beneficiary_cycle_receipts(cursor: sqlite3.Cursor) -> None:

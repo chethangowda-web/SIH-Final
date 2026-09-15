@@ -39,6 +39,7 @@ async def test_choice_window_status_initially_open():
 @pytest.mark.asyncio
 async def test_beneficiary_preference_submission_during_open_window():
     """Test 2: Beneficiary can submit / update portability preference while window is OPEN."""
+    headers = {"x-test-role": "BENEFICIARY", "x-test-beneficiary-id": "BEN-KA-0005"}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         payload = {
             "beneficiary_id": "BEN-KA-0005",
@@ -48,7 +49,7 @@ async def test_beneficiary_preference_submission_during_open_window():
             "declared_quantity_kg": 20.0,
             "confidence": 0.95
         }
-        res = await client.post("/intent", json=payload)
+        res = await client.post("/intent", json=payload, headers=headers)
         assert res.status_code == 201
         data = res.json()
         assert data["beneficiary_id"] == "BEN-KA-0005"
@@ -59,9 +60,10 @@ async def test_beneficiary_preference_submission_during_open_window():
 @pytest.mark.asyncio
 async def test_close_choice_window_locks_demand():
     """Test 3: Admin closes choice window, computes D_hat, and locks demand baseline."""
+    headers = {"x-test-role": "ADMIN"}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         # 1. Close choice window
-        res = await client.post("/admin/choice-window/close?cycle_id=2026-09")
+        res = await client.post("/admin/choice-window/close?cycle_id=2026-09", headers=headers)
         assert res.status_code == 200
         data = res.json()
         assert data["status"] == "CHOICE_WINDOW_CLOSED"
@@ -69,7 +71,7 @@ async def test_close_choice_window_locks_demand():
         assert data["total_locked_forecast_demand_kg"] > 0
 
         # 2. Verify status endpoint reflects closed window
-        status_res = await client.get("/choice-window/status?cycle_id=2026-09")
+        status_res = await client.get("/choice-window/status?cycle_id=2026-09", headers=headers)
         assert status_res.status_code == 200
         assert status_res.json()["is_open"] is False
         assert status_res.json()["status"] == "CHOICE_WINDOW_CLOSED"
@@ -78,9 +80,11 @@ async def test_close_choice_window_locks_demand():
 @pytest.mark.asyncio
 async def test_preference_submission_blocked_after_choice_window_closed():
     """Test 4: Preference submission is rejected with HTTP 400 once choice window is closed."""
+    headers = {"x-test-role": "BENEFICIARY", "x-test-beneficiary-id": "BEN-KA-0001"}
+    admin_headers = {"x-test-role": "ADMIN"}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         # 1. Close choice window
-        await client.post("/admin/choice-window/close?cycle_id=2026-09")
+        await client.post("/admin/choice-window/close?cycle_id=2026-09", headers=admin_headers)
 
         # 2. Attempt to submit preference
         payload = {
@@ -90,7 +94,7 @@ async def test_preference_submission_blocked_after_choice_window_closed():
             "commodity": "Rice",
             "declared_quantity_kg": 30.0
         }
-        res = await client.post("/intent", json=payload)
+        res = await client.post("/intent", json=payload, headers=headers)
         assert res.status_code == 400
         assert "closed and demand is locked" in res.json()["detail"]
 

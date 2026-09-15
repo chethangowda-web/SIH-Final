@@ -156,6 +156,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           _activeIntents = intents;
           _deliveryRecords = deliveries;
           _planningCycleState = cycleState;
+          _userSubmittedChoice = false;
           _eligibleMembersCount = ent.familyMembersCount > 0 ? ent.familyMembersCount : 1;
           final statutoryTotal = ent.totalEligibleBalanceKg > 0
               ? ent.totalEligibleBalanceKg
@@ -240,64 +241,8 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
       return;
     }
 
-    final isOpen = _planningCycleState?['is_open'] ?? true;
-    final planningDay = _planningCycleState?['planning_day'] ?? 22;
-    if (!isOpen || planningDay >= 25) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Row(
-            children: [
-              const Icon(Icons.lock_clock_rounded, color: Color(0xFFB91C1C), size: 24),
-              const SizedBox(width: 8),
-              Text(
-                tr('cycle.window_closed'),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                tr('cycle.locked_cannot_edit', params: {'cycle': _planningCycleState?['cycle_id'] ?? '2026-09'}),
-                style: const TextStyle(fontSize: 13, color: AppConstants.textPrimary, height: 1.4),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF2F2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFFCA5A5)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline, size: 16, color: Color(0xFFB91C1C)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Day $planningDay: Demand baseline snapshot is permanently sealed into district pre-dispatch logistics.',
-                        style: const TextStyle(fontSize: 11.5, color: Color(0xFF7F1D1D), fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(tr('nav.close'), style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
+    // Beneficiary eligibility for choice selection is governed strictly per-beneficiary
+    // based on whether they have already received/confirmed ration for the active cycle.
 
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
