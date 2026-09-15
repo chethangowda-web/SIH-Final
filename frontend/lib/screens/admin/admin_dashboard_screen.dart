@@ -2438,6 +2438,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
+                // TRIGGER: BENEFICIARY DEMAND CONFIRMATION STEP
+                _buildBeneficiaryTriggerStepCard(_dashboardData?.isDemandLocked ?? false),
+                _buildStepConnector(isDone: _dashboardData?.isDemandLocked ?? false),
+
                 _buildWorkflowStep(
                   1,
                   'Forecast',
@@ -2551,13 +2555,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             Container(
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: isLocked ? const Color(0xFFE2E8F0) : const Color(0xFFDCFCE7),
+                color: isLocked ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(
-                isLocked ? Icons.lock_rounded : Icons.schedule_rounded,
+                isLocked ? Icons.verified_user_rounded : Icons.pending_actions_rounded,
                 size: 18,
-                color: isLocked ? AppConstants.primaryNavy : const Color(0xFF15803D),
+                color: isLocked ? const Color(0xFF15803D) : const Color(0xFFB45309),
               ),
             ),
             const SizedBox(width: 10),
@@ -2570,25 +2574,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   Text(
                     'PDS PLANNING CYCLE: DAY $planningDay OF 30',
                     style: TextStyle(
-                      fontSize: 11.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w900,
-                      color: isLocked ? AppConstants.primaryNavy : const Color(0xFF15803D),
+                      color: isLocked ? const Color(0xFF15803D) : AppConstants.primaryNavy,
                       letterSpacing: 0.4,
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                     decoration: BoxDecoration(
-                      color: isLocked ? const Color(0xFFEFF6FF) : const Color(0xFFDCFCE7),
+                      color: isLocked ? const Color(0xFFDCFCE7) : const Color(0xFFEFF6FF),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: isLocked ? const Color(0xFF93C5FD) : const Color(0xFF86EFAC)),
+                      border: Border.all(color: isLocked ? const Color(0xFF86EFAC) : const Color(0xFF93C5FD)),
                     ),
                     child: Text(
-                      isLocked ? '🔒 DEMAND BASELINE LOCKED' : 'CHOICE WINDOW OPEN (DAY 21–24)',
+                      isLocked ? '✓ BENEFICIARY DEMAND CONFIRMED & LOCKED' : '⚡ AWAITING BENEFICIARY DEMAND CONFIRMATION',
                       style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        color: isLocked ? const Color(0xFF1D4ED8) : const Color(0xFF15803D),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: isLocked ? const Color(0xFF15803D) : const Color(0xFF1D4ED8),
                       ),
                     ),
                   ),
@@ -2614,9 +2618,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
         Widget descriptionText = Text(
           isLocked
-              ? 'Demand baseline D_hat is frozen (Day 25). 7-stage Pre-Dispatch engine consumes this immutable snapshot without mutating beneficiary signals.'
-              : 'Beneficiaries are submitting preferred FPS / doorstep requests. District Supply Officer locks demand on Day 25 to initiate pre-dispatch allocation.',
-          style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary),
+              ? 'Beneficiary demand has been confirmed & locked. The 7-stage Pre-Dispatch Intelligence Pipeline is active and executing on this locked baseline.'
+              : 'Beneficiaries are confirming their demand preferences. Once beneficiary confirms demand, the 7-stage intelligence cycle initiates automatically.',
+          style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary, height: 1.3),
         );
 
         Widget actionsWidget;
@@ -2637,13 +2641,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ),
               ElevatedButton.icon(
-                onPressed: _isActionExecuting ? null : _lockForecast,
-                icon: const Icon(Icons.lock_outline_rounded, size: 14),
-                label: const Text('Lock Demand', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                onPressed: _isActionExecuting ? null : () async {
+                  await _lockForecast();
+                  // Trigger full 7-stage cycle simulation when beneficiary demand is confirmed!
+                  _runFullPipelineSimulation();
+                },
+                icon: const Icon(Icons.play_circle_fill_rounded, size: 16),
+                label: const Text('Confirm Demand & Start 7 Cycle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppConstants.primaryNavy,
+                  backgroundColor: const Color(0xFF16A34A),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  elevation: 2,
                 ),
               ),
             ],
@@ -2674,11 +2683,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: isLocked ? const Color(0xFFF8FAFC) : const Color(0xFFF0FDF4),
+            color: isLocked ? const Color(0xFFF0FDF4) : const Color(0xFFFFFBEB),
             borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
             border: Border.all(
-              color: isLocked ? const Color(0xFFCBD5E1) : const Color(0xFF86EFAC),
-              width: 1.2,
+              color: isLocked ? const Color(0xFF86EFAC) : const Color(0xFFFCD34D),
+              width: 1.4,
             ),
           ),
           child: isCompact
@@ -2833,6 +2842,107 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  Widget _buildBeneficiaryTriggerStepCard(bool isLocked) {
+    return Container(
+      width: 175,
+      padding: const EdgeInsets.only(left: 12, right: 12, top: 0, bottom: 12),
+      decoration: BoxDecoration(
+        color: isLocked ? const Color(0xFFF0FDF4) : const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isLocked ? const Color(0xFF16A34A) : const Color(0xFFF59E0B),
+          width: 1.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isLocked
+                ? const Color(0xFF16A34A).withValues(alpha: 0.15)
+                : const Color(0xFFF59E0B).withValues(alpha: 0.15),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 4.5,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isLocked ? const Color(0xFF16A34A) : const Color(0xFFF59E0B),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: isLocked ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Icon(
+                    isLocked ? Icons.verified_user_rounded : Icons.pending_actions_rounded,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isLocked ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  isLocked ? 'TRIGGERED' : 'PENDING',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w900,
+                    color: isLocked ? const Color(0xFF15803D) : const Color(0xFF92400E),
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Beneficiary Demand',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w900,
+              color: AppConstants.primaryNavy,
+              letterSpacing: -0.1,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 3),
+          Text(
+            isLocked ? '✓ Confirmed Baseline' : 'Awaiting Confirmation',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: isLocked ? const Color(0xFF15803D) : const Color(0xFFB45309),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildWorkflowStep(
     int num,
     String title,
@@ -2902,36 +3012,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
-        width: 148,
-        padding: const EdgeInsets.only(left: 10, right: 10, top: 0, bottom: 9),
+        width: 175,
+        padding: const EdgeInsets.only(left: 12, right: 12, top: 0, bottom: 12),
         decoration: BoxDecoration(
           color: cardBg,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected ? border : (isActive ? border : border),
-            width: isSelected ? 2.0 : (isActive ? 1.8 : 1.0),
+            width: isSelected ? 2.2 : (isActive ? 2.0 : 1.2),
           ),
           boxShadow: [
             if (isSelected)
               BoxShadow(
-                color: border.withValues(alpha: 0.24),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
+                color: border.withValues(alpha: 0.28),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               )
             else if (isActive)
               BoxShadow(
-                color: const Color(0xFF0284C7).withValues(alpha: 0.22),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                color: const Color(0xFF0284C7).withValues(alpha: 0.24),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               )
             else
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 4,
-                offset: const Offset(0, 1),
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
           ],
         ),
@@ -2941,54 +3051,54 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           children: [
             // Top Accent Stripe
             Container(
-              height: 3.5,
+              height: 4.5,
               width: double.infinity,
               decoration: BoxDecoration(
                 color: accentStripe,
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(10),
-                  topRight: Radius.circular(10),
+                  topLeft: Radius.circular(12),
+                  topRight: Radius.circular(12),
                 ),
               ),
             ),
-            const SizedBox(height: 7),
+            const SizedBox(height: 8),
             // Header: Avatar + Status Pill
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  width: 22,
-                  height: 22,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
                     color: iconBg,
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Center(
                     child: isActive
                         ? const SizedBox(
-                            width: 11,
-                            height: 11,
+                            width: 13,
+                            height: 13,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           )
                         : (isDone
-                            ? const Icon(Icons.check, size: 13, color: Colors.white)
+                            ? const Icon(Icons.check, size: 16, color: Colors.white)
                             : (isWarning
-                                ? const Icon(Icons.priority_high, size: 13, color: Colors.white)
+                                ? const Icon(Icons.priority_high, size: 16, color: Colors.white)
                                 : (icon != null
-                                    ? Icon(icon, size: 13, color: Colors.white)
-                                    : Text('$num', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: Colors.white))))),
+                                    ? Icon(icon, size: 15, color: Colors.white)
+                                    : Text('$num', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.white))))),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
                     color: badgeBg,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(5),
                   ),
                   child: Text(
                     statusPill,
                     style: TextStyle(
-                      fontSize: 8.5,
+                      fontSize: 9.5,
                       fontWeight: FontWeight.w900,
                       color: badgeTextColor,
                       letterSpacing: 0.4,
@@ -2997,12 +3107,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             // Title
             Text(
-              title,
+              '$num. $title',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: isSelected || isActive ? FontWeight.w900 : FontWeight.w800,
                 color: titleColor,
                 letterSpacing: -0.1,
@@ -3010,12 +3120,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 3),
             // Subtext
             Text(
               subtext,
               style: TextStyle(
-                fontSize: 9.5,
+                fontSize: 10.5,
                 fontWeight: isDone || isActive || isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected ? AppConstants.primaryNavy : const Color(0xFF64748B),
               ),
@@ -3030,18 +3140,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _buildStepConnector({bool isDone = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 10,
-            height: 2,
+            width: 14,
+            height: 2.5,
             color: isDone ? const Color(0xFF16A34A) : const Color(0xFFCBD5E1),
           ),
           Icon(
             Icons.chevron_right_rounded,
-            size: 15,
+            size: 18,
             color: isDone ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
           ),
         ],
@@ -3092,7 +3202,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // STAGE DEEP DIVE & MATHEMATICAL ENGINE CONSOLE
+  // STAGE OVERVIEW CONSOLE (STREAMLINED WORKFLOW VIEW)
   Widget _buildStageDeepDiveConsole() {
     final meta = _getWorkflowStageMeta(_selectedWorkflowStage);
 
@@ -3109,178 +3219,67 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // STAGE HEADER BANNER
-          Container(
-            padding: const EdgeInsets.all(AppConstants.space16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppConstants.primaryNavy,
-                  AppConstants.primaryNavy.withValues(alpha: 0.92),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(AppConstants.radiusMedium),
-                topRight: Radius.circular(AppConstants.radiusMedium),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.space16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: meta.accentColor.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: meta.accentColor.withValues(alpha: 0.4)),
-                      ),
-                      child: Icon(meta.icon, size: 20, color: meta.accentColor),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: meta.accentColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: meta.accentColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Icon(meta.icon, size: 24, color: meta.accentColor),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: meta.accentColor.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: meta.accentColor.withValues(alpha: 0.4)),
-                                ),
-                                child: Text(
-                                  meta.category,
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w900,
-                                    color: meta.accentColor,
-                                    letterSpacing: 0.6,
-                                  ),
-                                ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: meta.accentColor.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'STAGE 0${_selectedWorkflowStage + 1} OF 07 • ${meta.category}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                color: meta.accentColor,
+                                letterSpacing: 0.5,
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.lock_clock_outlined, size: 10, color: Colors.white70),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Pre-Dispatch Sealed',
-                                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white70),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            meta.title,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              height: 1.2,
                             ),
                           ),
-                          const SizedBox(height: 3),
-                          Text(
-                            meta.engine,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.white.withValues(alpha: 0.75),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDCFCE7),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFF86EFAC)),
+                            ),
+                            child: const Text(
+                              '✓ ACTIVE PIPELINE STAGE',
+                              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: Color(0xFF15803D)),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // MATHEMATICAL FORMULATION TERMINAL WITH INTERACTIVE INSPECTOR
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF030712),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFF334155)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.35),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0284C7).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Icon(Icons.functions_rounded, size: 14, color: Color(0xFF38BDF8)),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          meta.mathSpec,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF67E8F9),
-                            letterSpacing: 0.4,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      InkWell(
-                        onTap: () => _showFormulaBreakdownDialog(context, meta),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFF475569)),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.tune_rounded, size: 12, color: Color(0xFFE2E8F0)),
-                              SizedBox(width: 5),
-                              Text(
-                                'Inspect Variables',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFFE2E8F0),
-                                ),
-                              ),
-                            ],
-                          ),
+                      const SizedBox(height: 6),
+                      Text(
+                        meta.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: AppConstants.primaryNavy,
                         ),
                       ),
                     ],
@@ -3288,166 +3287,42 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ],
             ),
-          ),
-
-          // 4 TELEMETRY METRIC TILES
-          Padding(
-            padding: const EdgeInsets.all(AppConstants.space16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'STAGE 0${_selectedWorkflowStage + 1} LIVE TELEMETRY & CONSTRAINTS',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppConstants.textSecondary, letterSpacing: 0.5),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, size: 18, color: AppConstants.accentBlue),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      meta.operationalObjective,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
                     ),
-                    Text(
-                      'Target: Zero Entitlement Loss',
-                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: meta.accentColor),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _showFormulaBreakdownDialog(context, meta),
+                    icon: const Icon(Icons.tune_rounded, size: 14),
+                    label: const Text('Inspect Solver', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppConstants.primaryNavy,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (constraints.maxWidth < 650) {
-                      return Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: meta.metrics.map((m) {
-                          return SizedBox(
-                            width: (constraints.maxWidth - 8) / 2,
-                            child: _buildStageMetricTile(m['val']!, m['label']!, m['sub']!, meta.accentColor),
-                          );
-                        }).toList(),
-                      );
-                    }
-                    return Row(
-                      children: meta.metrics.map((m) {
-                        return Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(right: m == meta.metrics.last ? 0 : 8),
-                            child: _buildStageMetricTile(m['val']!, m['label']!, m['sub']!, meta.accentColor),
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  },
-                ),
-                const SizedBox(height: 14),
-
-                // OPERATIONAL OBJECTIVE & PURPOSE
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: meta.accentColor.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: meta.accentColor.withValues(alpha: 0.2)),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.flag_rounded, size: 16, color: meta.accentColor),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'OPERATIONAL OBJECTIVE',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: meta.accentColor, letterSpacing: 0.5),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              meta.operationalObjective,
-                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              meta.description,
-                              style: const TextStyle(fontSize: 11, color: Color(0xFF475569), height: 1.35),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // WHAT IS HAPPENING IN THIS STAGE? (CHRONOLOGICAL EXECUTION BREAKDOWN)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppConstants.cardBorder),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.timeline_rounded, size: 15, color: meta.accentColor),
-                              const SizedBox(width: 6),
-                              Text(
-                                'WHAT IS HAPPENING IN STAGE 0${_selectedWorkflowStage + 1}?',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w900,
-                                  color: meta.accentColor,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: meta.accentColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '4 Execution Steps',
-                              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: meta.accentColor),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      ...meta.executionSteps.asMap().entries.map((entry) {
-                        final i = entry.key + 1;
-                        final step = entry.value;
-                        return _buildExecutionStepCard(
-                          i,
-                          step['title'] ?? '',
-                          step['desc'] ?? '',
-                          step['tag'] ?? '',
-                          meta.accentColor,
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // PIPELINE NODE ARCHITECTURE FLOW (INTERACTIVE VISUAL GRAPH)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppConstants.cardBorder),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Row(
