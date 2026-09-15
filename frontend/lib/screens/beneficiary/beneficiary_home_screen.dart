@@ -98,10 +98,10 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
-  // Household-based Entitlement State (5 kg / eligible person)
-  int _eligibleMembersCount = 5;
+  // Household-based Entitlement State
+  int _eligibleMembersCount = 1;
   double _distributedQuantityKg = 0.0;
-  double _remainingBalanceKg = 25.0;
+  double _remainingBalanceKg = 0.0;
   bool _isBiometricVerified = false;
 
   // Active Request ETA Countdown State
