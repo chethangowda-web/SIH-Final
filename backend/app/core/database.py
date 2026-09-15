@@ -153,10 +153,53 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
         FOREIGN KEY (registered_fps_id) REFERENCES fps (fps_id)
     );
     """)
-    try:
-        cursor.execute("ALTER TABLE beneficiaries ADD COLUMN phone TEXT;")
-    except Exception:
-        pass
+    for col_def in [
+        ("phone", "TEXT"),
+        ("scheme_type", "TEXT DEFAULT 'PHH'"),
+        ("members_count", "INTEGER DEFAULT 4"),
+        ("monthly_entitlement_kg", "REAL DEFAULT 20.0"),
+        ("monthly_rice_kg", "REAL DEFAULT 15.0"),
+        ("monthly_wheat_kg", "REAL DEFAULT 5.0"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE beneficiaries ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
+
+    # FPS Inspection & Digital Checklist Tables
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS fps_inspections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        inspection_id TEXT NOT NULL UNIQUE,
+        fps_id TEXT NOT NULL,
+        inspector_id TEXT NOT NULL,
+        inspection_type TEXT NOT NULL DEFAULT 'ROUTINE',
+        scale_certified INTEGER NOT NULL DEFAULT 1,
+        display_board_updated INTEGER NOT NULL DEFAULT 1,
+        stock_matches_register INTEGER NOT NULL DEFAULT 1,
+        cctv_functional INTEGER NOT NULL DEFAULT 1,
+        epos_online INTEGER NOT NULL DEFAULT 1,
+        hygiene_compliant INTEGER NOT NULL DEFAULT 1,
+        compliance_score REAL NOT NULL DEFAULT 100.0,
+        remarks TEXT,
+        status TEXT NOT NULL DEFAULT 'SUBMITTED',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (fps_id) REFERENCES fps (fps_id)
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS surprise_inspection_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id TEXT NOT NULL UNIQUE,
+        fps_id TEXT NOT NULL,
+        dso_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'HIGH',
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
 
     # Seed fallback master records for default citizen users if absent
     cursor.execute("""
@@ -164,10 +207,10 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
     VALUES ('FPS-KA-BAG-0001', 'Fair Price Shop 1 (Bagalkot)', 'Bagalkot', 16.185, 75.696, 5000.0);
     """)
     cursor.execute("""
-    INSERT OR IGNORE INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language)
+    INSERT OR IGNORE INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, scheme_type, members_count, monthly_entitlement_kg, monthly_rice_kg, monthly_wheat_kg)
     VALUES 
-        ('BEN-KA-0001', 'Deepa Reddy', 'FPS-KA-BAG-0001', 'en'),
-        ('RC-KA-000001', 'Deepa Reddy', 'FPS-KA-BAG-0001', 'en');
+        ('BEN-KA-0001', 'Deepa Reddy', 'FPS-KA-BAG-0001', 'en', 'PHH', 2, 10.0, 0.0, 10.0),
+        ('RC-KA-000001', 'Deepa Reddy', 'FPS-KA-BAG-0001', 'en', 'PHH', 2, 10.0, 0.0, 10.0);
     """)
 
     # 5. intent (Forward Beneficiary Signal)

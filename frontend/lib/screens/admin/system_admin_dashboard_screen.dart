@@ -4,6 +4,7 @@ import '../../models/health_model.dart';
 import '../../services/api_service.dart';
 import 'citizen_request_queue_dialog.dart';
 import '../beneficiary/demo_login_screen.dart';
+import '../connectivity_screen.dart';
 
 class SystemAdminDashboardScreen extends StatefulWidget {
   final ApiService? apiService;
@@ -208,6 +209,18 @@ class _SystemAdminDashboardScreenState extends State<SystemAdminDashboardScreen>
                     spacing: 8,
                     runSpacing: 8,
                     children: [
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => ConnectivityScreen(apiService: _apiService),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.monitor_heart_outlined, size: 16, color: Colors.white),
+                        label: const Text('System Diagnostics & Health Check', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF15803D)),
+                      ),
                       ElevatedButton.icon(
                         onPressed: () => showDialog(context: context, builder: (_) => const CitizenRequestQueueDialog()),
                         icon: const Icon(Icons.inbox_outlined, size: 16, color: Colors.white),

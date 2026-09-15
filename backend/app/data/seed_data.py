@@ -119,7 +119,7 @@ def seed_fps(cursor):
 
 
 def seed_beneficiaries(cursor):
-    """Load 10,000 beneficiaries from beneficiaries_master.csv."""
+    """Load 10,000 beneficiaries from beneficiaries_master.csv with full demographic & quota metadata."""
     rows = _read_csv("beneficiaries_master.csv")
     records = []
     for row in rows:
@@ -127,11 +127,36 @@ def seed_beneficiaries(cursor):
         name = row["name"].strip()
         home_fps = row["home_fps_id"].strip()
         lang = row.get("language", "kn").strip()
-        records.append((card_id, name, home_fps, lang, "ACTIVE"))
+        scheme_type = row.get("scheme_type", "PHH").strip()
+        try:
+            members_count = int(row.get("members_count", 4))
+        except Exception:
+            members_count = 4
+        try:
+            monthly_entitlement_kg = float(row.get("monthly_entitlement_kg", 20.0))
+        except Exception:
+            monthly_entitlement_kg = 20.0
+        try:
+            monthly_rice_kg = float(row.get("monthly_rice_kg", 15.0))
+        except Exception:
+            monthly_rice_kg = 15.0
+        try:
+            monthly_wheat_kg = float(row.get("monthly_wheat_kg", 5.0))
+        except Exception:
+            monthly_wheat_kg = 5.0
+
+        records.append((
+            card_id, name, home_fps, lang, "ACTIVE",
+            scheme_type, members_count, monthly_entitlement_kg,
+            monthly_rice_kg, monthly_wheat_kg
+        ))
 
     cursor.executemany("""
-    INSERT OR REPLACE INTO beneficiaries (pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status)
-    VALUES (?, ?, ?, ?, ?);
+    INSERT OR REPLACE INTO beneficiaries (
+        pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status,
+        scheme_type, members_count, monthly_entitlement_kg, monthly_rice_kg, monthly_wheat_kg
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     """, records)
     return len(records)
 

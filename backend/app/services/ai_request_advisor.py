@@ -47,7 +47,8 @@ class CitizenRequestAdvisor:
         cursor = db.cursor()
         cursor.execute("""
         SELECT b.id, b.pseudonymous_beneficiary_id, b.name_for_demo, b.registered_fps_id,
-               b.language, b.status,
+               b.language, b.status, b.scheme_type, b.members_count,
+               b.monthly_entitlement_kg, b.monthly_rice_kg, b.monthly_wheat_kg,
                COALESCE(f.name, 'Registered FPS') as registered_fps_name
         FROM beneficiaries b
         LEFT JOIN fps f ON b.registered_fps_id = f.fps_id
@@ -55,52 +56,32 @@ class CitizenRequestAdvisor:
         """, (beneficiary_id,))
         row = cursor.fetchone()
 
-        # Deterministic card type derivation based on beneficiary index
-        try:
-            ben_num = int(beneficiary_id.split("-")[-1])
-        except Exception:
-            ben_num = 1
-
-        if ben_num % 10 == 0:
-            card_type = "AAY"
-            members = 1  # AAY is family-level 35kg fixed
-        elif ben_num % 4 == 0:
-            card_type = "PHH"
-            members = 5
+        # Extract authoritative master dataset records if available
+        if row and "members_count" in row.keys() and row["members_count"] is not None and row["members_count"] > 0:
+            card_type = (row["scheme_type"] or "PHH").strip()
+            members = int(row["members_count"])
+            rice_quota = float(row["monthly_rice_kg"] or 0.0)
+            wheat_quota = float(row["monthly_wheat_kg"] or 0.0)
+            card_label = "Antyodaya Anna Yojana (AAY)" if card_type == "AAY" else "Priority Household (PHH)"
         else:
-            card_type = "PHH"
-            members = 4
+            # Fallback derivation if record not seeded
+            try:
+                ben_num = int(beneficiary_id.split("-")[-1])
+            except Exception:
+                ben_num = 1
 
-        # Query data-driven policy from entitlement_policies table
-        cursor.execute("""
-        SELECT card_type, label, rice_per_member_kg, wheat_per_member_kg,
-               family_fixed_rice_kg, family_fixed_wheat_kg, transport_base_fee_inr,
-               transport_per_km_fee_inr
-        FROM entitlement_policies WHERE card_type = ?;
-        """, (card_type,))
-        policy_row = cursor.fetchone()
-
-        if policy_row:
-            card_label = policy_row["label"]
-            if policy_row["family_fixed_rice_kg"] > 0:
-                rice_quota = float(policy_row["family_fixed_rice_kg"])
-                wheat_quota = float(policy_row["family_fixed_wheat_kg"])
-            else:
-                rice_quota = float(policy_row["rice_per_member_kg"] * members)
-                wheat_quota = float(policy_row["wheat_per_member_kg"] * members)
-        else:
-            if card_type == "AAY":
+            if ben_num % 10 == 0:
+                card_type = "AAY"
+                members = 1
                 card_label = "Antyodaya Anna Yojana (AAY)"
                 rice_quota = 25.0
                 wheat_quota = 10.0
             else:
+                card_type = "PHH"
+                members = 4
                 card_label = "Priority Household (PHH)"
-                rice_quota = 20.0
+                rice_quota = 15.0
                 wheat_quota = 5.0
-
-        # Align household member count with statutory foodgrain quota for per-member schemes (PHH: 5kg/person)
-        if card_type == "PHH" and (rice_quota + wheat_quota) > 0:
-            members = max(1, int(round((rice_quota + wheat_quota) / 5.0)))
 
         # Query existing actual distribution / consumed balance for this cycle from confirmed citizen requests
         try:

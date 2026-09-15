@@ -540,6 +540,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     ).then((_) => _loadDashboardData());
   }
 
+  Future<void> _triggerSurpriseInspection() async {
+    final selectedFps = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.shield_outlined, color: Colors.red, size: 22),
+            SizedBox(width: 8),
+            Text('Issue Surprise Inspection Order'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Select target Fair Price Shop for immediate unannounced audit:'),
+            SizedBox(height: 12),
+            Text('• FPS-KA-IND-0003 (Indiranagar Ration Depot)', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('• FPS-KA-BAG-0001 (Malleshwaram Shop #1)'),
+            Text('• FPS-KA-MAL-0002 (Rajajinagar PDS Center)'),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop('FPS-KA-IND-0003'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Issue Order to Field Inspector', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (selectedFps != null) {
+      try {
+        await _apiService.issueSurpriseInspection(
+          fpsId: selectedFps,
+          assignedInspector: 'inspector_user',
+          reason: 'Stock discrepancy detected via AI reconciliation',
+        );
+      } catch (_) {}
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('⚡ Surprise Inspection Order issued for $selectedFps! Alert dispatched to Field Food Inspector.'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    }
+  }
+
   String get _activeFpsId => _selectedDrawerFps?.fpsId ?? (_dashboardData?.fpsList.isNotEmpty == true ? _dashboardData!.fpsList.first.fpsId : 'FPS-KA-BAG-0001');
 
   void _showCausalTraceDialog([String? fpsId]) {
@@ -1282,6 +1334,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       description =
           'Desk-based command dashboard. Operates the 7-stage workflow stepper (Forecast → Validate → Allocate → Optimize → Dispatch → Verify → Evaluate). Authorized to trigger AI forecasts, lock demand quota baselines, review pre-dispatch incidents, manually override AI quotas, and inspect XAI causal decision traces.';
       actions = [
+        {
+          'label': '🚨 Issue Surprise Inspection Order',
+          'icon': Icons.warning_amber_rounded,
+          'color': const Color(0xFFDC2626),
+          'onTap': _triggerSurpriseInspection,
+        },
         {
           'label': 'Trigger AI Forecast Pipeline',
           'icon': Icons.auto_awesome_rounded,

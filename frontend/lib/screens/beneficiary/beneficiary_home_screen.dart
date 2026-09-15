@@ -155,14 +155,11 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           _activeIntents = intents;
           _deliveryRecords = deliveries;
           _planningCycleState = cycleState;
-          if (ent.familyMembersCount > 0) {
-            _eligibleMembersCount = ent.familyMembersCount;
-          }
-          final statutoryTotal = ent.statutoryEntitlementRiceKg + ent.statutoryEntitlementWheatKg;
-          if (statutoryTotal >= 25.0 && _eligibleMembersCount < 5) {
-            _eligibleMembersCount = (statutoryTotal / 5.0).round();
-          }
-          final totalEligible = (statutoryTotal > 0) ? statutoryTotal : (_eligibleMembersCount * 5.0);
+          _eligibleMembersCount = ent.familyMembersCount > 0 ? ent.familyMembersCount : 1;
+          final statutoryTotal = ent.totalEligibleBalanceKg > 0
+              ? ent.totalEligibleBalanceKg
+              : (ent.statutoryEntitlementRiceKg + ent.statutoryEntitlementWheatKg);
+          final totalEligible = statutoryTotal > 0 ? statutoryTotal : (_eligibleMembersCount * 5.0);
           _remainingBalanceKg = (totalEligible - _distributedQuantityKg).clamp(0.0, totalEligible);
           _isLoading = false;
         });
@@ -1475,10 +1472,10 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
       );
     }
 
-    final hasPlanLocked = _activeIntents.isNotEmpty || _deliveryRecords.isNotEmpty;
-    final activeFpsName = _activeIntents.isNotEmpty
-        ? _activeIntents.first.intendedFpsName
-        : (_deliveryRecords.isNotEmpty ? (_deliveryRecords.first.intendedFpsName ?? _deliveryRecords.first.registeredFpsName ?? homeFpsName) : homeFpsName);
+    final hasPlanLocked = _deliveryRecords.isNotEmpty;
+    final activeFpsName = _deliveryRecords.isNotEmpty
+        ? (_deliveryRecords.first.intendedFpsName ?? _deliveryRecords.first.registeredFpsName ?? homeFpsName)
+        : (_activeIntents.isNotEmpty ? _activeIntents.first.intendedFpsName : homeFpsName);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

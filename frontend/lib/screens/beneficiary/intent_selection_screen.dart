@@ -101,12 +101,7 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
           // This ensures the displayed count matches the verified ration card registry,
           // not a client-side default. Rice = 4kg/member, Wheat = 1kg/member.
           if (ent != null) {
-            final statutoryTotal = ent.statutoryEntitlementRiceKg + ent.statutoryEntitlementWheatKg;
-            final derivedMembers = (statutoryTotal > 0) ? (statutoryTotal / 5.0).round() : ent.familyMembersCount;
-            _eligibleMembersCount = ent.familyMembersCount > 0 ? ent.familyMembersCount : derivedMembers;
-            if (statutoryTotal >= 25.0 && _eligibleMembersCount < 5) {
-              _eligibleMembersCount = (statutoryTotal / 5.0).round();
-            }
+            _eligibleMembersCount = ent.familyMembersCount > 0 ? ent.familyMembersCount : 1;
             _riceQtyKg = ent.statutoryEntitlementRiceKg;
             _wheatQtyKg = ent.statutoryEntitlementWheatKg;
           }
