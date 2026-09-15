@@ -31,6 +31,10 @@ class BeneficiaryOut(BaseModel):
     language: str
     status: str
     phone: Optional[str] = None
+    scheme_type: Optional[str] = "PHH"
+    members_count: Optional[int] = 1
+    monthly_rice_kg: Optional[float] = 0.0
+    monthly_wheat_kg: Optional[float] = 0.0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -43,6 +47,10 @@ class BeneficiaryDetailOut(BaseModel):
     language: str
     status: str
     phone: Optional[str] = None
+    scheme_type: Optional[str] = "PHH"
+    members_count: Optional[int] = 1
+    monthly_rice_kg: Optional[float] = 0.0
+    monthly_wheat_kg: Optional[float] = 0.0
     active_intents: List[Dict[str, Any]] = []
     demo_notice: str = DEMO_NOTICE
 

@@ -134,38 +134,79 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     });
 
     try {
-      // Search beneficiary from real database
+      // 1. Authoritative check via e-PoS eligibility API
+      try {
+        final el = await _apiService.checkEposEligibility(
+          fpsId: _selectedFpsId,
+          beneficiaryId: query,
+        );
+        if (!mounted) return;
+        final rKg = (el['statutory_rice_kg'] as num?)?.toDouble() ?? 0.0;
+        final wKg = (el['statutory_wheat_kg'] as num?)?.toDouble() ?? 0.0;
+        setState(() {
+          _searchedBeneficiary = {
+            'cardId': el['beneficiary_id'],
+            'name': el['name'],
+            'members': el['family_members_count'] ?? 1,
+            'cardCategory': el['category_label'] ?? 'Priority Household (BPHH)',
+            'riceEntitlementKg': rKg,
+            'wheatEntitlementKg': wKg,
+            'alreadyCollected': el['already_collected'] == true,
+            'collectedAt': el['collected_at'],
+            'isPortability': el['is_portability'] == true,
+            'homeFps': el['registered_fps_name'] ?? 'Home FPS',
+          };
+          _dispenseRiceKg = rKg;
+          _dispenseWheatKg = wKg;
+        });
+        return;
+      } catch (_) {}
+
+      // 2. Direct search from master beneficiaries dataset
       final beneficiaries = await _apiService.fetchBeneficiaries(search: query, limit: 1);
       if (!mounted) return;
 
       if (beneficiaries.isNotEmpty) {
         final b = beneficiaries.first;
+        final scheme = b.schemeType ?? 'PHH';
+        final catLabel = scheme == 'AAY'
+            ? 'Antyodaya Anna Yojana (AAY)'
+            : 'Priority Household (BPHH / PHH)';
+        final rKg = (b.monthlyRiceKg != null && b.monthlyRiceKg! > 0)
+            ? b.monthlyRiceKg!
+            : (scheme == 'AAY' ? 30.0 : ((b.membersCount ?? 4) * 4.0));
+        final wKg = (b.monthlyWheatKg != null && b.monthlyWheatKg! > 0)
+            ? b.monthlyWheatKg!
+            : (scheme == 'AAY' ? 5.0 : ((b.membersCount ?? 4) * 1.0));
+
         setState(() {
           _searchedBeneficiary = {
             'cardId': b.pseudonymousBeneficiaryId,
             'name': b.nameForDemo,
-            'members': 4, // standard household
+            'members': b.membersCount ?? 4,
+            'cardCategory': catLabel,
+            'riceEntitlementKg': rKg,
+            'wheatEntitlementKg': wKg,
+            'alreadyCollected': false,
+            'isPortability': b.registeredFpsId != _selectedFpsId,
+            'homeFps': b.registeredFpsName ?? b.registeredFpsId,
+          };
+          _dispenseRiceKg = rKg;
+          _dispenseWheatKg = wKg;
+        });
+      } else {
+        // Fallback for search query
+        setState(() {
+          _searchedBeneficiary = {
+            'cardId': query,
+            'name': 'Citizen ($query)',
+            'members': 4,
             'cardCategory': 'Priority Household (BPHH)',
             'riceEntitlementKg': 20.0,
             'wheatEntitlementKg': 5.0,
             'alreadyCollected': false,
           };
           _dispenseRiceKg = 20.0;
-          _dispenseWheatKg = 5.0;
-        });
-      } else {
-        // Fallback demo beneficiary record
-        setState(() {
-          _searchedBeneficiary = {
-            'cardId': query,
-            'name': 'Citizen Beneficiary ($query)',
-            'members': 3,
-            'cardCategory': 'Antyodaya Anna Yojana (AAY)',
-            'riceEntitlementKg': 35.0,
-            'wheatEntitlementKg': 5.0,
-            'alreadyCollected': false,
-          };
-          _dispenseRiceKg = 35.0;
           _dispenseWheatKg = 5.0;
         });
       }
@@ -175,14 +216,14 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
           _searchedBeneficiary = {
             'cardId': query,
             'name': 'Citizen ($query)',
-            'members': 3,
+            'members': 4,
             'cardCategory': 'BPHH',
-            'riceEntitlementKg': 15.0,
-            'wheatEntitlementKg': 3.0,
+            'riceEntitlementKg': 20.0,
+            'wheatEntitlementKg': 5.0,
             'alreadyCollected': false,
           };
-          _dispenseRiceKg = 15.0;
-          _dispenseWheatKg = 3.0;
+          _dispenseRiceKg = 20.0;
+          _dispenseWheatKg = 5.0;
         });
       }
     } finally {
@@ -757,14 +798,37 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
                           ),
                         ],
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF0FDF4),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: const Color(0xFF86EFAC)),
-                        ),
-                        child: const Text('ELIGIBLE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govGreen)),
+                      Row(
+                        children: [
+                          if (_searchedBeneficiary!['isPortability'] == true) ...[
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: const Color(0xFF93C5FD)),
+                              ),
+                              child: const Text('ONORC PORTABLE', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8))),
+                            ),
+                          ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFFCA5A5) : const Color(0xFF86EFAC)),
+                            ),
+                            child: Text(
+                              (_searchedBeneficiary!['alreadyCollected'] as bool) ? 'ALREADY COLLECTED' : 'ELIGIBLE',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFDC2626) : _govGreen,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

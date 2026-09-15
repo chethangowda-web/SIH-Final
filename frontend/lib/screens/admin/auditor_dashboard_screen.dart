@@ -26,12 +26,13 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
   DispatchManifestData? _manifest;
   List<DigitalGatepass> _gatepasses = [];
   ForecastEvaluationData? _evalData;
+  List<Map<String, dynamic>> _inspections = [];
 
   @override
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadAuditData();
   }
 
@@ -54,6 +55,13 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
 
       try {
         _evalData = await _apiService.fetchForecastEvaluation(cycleId: '2026-09');
+      } catch (_) {}
+
+      try {
+        final insp = await _apiService.fetchFpsInspections();
+        _inspections = (insp['completed_inspections'] as List<dynamic>? ?? [])
+            .map((i) => Map<String, dynamic>.from(i as Map))
+            .toList();
       } catch (_) {}
 
       if (mounted) {
@@ -106,6 +114,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
             Tab(text: 'Sealed Manifests (SHA-256)'),
             Tab(text: 'Gatepass Audit Trail'),
             Tab(text: 'Forecast vs Actual MAPE'),
+            Tab(text: 'Field Inspection Logs'),
           ],
         ),
         actions: [
@@ -171,6 +180,9 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
 
                       // TAB 3: Forecast MAPE Evaluation
                       _buildEvaluationTab(mape),
+
+                      // TAB 4: Field Inspection Records
+                      _buildInspectionsAuditTab(),
                     ],
                   ),
                 ),
@@ -396,6 +408,155 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                   Text('Permissible Tolerance: < 10.0% MAPE', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
                 ],
               ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInspectionsAuditTab() {
+    double avgScore = 100.0;
+    if (_inspections.isNotEmpty) {
+      final total = _inspections.fold<double>(
+        0.0,
+        (prev, i) => prev + ((i['compliance_score'] as num?)?.toDouble() ?? 100.0),
+      );
+      avgScore = total / _inspections.length;
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildMetricCard('Filed Inspections', '${_inspections.length} Reports', 'Field Officer Audits', Icons.assignment_turned_in_outlined, const Color(0xFF7E22CE)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildMetricCard('Average Compliance', '${avgScore.toStringAsFixed(1)}%', 'Statutory 6-Point Bar', Icons.score_outlined, const Color(0xFF059669)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildMetricCard('Regulatory Seal', 'ACTIVE / VERIFIED', 'Lokayukta Certified', Icons.verified_user_rounded, const Color(0xFF2563EB)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppConstants.cardBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Frontline Field Food Inspector Audit Register',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppConstants.textPrimary),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Complete regulatory records of unannounced on-site audits, electronic weighing calibrations, and grain moisture verifications.',
+                style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              if (_inspections.isNotEmpty)
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _inspections.length,
+                  separatorBuilder: (_, __) => const Divider(height: 16),
+                  itemBuilder: (context, idx) {
+                    final insp = _inspections[idx];
+                    final score = (insp['compliance_score'] as num?)?.toDouble() ?? 100.0;
+                    final isPass = score >= 80.0;
+
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppConstants.cardBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    isPass ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                                    size: 18,
+                                    color: isPass ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${insp['fps_id'] ?? "FPS-SHOP"} • Seal: ${insp['inspection_id'] ?? "INSP-SEAL"}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: isPass ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Score: ${score.toStringAsFixed(0)}% ${isPass ? "PASS" : "FAIL"}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: isPass ? const Color(0xFF15803D) : const Color(0xFFB91C1C),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            insp['remarks'] ?? 'Physical stock and weighing scale calibration verified.',
+                            style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Auditor: ${insp['inspector_id'] ?? "inspector_user"}',
+                                style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                (insp['created_at'] as String? ?? 'Today').split('T').first,
+                                style: const TextStyle(fontSize: 10.5, color: AppConstants.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  alignment: Alignment.center,
+                  child: const Column(
+                    children: [
+                      Icon(Icons.assignment_turned_in_outlined, size: 36, color: AppConstants.textSecondary),
+                      SizedBox(height: 8),
+                      Text('No completed field inspection reports logged yet.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                      SizedBox(height: 4),
+                      Text('Inspections submitted by Field Food Inspectors will appear here.', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),

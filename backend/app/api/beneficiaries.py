@@ -19,7 +19,7 @@ def list_beneficiaries(
 ):
     """Retrieve paginated list of synthetic demo beneficiaries."""
     cursor = db.cursor()
-    query = "SELECT id, pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status, phone FROM beneficiaries WHERE 1=1"
+    query = "SELECT id, pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status, phone, scheme_type, members_count, monthly_rice_kg, monthly_wheat_kg FROM beneficiaries WHERE 1=1"
     count_query = "SELECT COUNT(*) FROM beneficiaries WHERE 1=1"
     params = []
 
@@ -49,7 +49,11 @@ def list_beneficiaries(
             registered_fps_id=r["registered_fps_id"],
             language=r["language"],
             status=r["status"],
-            phone=r["phone"] if "phone" in r.keys() else None
+            phone=r["phone"] if "phone" in r.keys() else None,
+            scheme_type=r["scheme_type"] if "scheme_type" in r.keys() else "PHH",
+            members_count=r["members_count"] if "members_count" in r.keys() else 1,
+            monthly_rice_kg=float(r["monthly_rice_kg"] or 0.0) if "monthly_rice_kg" in r.keys() else 0.0,
+            monthly_wheat_kg=float(r["monthly_wheat_kg"] or 0.0) if "monthly_wheat_kg" in r.keys() else 0.0
         )
         for r in rows
     ]
@@ -74,14 +78,16 @@ def get_beneficiary(
     # Check if id is integer or pseudonymous string
     if id.isdigit():
         cursor.execute("""
-        SELECT b.id, b.pseudonymous_beneficiary_id, b.name_for_demo, b.registered_fps_id, b.language, b.status, b.phone, f.name as registered_fps_name
+        SELECT b.id, b.pseudonymous_beneficiary_id, b.name_for_demo, b.registered_fps_id, b.language, b.status, b.phone,
+               b.scheme_type, b.members_count, b.monthly_rice_kg, b.monthly_wheat_kg, f.name as registered_fps_name
         FROM beneficiaries b
         LEFT JOIN fps f ON b.registered_fps_id = f.fps_id
         WHERE b.id = ?;
         """, (int(id),))
     else:
         cursor.execute("""
-        SELECT b.id, b.pseudonymous_beneficiary_id, b.name_for_demo, b.registered_fps_id, b.language, b.status, b.phone, f.name as registered_fps_name
+        SELECT b.id, b.pseudonymous_beneficiary_id, b.name_for_demo, b.registered_fps_id, b.language, b.status, b.phone,
+               b.scheme_type, b.members_count, b.monthly_rice_kg, b.monthly_wheat_kg, f.name as registered_fps_name
         FROM beneficiaries b
         LEFT JOIN fps f ON b.registered_fps_id = f.fps_id
         WHERE b.pseudonymous_beneficiary_id = ?;
@@ -116,6 +122,10 @@ def get_beneficiary(
         language=row["language"],
         status=row["status"],
         phone=row["phone"] if "phone" in row.keys() else None,
+        scheme_type=row["scheme_type"] if "scheme_type" in row.keys() else "PHH",
+        members_count=row["members_count"] if "members_count" in row.keys() else 1,
+        monthly_rice_kg=float(row["monthly_rice_kg"] or 0.0) if "monthly_rice_kg" in row.keys() else 0.0,
+        monthly_wheat_kg=float(row["monthly_wheat_kg"] or 0.0) if "monthly_wheat_kg" in row.keys() else 0.0,
         active_intents=active_intents,
         demo_notice=DEMO_NOTICE
     )

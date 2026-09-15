@@ -72,6 +72,7 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
   void _showIssueSurpriseInspectionModal() {
     String selectedFps = _fpsList.isNotEmpty ? _fpsList.first.fpsId : 'FPS-KA-BAG-0001';
     String priority = 'HIGH';
+    String searchFilter = '';
     final reasonController = TextEditingController(
       text: 'Stock discrepancy detected via AI demand variance reconciliation. Conduct immediate physical weighing audit.',
     );
@@ -80,54 +81,78 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.gavel_rounded, color: _dangerRed, size: 24),
-              SizedBox(width: 8),
-              Text('Issue Surprise Inspection Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+        builder: (context, setModalState) {
+          final filteredList = _fpsList.where((fps) {
+            if (searchFilter.isEmpty) return true;
+            final q = searchFilter.toLowerCase();
+            return fps.fpsId.toLowerCase().contains(q) || fps.name.toLowerCase().contains(q);
+          }).toList();
+
+          if (filteredList.isNotEmpty && !filteredList.any((f) => f.fpsId == selectedFps)) {
+            selectedFps = filteredList.first.fpsId;
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
               children: [
-                const Text(
-                  'Select Target Fair Price Shop (From Master Dataset):',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _slate200),
+                Icon(Icons.gavel_rounded, color: _dangerRed, size: 24),
+                SizedBox(width: 8),
+                Text('Issue Surprise Inspection Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Select Target Fair Price Shop (Search 625 Dataset):',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                   ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: selectedFps,
-                      isExpanded: true,
-                      items: _fpsList.take(30).map((fps) {
-                        return DropdownMenuItem(
-                          value: fps.fpsId,
-                          child: Text('${fps.fpsId} - ${fps.name}', style: const TextStyle(fontSize: 12)),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) setModalState(() => selectedFps = val);
-                      },
+                  const SizedBox(height: 6),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Filter by FPS ID or Locality...',
+                      prefixIcon: const Icon(Icons.search, size: 16),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
+                    ),
+                    onChanged: (val) {
+                      setModalState(() => searchFilter = val.trim());
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _slate200),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: filteredList.any((f) => f.fpsId == selectedFps) ? selectedFps : (filteredList.isNotEmpty ? filteredList.first.fpsId : null),
+                        isExpanded: true,
+                        items: filteredList.take(50).map((fps) {
+                          return DropdownMenuItem(
+                            value: fps.fpsId,
+                            child: Text('${fps.fpsId} - ${fps.name}', style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setModalState(() => selectedFps = val);
+                        },
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                const Text('Audit Directive Priority:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                Row(
-                  children: ['CRITICAL', 'HIGH', 'NORMAL'].map((p) {
-                    final isSel = priority == p;
+                  const Text('Audit Directive Priority:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: ['CRITICAL', 'HIGH', 'NORMAL'].map((p) {
+                      final isSel = priority == p;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: ChoiceChip(
@@ -196,10 +221,11 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
                   : const Text('Dispatch Order to Inspector'),
             ),
           ],
-        ),
-      ),
-    );
-  }
+        );
+      },
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -301,56 +327,84 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
                     // 1. High-Level District Metrics Cards
                     const Text('1. High-Level District Demand Overview:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _slate900)),
                     const SizedBox(height: 8),
-                    LayoutBuilder(builder: (context, constraints) {
-                      final isWide = constraints.maxWidth > 700;
-                      return GridView.count(
-                        crossAxisCount: isWide ? 4 : 2,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: isWide ? 2.3 : 1.9,
+                    Builder(builder: (context) {
+                      final histMt = _dashboardData != null && _dashboardData!.totalHistoricalDemandKg > 0
+                          ? (_dashboardData!.totalHistoricalDemandKg / 1000).toStringAsFixed(1)
+                          : '481.1';
+                      final intentMt = _dashboardData != null && _dashboardData!.totalDeclaredIntentKg > 0
+                          ? (_dashboardData!.totalDeclaredIntentKg / 1000).toStringAsFixed(1)
+                          : '129.9';
+                      final forecastMt = _dashboardData != null && _dashboardData!.totalForecastDemandKg > 0
+                          ? (_dashboardData!.totalForecastDemandKg / 1000).toStringAsFixed(1)
+                          : '276.7';
+                      final highRisk = _dashboardData != null
+                          ? '${_dashboardData!.highRiskFpsCount} Shops'
+                          : '61 Shops';
+
+                      final totalForecastMt = _dashboardData != null && _dashboardData!.totalForecastDemandKg > 0
+                          ? _dashboardData!.totalForecastDemandKg / 1000.0
+                          : 276.7;
+                      final riceMt = totalForecastMt * 0.665;
+                      final wheatMt = totalForecastMt * 0.248;
+                      final ragiMt = totalForecastMt * 0.061;
+                      final sugarMt = totalForecastMt * 0.026;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildMetricTile('Historical Baseline', '481.1 MT', 'Previous 3-cycle aggregate', Icons.history_rounded, _govNavy),
-                          _buildMetricTile('Intent Demand', '129.9 MT', '+12.4% advance signals', Icons.sensors_rounded, const Color(0xFF2563EB)),
-                          _buildMetricTile('Forecast Demand (D̂)', '276.7 MT', 'AI Baseline + Intent', Icons.auto_graph_rounded, _govGreen),
-                          _buildMetricTile('High-Risk Stockouts', '61 Shops', 'Exceeding 75% threshold', Icons.warning_amber_rounded, _dangerRed),
+                          LayoutBuilder(builder: (context, constraints) {
+                            final isWide = constraints.maxWidth > 700;
+                            return GridView.count(
+                              crossAxisCount: isWide ? 4 : 2,
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                              childAspectRatio: isWide ? 2.3 : 1.9,
+                              children: [
+                                _buildMetricTile('Historical Baseline', '$histMt MT', 'Previous 3-cycle aggregate', Icons.history_rounded, _govNavy),
+                                _buildMetricTile('Intent Demand', '$intentMt MT', '+12.4% advance signals', Icons.sensors_rounded, const Color(0xFF2563EB)),
+                                _buildMetricTile('Forecast Demand (D̂)', '$forecastMt MT', 'AI Baseline + Intent', Icons.auto_graph_rounded, _govGreen),
+                                _buildMetricTile('High-Risk Stockouts', highRisk, 'Exceeding 75% threshold', Icons.warning_amber_rounded, _dangerRed),
+                              ],
+                            );
+                          }),
+                          const SizedBox(height: 16),
+
+                          // 2. Total District Grain Charts Section
+                          const Text('2. Total District Grain Distribution & Demand Trends:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _slate900)),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: _slate200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('District Monthly Commodity Demand (Metric Tons)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    Text('Active Cycle: ${_dashboardData?.activeCycle ?? "2026-09"}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govGreen)),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                _buildGrainBar('Fortified Rice', riceMt, totalForecastMt * 1.1, _govGreen),
+                                const SizedBox(height: 10),
+                                _buildGrainBar('Whole Wheat', wheatMt, totalForecastMt * 1.1, _amber),
+                                const SizedBox(height: 10),
+                                _buildGrainBar('Ragi / Coarse Grains', ragiMt, totalForecastMt * 1.1, const Color(0xFF6B21A8)),
+                                const SizedBox(height: 10),
+                                _buildGrainBar('Refined Sugar & Dal', sugarMt, totalForecastMt * 1.1, const Color(0xFF2563EB)),
+                              ],
+                            ),
+                          ),
                         ],
                       );
                     }),
-                    const SizedBox(height: 16),
-
-                    // 2. Total District Grain Charts Section
-                    const Text('2. Total District Grain Distribution & Demand Trends:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _slate900)),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _slate200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('District Monthly Commodity Demand (Metric Tons)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              Text('Active Cycle: 2026-09', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govGreen)),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          _buildGrainBar('Fortified Rice', 184.2, 300.0, _govGreen),
-                          const SizedBox(height: 10),
-                          _buildGrainBar('Whole Wheat', 68.5, 300.0, _amber),
-                          const SizedBox(height: 10),
-                          _buildGrainBar('Ragi / Coarse Grains', 16.8, 300.0, const Color(0xFF6B21A8)),
-                          const SizedBox(height: 10),
-                          _buildGrainBar('Refined Sugar & Dal', 7.2, 300.0, const Color(0xFF2563EB)),
-                        ],
-                      ),
-                    ),
                     const SizedBox(height: 16),
 
                     // 3. Active Surprise Inspection Orders & Reports Monitor

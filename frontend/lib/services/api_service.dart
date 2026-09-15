@@ -2441,7 +2441,26 @@ class ApiService {
     }
   }
 
-  /// FPS Owner: Dispense ration via e-PoS
+  /// FPS Owner: Check authoritative e-PoS entitlement and collection status
+  Future<Map<String, dynamic>> checkEposEligibility({
+    required String fpsId,
+    required String beneficiaryId,
+    String cycleId = '2026-09',
+  }) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/epos/eligibility?fps_id=$fpsId&beneficiary_id=$beneficiaryId&cycle_id=$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Beneficiary lookup failed: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Dispense ration via e-PoS terminal (decrements persistent stock)
   Future<Map<String, dynamic>> dispenseEposRation({
     required String fpsId,
     required String beneficiaryId,

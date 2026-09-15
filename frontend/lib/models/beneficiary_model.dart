@@ -8,6 +8,10 @@ class Beneficiary {
   final String? registeredFpsName;
   final String language;
   final String status;
+  final String? schemeType;
+  final int? membersCount;
+  final double? monthlyRiceKg;
+  final double? monthlyWheatKg;
   final List<Map<String, dynamic>> activeIntents;
 
   Beneficiary({
@@ -18,6 +22,10 @@ class Beneficiary {
     this.registeredFpsName,
     required this.language,
     required this.status,
+    this.schemeType = 'PHH',
+    this.membersCount = 1,
+    this.monthlyRiceKg = 0.0,
+    this.monthlyWheatKg = 0.0,
     this.activeIntents = const [],
   });
 
@@ -30,6 +38,10 @@ class Beneficiary {
       registeredFpsName: json['registered_fps_name'],
       language: json['language'] ?? 'kn',
       status: json['status'] ?? 'ACTIVE',
+      schemeType: json['scheme_type'] ?? 'PHH',
+      membersCount: (json['members_count'] as num?)?.toInt() ?? 1,
+      monthlyRiceKg: (json['monthly_rice_kg'] as num?)?.toDouble() ?? 0.0,
+      monthlyWheatKg: (json['monthly_wheat_kg'] as num?)?.toDouble() ?? 0.0,
       activeIntents: (json['active_intents'] as List<dynamic>?)
               ?.map((e) => Map<String, dynamic>.from(e))
               .toList() ??

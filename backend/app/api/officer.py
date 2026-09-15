@@ -343,3 +343,54 @@ def dispense_ration_epos(
         status="SUCCESS_DISPENSED",
         receipt_confirmed_at=now_str
     )
+
+
+@router.get("/epos/eligibility")
+def check_epos_eligibility(
+    fps_id: str = Query(...),
+    beneficiary_id: str = Query(...),
+    cycle_id: str = Query("2026-09"),
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FPS_OWNER", "DSO", "ADMIN"]))
+):
+    """
+    Query authoritative entitlement, scheme category, and collection status for a ration card.
+    Used by the e-PoS terminal prior to biometric authorization.
+    """
+    ben_id = beneficiary_id.strip()
+    c_id = cycle_id.strip()
+
+    try:
+        ent = ai_request_advisor.get_beneficiary_entitlement(db, ben_id, "Rice", c_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Beneficiary '{ben_id}' not found in master database: {str(e)}"
+        )
+
+    cursor = db.cursor()
+    cursor.execute("""
+    SELECT id, status, confirmed_at FROM beneficiary_cycle_receipts
+    WHERE beneficiary_id = ? AND cycle_id = ? AND status = 'COMPLETED';
+    """, (ben_id, c_id))
+    receipt = cursor.fetchone()
+    already_collected = bool(receipt)
+    collected_at = str(receipt["confirmed_at"]) if receipt and "confirmed_at" in receipt.keys() else None
+
+    scheme = ent.get("card_type", "PHH")
+    category_label = "Antyodaya Anna Yojana (AAY)" if scheme == "AAY" else "Priority Household (BPHH / PHH)"
+
+    return {
+        "beneficiary_id": ent["beneficiary_id"],
+        "name": ent["name"],
+        "registered_fps_id": ent["registered_fps_id"],
+        "registered_fps_name": ent.get("registered_fps_name", "Registered Fair Price Shop"),
+        "card_type": scheme,
+        "category_label": category_label,
+        "family_members_count": ent.get("family_members_count", 1),
+        "statutory_rice_kg": ent.get("statutory_entitlement_rice_kg", 0.0),
+        "statutory_wheat_kg": ent.get("statutory_entitlement_wheat_kg", 0.0),
+        "already_collected": already_collected,
+        "collected_at": collected_at,
+        "is_portability": ent["registered_fps_id"] != fps_id.strip()
+    }
