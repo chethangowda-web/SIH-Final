@@ -99,7 +99,7 @@ def order_surprise_inspection(
 def list_inspections(
     fps_id: Optional[str] = None,
     db: sqlite3.Connection = Depends(get_db),
-    current_user: dict = Depends(RoleChecker(["DSO", "FIELD_FOOD_INSPECTOR", "FIELD_OFFICER", "ADMIN"]))
+    current_user: dict = Depends(RoleChecker(["DSO", "FIELD_FOOD_INSPECTOR", "FIELD_OFFICER", "AUDITOR", "ADMIN"]))
 ):
     """
     List inspection orders and completed inspections.

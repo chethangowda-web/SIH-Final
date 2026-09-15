@@ -2399,31 +2399,7 @@ class ApiService {
 
   // ----------------- Officer & e-PoS Operational Workflows ----------------- //
 
-  /// Field Food Inspector: Submit 6-point physical verification inspection
-  Future<Map<String, dynamic>> submitFpsInspectionReport({
-    required String fpsId,
-    required int complianceScore,
-    required String notes,
-    String? orderId,
-  }) async {
-    final response = await client.post(
-      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/submit'),
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-      body: json.encode({
-        'fps_id': fpsId,
-        'order_id': orderId,
-        'compliance_score': complianceScore.toDouble(),
-        'remarks': notes,
-      }),
-    ).timeout(AppConstants.apiTimeout);
 
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return json.decode(response.body) as Map<String, dynamic>;
-    } else {
-      final err = json.decode(response.body);
-      throw parseError(response, 'Failed to submit inspection report: ${err['detail'] ?? response.statusCode}');
-    }
-  }
 
   /// DSO: Trigger surprise inspection order
   Future<Map<String, dynamic>> orderSurpriseInspection({
@@ -2519,6 +2495,58 @@ class ApiService {
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return json.decode(response.body) as List<dynamic>;
+    }
+    return [];
+  }
+
+  /// Field Food Inspector: Submit 6-point physical verification inspection
+  Future<Map<String, dynamic>> submitFpsInspectionReport({
+    required String fpsId,
+    String? orderId,
+    bool scaleCertified = true,
+    bool displayBoardUpdated = true,
+    bool stockMatchesRegister = true,
+    bool cctvFunctional = true,
+    bool eposOnline = true,
+    bool hygieneCompliant = true,
+    double complianceScore = 100.0,
+    String remarks = '',
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/submit'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'fps_id': fpsId,
+        'order_id': orderId,
+        'scale_certified': scaleCertified,
+        'display_board_updated': displayBoardUpdated,
+        'stock_matches_register': stockMatchesRegister,
+        'cctv_functional': cctvFunctional,
+        'epos_online': eposOnline,
+        'hygiene_compliant': hygieneCompliant,
+        'compliance_score': complianceScore,
+        'remarks': remarks,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to submit inspection report: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Retrieve list of all Fair Price Shops with live inventory and intent aggregates
+  Future<List<FpsShop>> fetchFPSList() async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      final list = json.decode(response.body) as List<dynamic>;
+      return list.map((e) => FpsShop.fromJson(e as Map<String, dynamic>)).toList();
     }
     return [];
   }

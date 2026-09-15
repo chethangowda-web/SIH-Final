@@ -9,7 +9,7 @@ from app.core.auth import get_current_user, verify_owner, RoleChecker
 
 router = APIRouter(tags=["Beneficiaries"], dependencies=[Depends(get_current_user)])
 
-@router.get("/beneficiaries", response_model=PaginatedBeneficiaries, dependencies=[Depends(RoleChecker(["DSO", "ADMIN", "AUDITOR"]))])
+@router.get("/beneficiaries", response_model=PaginatedBeneficiaries, dependencies=[Depends(RoleChecker(["DSO", "ADMIN", "AUDITOR", "FPS_OWNER", "FIELD_FOOD_INSPECTOR", "FIELD_OFFICER"]))])
 def list_beneficiaries(
     limit: int = Query(50, ge=1, le=2000, description="Max records to return"),
     offset: int = Query(0, ge=0, description="Number of records to skip"),
