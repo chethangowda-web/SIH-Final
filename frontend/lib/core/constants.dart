@@ -37,8 +37,8 @@ class AppConstants {
   }
   static String get healthEndpoint => '$apiBaseUrl/health';
 
-  // Fast, responsive Request Timeout (12s prevents UI freezing)
-  static const Duration apiTimeout = Duration(seconds: 12);
+  // Cloud production resilient Request Timeout (35s handles cloud cold starts)
+  static const Duration apiTimeout = Duration(seconds: 35);
 
 
   // Modern Government Digital Infrastructure Color Palette

@@ -102,6 +102,20 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     return '$m:$s';
   }
 
+  String _cleanErrorMessage(dynamic e) {
+    final str = e.toString();
+    if (str.contains('TimeoutException') || str.contains('Future not completed')) {
+      return 'Connection timed out while reaching the cloud server. Please retry in a moment.';
+    }
+    if (e is ApiException) {
+      return e.message;
+    }
+    if (str.startsWith('Exception: ')) {
+      return str.replaceFirst('Exception: ', '');
+    }
+    return str;
+  }
+
   // Action: Send Real OTP to Citizen via Twilio SMS
   Future<void> _handleSendOtp() async {
     final cardId = _citizenCardController.text.trim();
@@ -109,38 +123,35 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
     if (cardId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your Ration Card Number (e.g. RC-KA-000001)')),
-      );
-      return;
-    }
-    if (homeFpsId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your Home FPS Center ID (e.g. FPS-KA-BAG-0001)')),
+        SnackBar(content: Text(tr('login.enter_ration_card'))),
       );
       return;
     }
 
     setState(() => _isSendingOtp = true);
     try {
-      final res = await _apiService.sendCitizenOtp(
-        cardId,
-        homeFpsId: homeFpsId,
-      );
+      final res = await _apiService.sendCitizenOtp(cardId, homeFpsId: homeFpsId.isNotEmpty ? homeFpsId : null);
+      if (!mounted) return;
+
       setState(() {
         _otpSent = true;
-        _citizenOtpController.clear();
-      });
-      final otpCode = res['demo_otp_code'] as String?;
-      setState(() {
-        _otpSent = true;
-        if (otpCode != null) {
-          _citizenOtpController.text = otpCode;
-        }
       });
       _startOtpTimer();
-      final displayText = otpCode != null ? 'OTP Code: $otpCode' : 'OTP Sent Successfully';
 
-      if (!mounted) return;
+      final mode = res['mode'] ?? 'MOCK';
+      final phone = res['masked_phone'] ?? '';
+      final mockOtp = res['mock_otp'];
+
+      String displayText;
+      if (mode == 'TWILIO_LIVE' || mode == 'LIVE') {
+        displayText = 'SMS OTP sent to $phone. Please check your phone.';
+      } else {
+        displayText = 'Demo Mode: OTP sent to $phone (Test code: $mockOtp)';
+        if (mockOtp != null) {
+          _citizenOtpController.text = mockOtp.toString();
+        }
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -161,7 +172,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(tr('login.otp_send_failed', params: {'error': e.toString()})),
+          content: Text(tr('login.otp_send_failed', params: {'error': _cleanErrorMessage(e)})),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -197,7 +208,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(tr('login.otp_verify_failed', params: {'error': e.toString()})),
+          content: Text(tr('login.otp_verify_failed', params: {'error': _cleanErrorMessage(e)})),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -244,7 +255,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(tr('login.dept_login_failed', params: {'error': e.toString()})),
+          content: Text(tr('login.dept_login_failed', params: {'error': _cleanErrorMessage(e)})),
           backgroundColor: Colors.red.shade700,
         ),
       );
