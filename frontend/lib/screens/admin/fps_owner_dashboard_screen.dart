@@ -52,6 +52,67 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
   final TextEditingController _indentRiceController = TextEditingController(text: '2000');
   final TextEditingController _indentWheatController = TextEditingController(text: '500');
 
+  // Guided Loading Bay Stepper Pipeline State
+  int _selectedQueueIndex = 0;
+  final List<Map<String, dynamic>> _loadingBayQueue = [
+    {
+      'truckId': 'TRK-KA-0001',
+      'driverName': 'Ramesh Bhat',
+      'gatepassId': 'GP-2026-09-0001',
+      'bay': 'Bay-02',
+      'stage': 1,
+      'statusLabel': 'STAGE 1: GATEPASS_ISSUED',
+    },
+    {
+      'truckId': 'TRK-KA-0002',
+      'driverName': 'Sanjay Patil',
+      'gatepassId': 'GP-2026-09-0002',
+      'bay': 'Bay-03',
+      'stage': 1,
+      'statusLabel': 'STAGE 1: GATEPASS_ISSUED',
+    },
+    {
+      'truckId': 'TRK-KA-0003',
+      'driverName': 'Kiran Rao',
+      'gatepassId': 'GP-2026-09-0003',
+      'bay': 'Bay-04',
+      'stage': 1,
+      'statusLabel': 'STAGE 1: GATEPASS_ISSUED',
+    },
+    {
+      'truckId': 'TRK-KA-0004',
+      'driverName': 'Kiran Kumar',
+      'gatepassId': 'GP-2026-09-0004',
+      'bay': 'Bay-01',
+      'stage': 1,
+      'statusLabel': 'STAGE 1: GATEPASS_ISSUED',
+    },
+    {
+      'truckId': 'TRK-KA-0005',
+      'driverName': 'Venkatesh Naik',
+      'gatepassId': 'GP-2026-09-0005',
+      'bay': 'Bay-02',
+      'stage': 1,
+      'statusLabel': 'STAGE 1: GATEPASS_ISSUED',
+    },
+    {
+      'truckId': 'TRK-KA-0006',
+      'driverName': 'Harish Reddy',
+      'gatepassId': 'GP-2026-09-0006',
+      'bay': 'Bay-03',
+      'stage': 1,
+      'statusLabel': 'STAGE 1: GATEPASS_ISSUED',
+    },
+    {
+      'truckId': 'TRK-KA-0007',
+      'driverName': 'Sanjay Shetty',
+      'gatepassId': 'GP-2026-09-0007',
+      'bay': 'Bay-04',
+      'stage': 1,
+      'statusLabel': 'STAGE 1: GATEPASS_ISSUED',
+    },
+  ];
+
   // Statutory Design Tokens
   static const Color _govNavy = Color(0xFF0F2942);
   static const Color _govGreen = Color(0xFF15803D);
@@ -525,11 +586,13 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
                     children: [
-                      _buildTabButton(0, '📦 Current Stock & Replenishment', Icons.inventory_2_outlined),
+                      _buildTabButton(0, '🚚 Loading Bay Stepper Pipeline', Icons.local_shipping_outlined),
                       const SizedBox(width: 8),
-                      _buildTabButton(1, '📖 Statutory Digital Register', Icons.receipt_long_outlined),
+                      _buildTabButton(1, '📱 e-PoS Terminal', Icons.point_of_sale_rounded),
                       const SizedBox(width: 8),
-                      _buildTabButton(2, '📱 e-PoS Dispensation Terminal', Icons.point_of_sale_rounded),
+                      _buildTabButton(2, '📦 Stock & Inventory', Icons.inventory_2_outlined),
+                      const SizedBox(width: 8),
+                      _buildTabButton(3, '📖 Digital Register', Icons.receipt_long_outlined),
                     ],
                   ),
                 ),
@@ -537,9 +600,10 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
                   child: IndexedStack(
                     index: _activeTab,
                     children: [
+                      _buildLoadingBayPipelineStepperView(),
+                      _buildEposScreenView(),
                       _buildCurrentStockView(),
                       _buildDigitalRegisterView(),
-                      _buildEposScreenView(),
                     ],
                   ),
                 ),
@@ -1507,6 +1571,444 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
                       ],
                     ],
                   ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingBayPipelineStepperView() {
+    final selectedTruck = _loadingBayQueue[_selectedQueueIndex.clamp(0, _loadingBayQueue.length - 1)];
+    final int stage = selectedTruck['stage'] as int;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Top Authority Banner
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7), // Light Cream Amber
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.shield_outlined, color: Color(0xFFC2410C), size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'PHYSICAL EXECUTION AUTHORITY • GODOWN & LOADING BAY Clearance',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.black, color: Color(0xFFC2410C), letterSpacing: 0.3),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'On-the-ground physical handshake. Confirms that what was planned in the sealed manifest matches physical truck loading. Policy decisions (Forecast locking & Quota overrides) are restricted to enforce CAG audit separation of duties.',
+                  style: TextStyle(fontSize: 11.5, color: Color(0xFF9A3412), height: 1.35),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('📷 Scanning QR Gatepass code... Gatepass GP-2026-09-0001 Verified!'),
+                            backgroundColor: Color(0xFFD97706),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.qr_code_scanner_rounded, size: 16, color: Colors.white),
+                      label: const Text('Scan QR Gatepass', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD97706),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: null,
+                      icon: const Icon(Icons.lock_outline, size: 14, color: Color(0xFFB45309)),
+                      label: const Text('AI Forecast (Restricted)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFFCD34D)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Digital QR Gatepass Pipeline Stepper Card
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _slate200),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6, offset: const Offset(0, 2)),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Digital QR Gatepass Pipeline',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _slate900),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _slate100,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: _slate200),
+                      ),
+                      child: Text(
+                        'ACTIVE TRUCK: ${selectedTruck['truckId']}',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _slate700),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // 4 Stepper Circle Nodes
+                Row(
+                  children: [
+                    _buildPipelineStepNode(1, 'Auth', 'Driver Identity', stage >= 1, isCurrent: stage == 1),
+                    _buildPipelineStepConnector(stage > 1),
+                    _buildPipelineStepNode(2, 'Bay Assign', selectedTruck['bay'] as String, stage >= 2, isCurrent: stage == 2),
+                    _buildPipelineStepConnector(stage > 2),
+                    _buildPipelineStepNode(3, 'Loading', 'Grain Seal', stage >= 3, isCurrent: stage == 3),
+                    _buildPipelineStepConnector(stage > 3),
+                    _buildPipelineStepNode(4, 'Exit QR', 'Dispatch Clear', stage >= 4, isCurrent: stage == 4),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // 3 Details Fields
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildPipelineInfoBox(
+                        icon: Icons.person_outline,
+                        label: 'Driver Name',
+                        value: selectedTruck['driverName'] as String,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildPipelineInfoBox(
+                        icon: Icons.store_outlined,
+                        label: 'Assigned Bay',
+                        value: selectedTruck['bay'] as String,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildPipelineInfoBox(
+                        icon: Icons.local_shipping_outlined,
+                        label: 'Current Status',
+                        value: selectedTruck['statusLabel'] as String,
+                        valueColor: const Color(0xFFD97706),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Action Buttons Bar
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: stage < 4
+                          ? () {
+                              setState(() {
+                                final nextStage = stage + 1;
+                                selectedTruck['stage'] = nextStage;
+                                if (nextStage == 2) {
+                                  selectedTruck['statusLabel'] = 'STAGE 2: BAY_ASSIGNED';
+                                } else if (nextStage == 3) {
+                                  selectedTruck['statusLabel'] = 'STAGE 3: GRAIN_SEALED';
+                                } else if (nextStage == 4) {
+                                  selectedTruck['statusLabel'] = 'STAGE 4: DISPATCH_CLEAR';
+                                }
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('⏩ Gatepass ${selectedTruck['gatepassId']} advanced to Stage ${selectedTruck['stage']}!'),
+                                  backgroundColor: const Color(0xFFD97706),
+                                ),
+                              );
+                            }
+                          : null,
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.white),
+                      label: Text(
+                        stage < 4 ? '➔ Advance Gatepass to Stage ${stage + 1}' : '✔ Gatepass Dispatch Cleared',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD97706),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            title: const Row(
+                              children: [
+                                Icon(Icons.verified_rounded, color: _govGreen, size: 24),
+                                SizedBox(width: 8),
+                                Text('Physical Manifest vs Grain Weight Verified', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            content: Text(
+                              'Verified truck ${selectedTruck['truckId']} physical grain weight (12,500 kg Rice) against sealed DSO manifest ${selectedTruck['gatepassId']}. Zero variance detected.',
+                              style: const TextStyle(fontSize: 12.5),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('OK'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.subtitles_outlined, size: 16, color: _slate700),
+                      label: const Text('Inspect Physical Manifest vs Grain Weight', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _slate700)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: _slate200),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 3. Godown Loading Bay Dispatch Queue
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _slate200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Godown Loading Bay Dispatch Queue',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _slate900),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Select a truck to inspect physical loading or advance gatepass status',
+                  style: TextStyle(fontSize: 12, color: _slate500),
+                ),
+                const SizedBox(height: 16),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _loadingBayQueue.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final t = _loadingBayQueue[index];
+                    final isSelected = _selectedQueueIndex == index;
+
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          _selectedQueueIndex = index;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isSelected ? const Color(0xFFFFFBEB) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isSelected ? const Color(0xFFF59E0B) : _slate200,
+                            width: isSelected ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: isSelected ? const Color(0xFFFDE68A) : _slate100,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.local_shipping_rounded,
+                                color: isSelected ? const Color(0xFFD97706) : _slate500,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${t['truckId']} - ${t['driverName']}',
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSelected ? const Color(0xFF92400E) : _slate900,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'Gatepass: ${t['gatepassId']} • Bay: ${t['bay']}',
+                                    style: const TextStyle(fontSize: 11.5, color: _slate500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFFDE68A)),
+                              ),
+                              child: Text(
+                                t['statusLabel'] as String,
+                                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPipelineStepNode(int stepNum, String title, String subtitle, bool isCompleted, {required bool isCurrent}) {
+    return Expanded(
+      child: Column(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isCurrent
+                  ? const Color(0xFFD97706)
+                  : (isCompleted ? const Color(0xFF059669) : Colors.white),
+              border: Border.all(
+                color: isCurrent
+                    ? const Color(0xFFB45309)
+                    : (isCompleted ? const Color(0xFF059669) : _slate200),
+                width: 2,
+              ),
+            ),
+            child: Center(
+              child: isCompleted && !isCurrent
+                  ? const Icon(Icons.check, size: 18, color: Colors.white)
+                  : Text(
+                      stepNum.toString(),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: isCurrent ? Colors.white : _slate500,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
+              color: isCurrent ? const Color(0xFFD97706) : _slate700,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 10, color: _slate500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPipelineStepConnector(bool isCompleted) {
+    return Container(
+      width: 40,
+      height: 2,
+      margin: const EdgeInsets.only(bottom: 22),
+      color: isCompleted ? const Color(0xFF059669) : _slate200,
+    );
+  }
+
+  Widget _buildPipelineInfoBox({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? valueColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _slate200),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: valueColor ?? _slate500),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 10.5, color: _slate500)),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: valueColor ?? _slate900,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
