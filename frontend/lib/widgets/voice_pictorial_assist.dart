@@ -3,6 +3,32 @@ import 'package:flutter/material.dart';
 import '../core/constants.dart';
 import '../core/localization.dart';
 
+enum BeneficiaryVoiceAction { openRation, openShop, openTrack, openHelp, goBack, repeat, unknown }
+
+BeneficiaryVoiceAction parseBeneficiaryVoiceAction(String input, [String lang = 'en']) {
+  final s = input.toLowerCase().trim();
+  // EN
+  if (s.contains('ration') || s.contains('need') || s.contains('rice') || s.contains('wheat')) return BeneficiaryVoiceAction.openRation;
+  if (s.contains('shop') || s.contains('store') || s.contains('fps')) return BeneficiaryVoiceAction.openShop;
+  if (s.contains('track') || s.contains('where') || s.contains('delivery') || s.contains('status')) return BeneficiaryVoiceAction.openTrack;
+  if (s.contains('help') || s.contains('problem') || s.contains('issue') || s.contains('complaint') || s.contains('grievance')) return BeneficiaryVoiceAction.openHelp;
+  if (s.contains('back')) return BeneficiaryVoiceAction.goBack;
+  if (s.contains('repeat')) return BeneficiaryVoiceAction.repeat;
+  // HI
+  if (s.contains('राशन') || s.contains('चावल') || s.contains('गेहूं')) return BeneficiaryVoiceAction.openRation;
+  if (s.contains('दुकान') || s.contains('दुकानदार')) return BeneficiaryVoiceAction.openShop;
+  if (s.contains('ट्रैक') || s.contains('स्थिति') || s.contains('कहाँ')) return BeneficiaryVoiceAction.openTrack;
+  if (s.contains('मदद') || s.contains('समस्या') || s.contains('शिकायत')) return BeneficiaryVoiceAction.openHelp;
+  if (s.contains('वापस') || s.contains('पीछे')) return BeneficiaryVoiceAction.goBack;
+  // KN
+  if (s.contains('ಪಡಿತರ') || s.contains('ಅಕ್ಕಿ') || s.contains('ಗೋಧಿ')) return BeneficiaryVoiceAction.openRation;
+  if (s.contains('ಅಂಗಡಿ')) return BeneficiaryVoiceAction.openShop;
+  if (s.contains('ಟ್ರ್ಯಾಕ್') || s.contains('ಸ್ಥಿತಿ') || s.contains('ಎಲ್ಲಿ')) return BeneficiaryVoiceAction.openTrack;
+  if (s.contains('ಸಹಾಯ') || s.contains('ಸಮಸ್ಯೆ') || s.contains('ದೂರು')) return BeneficiaryVoiceAction.openHelp;
+  if (s.contains('ಹಿಂದೆ')) return BeneficiaryVoiceAction.goBack;
+  return BeneficiaryVoiceAction.unknown;
+}
+
 class VoicePictorialAssistButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool isCompact;

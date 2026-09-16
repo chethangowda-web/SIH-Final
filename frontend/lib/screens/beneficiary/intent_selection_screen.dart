@@ -41,6 +41,7 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
   late int _eligibleMembersCount;
   late double _riceQtyKg;
   late double _wheatQtyKg;
+  String _selectedCommodity = 'both';
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -143,12 +144,14 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
     final distance = _getCalculatedDistance(_selectedFps!);
     final fee = _calculateTransportFee(distance);
 
+    final commodityOption = _selectedCommodity == 'rice' ? 'Rice' : (_selectedCommodity == 'wheat' ? 'Wheat' : 'Both');
+
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => IntentConfirmationScreen(
           beneficiary: widget.beneficiary,
           intendedFps: _selectedFps!,
-          commodityOption: 'Both',
+          commodityOption: commodityOption,
           apiService: _apiService,
           deliveryMode: _deliveryMode,
           deliveryAddress: _deliveryMode == 'HOME_DELIVERY' ? _addressController.text.trim() : null,
@@ -172,16 +175,6 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
     final selectedDist = _selectedFps != null ? _getCalculatedDistance(_selectedFps!) : 0.6;
     final transportFee = _calculateTransportFee(selectedDist);
 
-    final riceTotal = _entitlement?.statutoryEntitlementRiceKg ?? 0.0;
-    final wheatTotal = _entitlement?.statutoryEntitlementWheatKg ?? 0.0;
-    final totalMonthly = riceTotal + wheatTotal;
-
-    final riceConsumed = _entitlement?.consumedRiceKg ?? 0.0;
-    final wheatConsumed = _entitlement?.consumedWheatKg ?? 0.0;
-    final totalConsumed = riceConsumed + wheatConsumed;
-
-    final remainingBalance = _entitlement?.totalEligibleBalanceKg ?? totalMonthly;
-
     return AnimatedBuilder(
       animation: LanguageController.instance,
       builder: (context, _) {
@@ -197,12 +190,12 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  tr('intent.screen_title'),
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.2),
+                  tr('beneficiary.home.tile_need'),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.2),
                 ),
                 Text(
-                  tr('app.nfsa_notice'),
-                  style: const TextStyle(fontSize: 10.5, color: Colors.white70),
+                  tr('beneficiary.select.choose_ration_sub'),
+                  style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
               ],
             ),
@@ -237,78 +230,11 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                     children: [
                       CircularProgressIndicator(strokeWidth: 2.5, color: AppConstants.primaryNavy),
                       SizedBox(height: 16),
-                      Text('Loading Fair Price Shops and Entitlement...', style: TextStyle(color: AppConstants.textSecondary, fontSize: 13)),
+                      Text('Loading Fair Price Shops & Entitlement...', style: TextStyle(color: AppConstants.textSecondary, fontSize: 13)),
                     ],
                   ),
                 )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: AppConstants.space20, vertical: AppConstants.space20),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 820),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          VoicePictorialAssistButton(
-                            onTap: () {
-                              VoicePictorialAssistModal.show(
-                                context,
-                                onApplyVoiceIntent: (mode, rice, wheat) {
-                                  setState(() {
-                                    _deliveryMode = mode;
-                                    _riceQtyKg = rice;
-                                    _wheatQtyKg = wheat;
-                                  });
-                                },
-                              );
-                            },
-                          ),
-                          const SizedBox(height: AppConstants.space16),
-                          _buildCitizenStepper(),
-                          const SizedBox(height: AppConstants.space20),
-                          _buildSection2FpsSelection(),
-                          const SizedBox(height: AppConstants.space20),
-                          _buildSectionHouseholdMembersAndAllocation(),
-                          const SizedBox(height: AppConstants.space20),
-                          _buildSection4EntitlementSummary(totalMonthly, totalConsumed, remainingBalance),
-                          const SizedBox(height: AppConstants.space20),
-                          if (_errorMessage != null) ...[
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFEF2F2),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFFECACA)),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.error_outline, color: AppConstants.dangerRed, size: 18),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(_errorMessage!, style: const TextStyle(color: AppConstants.dangerRed, fontSize: 12)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: AppConstants.space16),
-                          ],
-                            Center(
-                              child: Text(
-                                tr('intent.policy_footer'),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.8,
-                                  color: Colors.grey.shade500,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: AppConstants.space16),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+              : _buildSimpleSelectionBody(selectedDist, transportFee),
           bottomNavigationBar: _isLoading
               ? null
               : Container(
@@ -333,6 +259,549 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                 ),
         );
       },
+    );
+  }
+
+  Widget _buildSimpleSelectionBody(double selectedDist, double transportFee) {
+    final isReceived = _entitlement?.rationReceivedForCycle == true;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 820),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              VoicePictorialAssistButton(
+                onTap: () {
+                  VoicePictorialAssistModal.show(
+                    context,
+                    onApplyVoiceIntent: (mode, rice, wheat) {
+                      setState(() {
+                        _deliveryMode = mode;
+                        _riceQtyKg = rice;
+                        _wheatQtyKg = wheat;
+                      });
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              if (isReceived) ...[
+                _buildAlreadyReceivedCard(),
+              ] else ...[
+                _buildFpsBanner(selectedDist),
+                const SizedBox(height: 16),
+                _buildDeliveryModeToggle(),
+                if (_deliveryMode == 'HOME_DELIVERY') ...[
+                  const SizedBox(height: 12),
+                  _buildAddressInput(),
+                ],
+                const SizedBox(height: 20),
+                _buildCommoditySelectionTiles(),
+                const SizedBox(height: 20),
+              ],
+              if (_errorMessage != null) ...[
+                _buildErrorBanner(),
+                const SizedBox(height: 16),
+              ],
+              Center(
+                child: Text(
+                  tr('intent.policy_footer'),
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlreadyReceivedCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 54),
+          const SizedBox(height: 12),
+          Text(
+            tr('delivery.ration_received_desc'),
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your registered household quota has already been issued for this cycle.',
+            style: TextStyle(fontSize: 12.5, color: Colors.green.shade800),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFpsBanner(double dist) {
+    final shopName = _selectedFps?.name.isNotEmpty == true
+        ? _selectedFps!.name
+        : (_selectedFps?.shopName.isNotEmpty == true ? _selectedFps!.shopName : 'Designated Fair Price Shop');
+    final fpsId = _selectedFps?.fpsId ?? widget.beneficiary.registeredFpsId;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppConstants.cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.storefront_rounded, color: AppConstants.accentBlue, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr('beneficiary.shop.title'),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppConstants.textSecondary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  shopName,
+                  style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'FPS #$fpsId • ${dist.toStringAsFixed(1)} km away',
+                  style: const TextStyle(fontSize: 11.5, color: AppConstants.textTertiary),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: _showFpsPickerSheet,
+            style: TextButton.styleFrom(
+              foregroundColor: AppConstants.accentBlue,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  tr('beneficiary.select.change_fps'),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                const Icon(Icons.arrow_drop_down, size: 18),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFpsPickerSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.65,
+          maxChildSize: 0.9,
+          minChildSize: 0.4,
+          expand: false,
+          builder: (context, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    tr('beneficiary.select.choose_fps'),
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy),
+                  ),
+                  const SizedBox(height: 14),
+                  Expanded(
+                    child: ListView.separated(
+                      controller: scrollController,
+                      itemCount: _fpsList.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, i) {
+                        final fps = _fpsList[i];
+                        final isSelected = _selectedFps?.fpsId == fps.fpsId;
+                        final isHome = fps.fpsId == widget.beneficiary.registeredFpsId;
+                        final dist = _getCalculatedDistance(fps);
+                        return ListTile(
+                          leading: Icon(
+                            isHome ? Icons.home_work_rounded : Icons.storefront_rounded,
+                            color: isSelected ? AppConstants.accentBlue : AppConstants.primaryNavy,
+                          ),
+                          title: Text(
+                            fps.name.isNotEmpty ? fps.name : fps.shopName,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              color: isSelected ? AppConstants.accentBlue : AppConstants.textPrimary,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'ID: ${fps.fpsId} • ${dist.toStringAsFixed(1)} km${isHome ? " • Registered Home Shop" : ""}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          trailing: isSelected
+                              ? const Icon(Icons.check_circle_rounded, color: AppConstants.accentBlue)
+                              : null,
+                          onTap: () {
+                            setState(() {
+                              _selectedFps = fps;
+                            });
+                            Navigator.pop(ctx);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDeliveryModeToggle() {
+    final isFps = _deliveryMode == 'FPS_COLLECTION';
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _deliveryMode = 'FPS_COLLECTION'),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: isFps ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: isFps ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)] : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.storefront_rounded, size: 16, color: isFps ? AppConstants.primaryNavy : AppConstants.textSecondary),
+                    const SizedBox(width: 6),
+                    Text(
+                      tr('intent.fps_choice_title'),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: isFps ? FontWeight.bold : FontWeight.w600,
+                        color: isFps ? AppConstants.primaryNavy : AppConstants.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _deliveryMode = 'HOME_DELIVERY'),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: !isFps ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: !isFps ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)] : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.delivery_dining_rounded, size: 16, color: !isFps ? AppConstants.accentBlue : AppConstants.textSecondary),
+                    const SizedBox(width: 6),
+                    Text(
+                      tr('service.home_delivery_title'),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: !isFps ? FontWeight.bold : FontWeight.w600,
+                        color: !isFps ? AppConstants.accentBlue : AppConstants.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddressInput() {
+    return TextField(
+      controller: _addressController,
+      decoration: InputDecoration(
+        labelText: tr('delivery.address_hint'),
+        hintText: 'Enter complete house address & landmark',
+        prefixIcon: const Icon(Icons.location_on_outlined, size: 18),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        filled: true,
+        fillColor: Colors.white,
+        isDense: true,
+      ),
+    );
+  }
+
+  Widget _buildCommoditySelectionTiles() {
+    final riceMax = _entitlement?.statutoryEntitlementRiceKg ?? (_eligibleMembersCount * 4.0);
+    final wheatMax = _entitlement?.statutoryEntitlementWheatKg ?? (_eligibleMembersCount * 1.0);
+    final totalKg = riceMax + wheatMax;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          tr('beneficiary.select.choose_ration'),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          tr('beneficiary.select.choose_ration_sub'),
+          style: const TextStyle(fontSize: 12.5, color: AppConstants.textSecondary),
+        ),
+        const SizedBox(height: 14),
+        _buildCommodityBigCard(
+          id: 'both',
+          title: tr('beneficiary.select.both_title'),
+          subtitle: '${riceMax.toStringAsFixed(1)} kg Rice + ${wheatMax.toStringAsFixed(1)} kg Wheat',
+          badge: '${totalKg.toStringAsFixed(1)} kg Total',
+          emoji: '🍚🌾',
+          gradientColors: const [Color(0xFF0F172A), Color(0xFF1E293B)],
+          accentColor: const Color(0xFF38BDF8),
+          isSelected: _selectedCommodity == 'both',
+          onTap: () => _applyCommoditySelection('both', riceMax, wheatMax),
+        ),
+        const SizedBox(height: 12),
+        _buildCommodityBigCard(
+          id: 'rice',
+          title: tr('beneficiary.select.rice_only'),
+          subtitle: '${riceMax.toStringAsFixed(1)} kg Premium Rice (Quota)',
+          badge: '${riceMax.toStringAsFixed(1)} kg',
+          emoji: '🍚',
+          gradientColors: const [Color(0xFF064E3B), Color(0xFF047857)],
+          accentColor: const Color(0xFF34D399),
+          isSelected: _selectedCommodity == 'rice',
+          onTap: () => _applyCommoditySelection('rice', riceMax, 0.0),
+        ),
+        const SizedBox(height: 12),
+        _buildCommodityBigCard(
+          id: 'wheat',
+          title: tr('beneficiary.select.wheat_only'),
+          subtitle: '${wheatMax.toStringAsFixed(1)} kg Standard Wheat (Quota)',
+          badge: '${wheatMax.toStringAsFixed(1)} kg',
+          emoji: '🌾',
+          gradientColors: const [Color(0xFF78350F), Color(0xFFB45309)],
+          accentColor: const Color(0xFFFBBF24),
+          isSelected: _selectedCommodity == 'wheat',
+          onTap: () => _applyCommoditySelection('wheat', 0.0, wheatMax),
+        ),
+      ],
+    );
+  }
+
+  void _applyCommoditySelection(String option, double rice, double wheat) {
+    setState(() {
+      _selectedCommodity = option;
+      _riceQtyKg = rice;
+      _wheatQtyKg = wheat;
+    });
+  }
+
+  Widget _buildCommodityBigCard({
+    required String id,
+    required String title,
+    required String subtitle,
+    required String badge,
+    required String emoji,
+    required List<Color> gradientColors,
+    required Color accentColor,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isSelected ? gradientColors : [Colors.white, const Color(0xFFF8FAFC)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected ? accentColor : AppConstants.cardBorder,
+              width: isSelected ? 2.2 : 1.0,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: gradientColors.last.withValues(alpha: 0.25),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white.withValues(alpha: 0.15) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: isSelected ? Colors.white : AppConstants.primaryNavy,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isSelected ? Colors.white.withValues(alpha: 0.8) : AppConstants.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isSelected ? accentColor : const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      badge,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected ? Colors.black87 : AppConstants.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Icon(
+                    isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                    color: isSelected ? accentColor : Colors.grey.shade400,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, color: AppConstants.dangerRed, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(_errorMessage!, style: const TextStyle(color: AppConstants.dangerRed, fontSize: 12)),
+          ),
+        ],
+      ),
     );
   }
 

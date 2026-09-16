@@ -601,7 +601,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
       animation: LanguageController.instance,
       builder: (context, _) {
         return Scaffold(
-          backgroundColor: AppConstants.backgroundLight,
+          backgroundColor: const Color(0xFFF0F4F8),
           appBar: _buildGovernmentAppBar(),
           body: _isLoading
               ? Center(
@@ -610,7 +610,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                     children: [
                       const CircularProgressIndicator(strokeWidth: 2.5, color: AppConstants.primaryNavy),
                       const SizedBox(height: 16),
-                      Text(tr('profile.loading'), style: const TextStyle(color: AppConstants.textSecondary, fontSize: 13)),
+                      Text(tr('beneficiary.home.loading'), style: const TextStyle(color: AppConstants.textSecondary, fontSize: 14)),
                     ],
                   ),
                 )
@@ -621,14 +621,30 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
-                            const SizedBox(height: 12),
-                            Text(_errorMessage!, textAlign: TextAlign.center),
+                            Icon(Icons.signal_wifi_off_rounded, size: 56, color: Colors.grey.shade400),
                             const SizedBox(height: 16),
+                            Text(
+                              tr('beneficiary.home.network_error'),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 16, color: AppConstants.textPrimary, height: 1.4),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+                            ),
+                            const SizedBox(height: 20),
                             ElevatedButton.icon(
                               onPressed: _loadBeneficiaryData,
-                              icon: const Icon(Icons.refresh),
-                              label: Text(tr('profile.error_retry')),
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: Text(tr('beneficiary.home.retry'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppConstants.primaryNavy,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
                             ),
                           ],
                         ),
@@ -638,79 +654,445 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                       onRefresh: _loadBeneficiaryData,
                       child: SingleChildScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: AppConstants.space20, vertical: AppConstants.space20),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                         child: Center(
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 820),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                // 0b. Authoritative Planning Cycle & Choice Window Visualizer
-                                _buildPlanningCycleBanner(),
-                                const SizedBox(height: AppConstants.space16),
-
-                                // 0c. Voice & Pictorial Accessibility Assistant (Low Literacy / Illiterate Mode)
-                                VoicePictorialAssistButton(
-                                  onTap: () {
-                                    VoicePictorialAssistModal.show(
-                                      context,
-                                      onApplyVoiceIntent: (mode, rice, wheat) {
-                                        _navigateToIntentSelectionWithMode(mode);
-                                      },
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: AppConstants.space16),
-
-                                // 1. Beneficiary Profile & Card Identity Card
-                                _buildBeneficiaryProfileCard(),
-                                const SizedBox(height: AppConstants.space16),
-
-                                // 1b. Eligible Household Members Selector (5 kg per person)
-                                _buildHouseholdMembersSelectorCard(),
-                                const SizedBox(height: AppConstants.space16),
-
-                                // 2. HERO: Your Ration Entitlement (Progress visualization & remaining dominant)
-                                _buildHeroRationEntitlementCard(),
-                                const SizedBox(height: AppConstants.space20),
-
-                                // 3. Plan Your Upcoming Collection (Two Large Service Cards)
-                                _buildPlanCollectionSection(),
-                                const SizedBox(height: AppConstants.space20),
-
-                                // 4. Current Request / Delivery Status (5-Stage Timeline)
-                                if (_deliveryRecords.isNotEmpty) ...[
-                                  _buildCurrentDeliveryStatusSection(),
-                                  const SizedBox(height: AppConstants.space20),
-                                ],
-
-                                // 5. Recent Distribution History (Compact list rows)
-                                _buildRecentDistributionHistorySection(),
-                                const SizedBox(height: AppConstants.space20),
-
-                                // Statutory Footer Reassurance
-                                Center(
-                                  child: Text(
-                                    '${tr('app.gov_badge')}\n${tr('commodity.entitled_free')}',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.8,
-                                      color: Colors.grey.shade500,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: AppConstants.space16),
-                              ],
-                            ),
+                            constraints: const BoxConstraints(maxWidth: 600),
+                            child: _buildSimpleBody(),
                           ),
                         ),
                       ),
                     ),
         );
       },
+    );
+  }
+
+  /// Simple voice-first 4-tile beneficiary home body.
+  Widget _buildSimpleBody() {
+    final name = _beneficiary?.beneficiaryName ?? '';
+    final riceKg = _entitlement?.statutoryEntitlementRiceKg;
+    final wheatKg = _entitlement?.statutoryEntitlementWheatKg;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── AI Voice Greeting Banner ──────────────────────────────────────
+        _buildAiGreetingBanner(name),
+        const SizedBox(height: 16),
+
+        // ── Monthly Ration Entitlement Card ──────────────────────────────
+        _buildSimpleEntitlementCard(riceKg, wheatKg),
+        const SizedBox(height: 20),
+
+        // ── 4 Action Tiles ────────────────────────────────────────────────
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 14,
+          crossAxisSpacing: 14,
+          childAspectRatio: 1.05,
+          children: [
+            _buildActionTile(emoji: '🌾', label: tr('beneficiary.home.action_need'), color: const Color(0xFF1A3D6B), id: 'tile_what_do_i_need', onTap: () => _navigateToIntentSelection()),
+            _buildActionTile(emoji: '🏪', label: tr('beneficiary.home.action_shop'), color: const Color(0xFF065F46), id: 'tile_my_shop', onTap: () => _showShopSheet()),
+            _buildActionTile(emoji: '🚚', label: tr('beneficiary.home.action_track'), color: const Color(0xFF7C3AED), id: 'tile_track', onTap: () => _showTrackSheet()),
+            _buildActionTile(emoji: '🆘', label: tr('beneficiary.home.action_help'), color: const Color(0xFFB91C1C), id: 'tile_help', onTap: () => _showHelpSheet()),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        // ── Statutory footer ──────────────────────────────────────────────
+        Center(
+          child: Text(
+            '${tr('app.gov_badge')} • ${tr('commodity.entitled_free')}',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade500),
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  Widget _buildAiGreetingBanner(String name) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1A3D6B), Color(0xFF2563EB)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF1A3D6B).withValues(alpha: 0.28), blurRadius: 12, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
+            ),
+            child: const Center(child: Text('🤖', style: TextStyle(fontSize: 26))),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (name.isNotEmpty)
+                  Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  tr('beneficiary.home.ai_greeting_short'),
+                  style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.88), height: 1.35),
+                ),
+              ],
+            ),
+          ),
+          // Language selector in banner
+          const LanguageSelectorWidget(isCompact: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimpleEntitlementCard(double? riceKg, double? wheatKg) {
+    final hasData = riceKg != null && wheatKg != null && (riceKg + wheatKg) > 0;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(tr('beneficiary.home.monthly_title'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.2)),
+          const SizedBox(height: 12),
+          if (!hasData)
+            Row(
+              children: [
+                const Icon(Icons.info_outline, size: 18, color: AppConstants.textSecondary),
+                const SizedBox(width: 8),
+                Expanded(child: Text(tr('beneficiary.home.entitlement_unavailable'), style: const TextStyle(fontSize: 13, color: AppConstants.textSecondary))),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(child: _buildCommodityPill('🍚', tr('beneficiary.home.rice_label'), '${riceKg!.toStringAsFixed(1)} kg', const Color(0xFF1A3D6B))),
+                const SizedBox(width: 10),
+                Expanded(child: _buildCommodityPill('🌾', tr('beneficiary.home.wheat_label'), '${wheatKg!.toStringAsFixed(1)} kg', const Color(0xFF065F46))),
+              ],
+            ),
+          if (_entitlement?.rationReceivedForCycle == true) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF86EFAC)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, size: 18, color: Color(0xFF16A34A)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(tr('beneficiary.select.already_received_title'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF15803D)))),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommodityPill(String emoji, String label, String qty, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 24)),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+          Text(qty, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionTile({required String emoji, required String label, required Color color, required String id, required VoidCallback onTap}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: Key(id),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [color, color.withValues(alpha: 0.78)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 36)),
+                const SizedBox(height: 8),
+                Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white, height: 1.2)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showShopSheet() {
+    final fps = _beneficiary?.registeredFpsId;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('🏪', textAlign: TextAlign.center, style: TextStyle(fontSize: 40)),
+            const SizedBox(height: 8),
+            Text(tr('beneficiary.shop.title'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
+            const SizedBox(height: 16),
+            if (fps == null || _beneficiary == null)
+              Text(tr('beneficiary.shop.unavailable'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, color: AppConstants.textSecondary))
+            else ...[
+              _buildShopRow(Icons.storefront_outlined, 'FPS ID', fps),
+              if (_beneficiary!.beneficiaryName.isNotEmpty)
+                _buildShopRow(Icons.person_outline, 'Registered for', _beneficiary!.beneficiaryName),
+            ],
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: ElevatedButton.styleFrom(backgroundColor: AppConstants.primaryNavy, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: Text(tr('nav.close'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShopRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: AppConstants.textSecondary),
+          const SizedBox(width: 12),
+          Text('$label: ', style: const TextStyle(fontSize: 13, color: AppConstants.textSecondary)),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy))),
+        ],
+      ),
+    );
+  }
+
+  void _showTrackSheet() {
+    final orders = _getCombinedDeliveryOrders();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.55,
+        maxChildSize: 0.92,
+        builder: (_, sc) => SingleChildScrollView(
+          controller: sc,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('🚚', textAlign: TextAlign.center, style: TextStyle(fontSize: 40)),
+              const SizedBox(height: 8),
+              Text(tr('beneficiary.track.title'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
+              const SizedBox(height: 16),
+              if (orders.isEmpty)
+                Text(
+                  _deliveryRecords.isEmpty ? tr('beneficiary.track.no_requests') : tr('beneficiary.track.unavailable'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, color: AppConstants.textSecondary),
+                )
+              else
+                ...orders.take(3).map((order) => _buildSimpleTrackCard(order)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                style: ElevatedButton.styleFrom(backgroundColor: AppConstants.primaryNavy, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                child: Text(tr('nav.close'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSimpleTrackCard(CombinedCitizenDeliveryOrder order) {
+    final stages = [
+      tr('beneficiary.track.stage1'),
+      tr('beneficiary.track.stage2'),
+      tr('beneficiary.track.stage3'),
+      tr('beneficiary.track.stage4'),
+      tr('beneficiary.track.stage5'),
+    ];
+    final statusUpper = order.deliveryStatus.toUpperCase();
+    int currentStage = 0;
+    if (statusUpper.contains('ALLOCATED') || statusUpper.contains('APPROVED')) {
+      currentStage = 1;
+    } else if (statusUpper.contains('OUT_FOR') || statusUpper.contains('DISPATCHED') || statusUpper.contains('DELAYED') || statusUpper.contains('STOCK')) {
+      currentStage = 2;
+    } else if (statusUpper.contains('DELIVERED') && !statusUpper.contains('CONFIRMED')) {
+      currentStage = 3;
+    } else if (statusUpper.contains('CONFIRMED')) {
+      currentStage = 4;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE2E8F0))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Order: ${order.baseRequestId}', style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary)),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: List.generate(stages.length, (i) {
+              final isDone = i <= currentStage;
+              final isCurrent = i == currentStage;
+              return Expanded(
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: isDone ? AppConstants.successGreen : const Color(0xFFE2E8F0),
+                                  shape: BoxShape.circle,
+                                  border: isCurrent ? Border.all(color: AppConstants.successGreen, width: 2) : null,
+                                ),
+                                child: Center(
+                                  child: isDone
+                                      ? const Icon(Icons.check, size: 14, color: Colors.white)
+                                      : Text('${i + 1}', style: const TextStyle(fontSize: 10, color: AppConstants.textSecondary, fontWeight: FontWeight.w700)),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                stages[i],
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 9, fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500, color: isDone ? AppConstants.successGreen : AppConstants.textSecondary),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (i < stages.length - 1)
+                          Container(width: 8, height: 2, margin: const EdgeInsets.only(bottom: 20), color: i < currentStage ? AppConstants.successGreen : const Color(0xFFE2E8F0)),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHelpSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('🆘', textAlign: TextAlign.center, style: TextStyle(fontSize: 40)),
+            const SizedBox(height: 8),
+            Text(tr('beneficiary.help.title'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
+            const SizedBox(height: 16),
+            ...[
+              (tr('beneficiary.help.no_ration'), Icons.no_food_outlined),
+              (tr('beneficiary.help.wrong_qty'), Icons.balance_outlined),
+              (tr('beneficiary.help.shop_problem'), Icons.storefront_outlined),
+              (tr('beneficiary.help.payment'), Icons.receipt_long_outlined),
+              (tr('beneficiary.help.other'), Icons.help_outline_rounded),
+            ].map((item) => _buildHelpOptionTile(ctx, item.$1, item.$2)),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: OutlinedButton.styleFrom(foregroundColor: AppConstants.primaryNavy, side: const BorderSide(color: AppConstants.cardBorder), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: Text(tr('nav.cancel'), style: const TextStyle(fontSize: 15)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHelpOptionTile(BuildContext sheetCtx, String label, IconData icon) {
+    return InkWell(
+      onTap: () {
+        Navigator.of(sheetCtx).pop();
+        _navigateToIntentHistory();
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: AppConstants.primaryNavy),
+            const SizedBox(width: 14),
+            Expanded(child: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppConstants.textPrimary))),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: AppConstants.textSecondary),
+          ],
+        ),
+      ),
     );
   }
 
