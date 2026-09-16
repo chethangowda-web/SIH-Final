@@ -5,6 +5,7 @@ import '../../core/localization.dart';
 import '../../models/beneficiary_model.dart';
 import '../../services/api_service.dart';
 import '../../widgets/status_badge.dart';
+import '../../widgets/voice_pictorial_assist.dart';
 import 'intent_confirmation_screen.dart';
 
 class IntentSelectionScreen extends StatefulWidget {
@@ -205,12 +206,28 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                 ),
               ],
             ),
-            actions: const [
-              Padding(
+            actions: [
+              VoicePictorialAssistButton(
+                isCompact: true,
+                onTap: () {
+                  VoicePictorialAssistModal.show(
+                    context,
+                    onApplyVoiceIntent: (mode, rice, wheat) {
+                      setState(() {
+                        _deliveryMode = mode;
+                        _riceQtyKg = rice;
+                        _wheatQtyKg = wheat;
+                      });
+                    },
+                  );
+                },
+              ),
+              const SizedBox(width: 6),
+              const Padding(
                 padding: EdgeInsets.symmetric(vertical: 10),
                 child: LanguageSelectorWidget(isCompact: true),
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
             ],
           ),
           body: _isLoading
@@ -232,6 +249,21 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          VoicePictorialAssistButton(
+                            onTap: () {
+                              VoicePictorialAssistModal.show(
+                                context,
+                                onApplyVoiceIntent: (mode, rice, wheat) {
+                                  setState(() {
+                                    _deliveryMode = mode;
+                                    _riceQtyKg = rice;
+                                    _wheatQtyKg = wheat;
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                          const SizedBox(height: AppConstants.space16),
                           _buildCitizenStepper(),
                           const SizedBox(height: AppConstants.space20),
                           _buildSection2FpsSelection(),

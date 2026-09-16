@@ -6,6 +6,7 @@ import '../../models/beneficiary_model.dart';
 import '../../services/api_service.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/delivery_timeline.dart';
+import '../../widgets/voice_pictorial_assist.dart';
 import 'intent_selection_screen.dart';
 import 'intent_history_screen.dart';
 import 'demo_login_screen.dart';
@@ -649,7 +650,16 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                                 const SizedBox(height: AppConstants.space16),
 
                                 // 0c. Voice & Pictorial Accessibility Assistant (Low Literacy / Illiterate Mode)
-                                _buildVoicePictorialAssistBanner(),
+                                VoicePictorialAssistButton(
+                                  onTap: () {
+                                    VoicePictorialAssistModal.show(
+                                      context,
+                                      onApplyVoiceIntent: (mode, rice, wheat) {
+                                        _navigateToIntentSelectionWithMode(mode);
+                                      },
+                                    );
+                                  },
+                                ),
                                 const SizedBox(height: AppConstants.space16),
 
                                 // 1. Beneficiary Profile & Card Identity Card
@@ -913,6 +923,18 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         ],
       ),
       actions: [
+        VoicePictorialAssistButton(
+          isCompact: true,
+          onTap: () {
+            VoicePictorialAssistModal.show(
+              context,
+              onApplyVoiceIntent: (mode, rice, wheat) {
+                _navigateToIntentSelectionWithMode(mode);
+              },
+            );
+          },
+        ),
+        const SizedBox(width: 4),
         // Language Selector inside App Bar
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 10),

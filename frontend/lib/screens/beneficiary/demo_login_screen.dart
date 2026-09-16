@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/localization.dart';
-import '../../services/api_service.dart';
+import '../../widgets/status_badge.dart';
+import '../../widgets/voice_pictorial_assist.dart';
 import 'beneficiary_home_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
 import '../admin/field_food_inspector_dashboard_screen.dart';
@@ -291,7 +292,28 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                       // Top Responsive Brand Header
                       _buildHeader(isSmallMobile),
 
-                      SizedBox(height: isSmallMobile ? 16 : 22),
+                      SizedBox(height: isSmallMobile ? 12 : 16),
+
+                      // Voice & Pictorial Accessibility Assistant for Low-Literacy Citizens
+                      VoicePictorialAssistButton(
+                        onTap: () {
+                          VoicePictorialAssistModal.show(
+                            context,
+                            onApplyVoiceIntent: (mode, rice, wheat) {
+                              // Automatically log in as demo beneficiary in voice assist mode
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const BeneficiaryHomeScreen(
+                                    beneficiaryId: 'KA-BEN-2026-0084',
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+
+                      SizedBox(height: isSmallMobile ? 12 : 16),
 
                       // Main Login Card
                       _buildCard(isSmallMobile),
