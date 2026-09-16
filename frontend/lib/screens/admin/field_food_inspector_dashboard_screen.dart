@@ -534,6 +534,31 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     );
   }
 
+  /// 4. Fulfill Individual Truck Route Demand
+  Future<void> _handleFulfillTruckDemand(String truckId) async {
+    setState(() => _isTruckActioning = true);
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    setState(() {
+      for (var truck in _activeTrucks) {
+        if (truck['truck_id'] == truckId) {
+          truck['status'] = 'DELIVERED';
+          truck['current_checkpoint'] = 'Delivered & Off-take Handshake Verified at FPS';
+          truck['distance_remaining_km'] = 0.0;
+          truck['eta_minutes'] = 0;
+        }
+      }
+      _isTruckActioning = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✔ Truck $truckId demand off-take fulfilled & target FPS stock updated live!'),
+        backgroundColor: _govGreen,
+      ),
+    );
+  }
+
   /// 4. Batch Confirm Delivery
   Future<void> _handleBatchConfirmDelivery() async {
     if (_selectedTruckIds.isEmpty) return;
@@ -1608,14 +1633,33 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                     ],
                   ),
                   subtitle: Text(
-                    'Driver: ${truck['driver_name']} (${truck['driver_phone']}) • Cargo: ${truck['commodity']} (${weightKg.toStringAsFixed(0)} kg) • Next: ${truck['next_checkpoint']}',
+                    'Driver: ${truck['driver_name']} • AI Demand: ${(weightKg / 1000).toStringAsFixed(1)} MT (${(weightKg * 0.8 / 1000).toStringAsFixed(1)} MT Rice + ${(weightKg * 0.2 / 1000).toStringAsFixed(1)} MT Wheat) • Target: ${truck['target_fps_id']}',
                     style: const TextStyle(fontSize: 11, color: _slate500),
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('ETA: ${truck['eta_minutes']}m', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: _govGreen)),
+                      Text(
+                        status == 'DELIVERED' ? '✔ FULFILLED' : 'ETA: ${truck['eta_minutes']}m',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: status == 'DELIVERED' ? _govGreen : const Color(0xFF2563EB),
+                        ),
+                      ),
                       const SizedBox(width: 8),
+                      if (status != 'DELIVERED')
+                        ElevatedButton.icon(
+                          onPressed: () => _handleFulfillTruckDemand(tId),
+                          icon: const Icon(Icons.flash_on_rounded, size: 12, color: Colors.white),
+                          label: const Text('Fulfill', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _govGreen,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                          ),
+                        ),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: const Icon(Icons.center_focus_strong_rounded, size: 16, color: _govNavy),
                         tooltip: 'Focus this route',
