@@ -1154,6 +1154,45 @@ class ApiService {
     }
   }
 
+  /// Verify truck arrival geofence via GPS telemetry
+  Future<Map<String, dynamic>> verifyTruckArrivalGps({
+    required String truckId,
+    required String targetFpsId,
+    required double lat,
+    required double lon,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/routing/verify-arrival'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'truck_id': truckId,
+        'target_fps_id': targetFpsId,
+        'current_lat': lat,
+        'current_lon': lon,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response, 'Failed to verify GPS geofence arrival');
+    }
+  }
+
+  /// Fetch GIS heatmap data with Lat/Long and stockout risk markers
+  Future<Map<String, dynamic>> fetchGisHeatmap({String cycleId = '2026-09'}) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/routing/gis-heatmap?cycle_id=$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response, 'Failed to fetch GIS heatmap data');
+    }
+  }
+
   /// Issue surprise inspection order for an FPS center
   Future<Map<String, dynamic>> issueSurpriseInspection({
     required String fpsId,
@@ -2569,6 +2608,8 @@ class ApiService {
     }
     return [];
   }
+
+
 }
 
 class CitizenRequestModel {

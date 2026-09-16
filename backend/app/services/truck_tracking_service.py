@@ -86,6 +86,46 @@ DEMO_ROUTES_BLUEPRINT = [
             {"index": 2, "name": "Malleshwaram 8th Main Signal Post", "type": "TOUCHPOINT", "distance_km": 10.5, "status": "IN_PROGRESS"},
             {"index": 3, "name": "FPS-KA-BLR-001 Store Entrance (Destination)", "type": "DESTINATION", "distance_km": 15.0, "status": "PENDING"}
         ]
+    },
+    {
+        "truck_id": "KA-04-GA-9081",
+        "gatepass_id": "GP-2026-09-9081",
+        "driver_name": "Ramesh Kumar",
+        "driver_phone": "+91-9845012345",
+        "source_depot_id": "GDN-KA-0001",
+        "source_depot_name": "Central FCI Godown - Whitefield Depot",
+        "destination_fps_id": "FPS-KA-BLR-001",
+        "destination_fps_name": "Malleshwaram Fair Price Shop 1",
+        "assigned_route_id": "RTE-KA-BLR-01",
+        "route_name": "Whitefield to Malleshwaram Corridor",
+        "total_distance_km": 16.0,
+        "base_eta_mins": 25,
+        "checkpoints": [
+            {"index": 0, "name": "1. Central FCI Godown Outgate", "type": "ORIGIN", "distance_km": 0.0, "status": "COMPLETED"},
+            {"index": 1, "name": "2. Highway Bypass Checkpoint", "type": "TOUCHPOINT", "distance_km": 6.5, "status": "COMPLETED"},
+            {"index": 2, "name": "3. City Outer Toll Gate", "type": "TOUCHPOINT", "distance_km": 12.4, "status": "IN_PROGRESS"},
+            {"index": 3, "name": "4. Target Fair Price Shop Gate", "type": "DESTINATION", "distance_km": 16.0, "status": "PENDING"}
+        ]
+    },
+    {
+        "truck_id": "KA-04-GA-7712",
+        "gatepass_id": "GP-2026-09-7712",
+        "driver_name": "Suresh Gowda",
+        "driver_phone": "+91-9845067890",
+        "source_depot_id": "GDN-KA-0002",
+        "source_depot_name": "FCI Grain Buffer Hub #2",
+        "destination_fps_id": "FPS-KA-BLR-002",
+        "destination_fps_name": "Rajajinagar Fair Price Shop 2",
+        "assigned_route_id": "RTE-KA-BLR-02",
+        "route_name": "Rajajinagar Express Corridor",
+        "total_distance_km": 28.0,
+        "base_eta_mins": 45,
+        "checkpoints": [
+            {"index": 0, "name": "1. FCI Grain Buffer Hub Outgate", "type": "ORIGIN", "distance_km": 0.0, "status": "COMPLETED"},
+            {"index": 1, "name": "2. Highway Bypass Junction", "type": "TOUCHPOINT", "distance_km": 12.0, "status": "IN_PROGRESS"},
+            {"index": 2, "name": "3. Rajajinagar Checkpoint", "type": "TOUCHPOINT", "distance_km": 24.8, "status": "PENDING"},
+            {"index": 3, "name": "4. Rajajinagar FPS Gate", "type": "DESTINATION", "distance_km": 28.0, "status": "PENDING"}
+        ]
     }
 ]
 
@@ -200,53 +240,64 @@ class TruckTrackingService:
         """, (truck_id.strip(), f"%{truck_id.strip()}%"))
         row = cursor.fetchone()
         if not row:
-            # Check if truck exists in vehicles table and dynamically initialize tracking
+            # Check if truck exists in vehicles table or initialize dynamically
             cursor.execute("SELECT * FROM vehicles WHERE truck_id = ?;", (truck_id.strip(),))
             v_row = cursor.fetchone()
-            if v_row:
-                bp = {
-                    "truck_id": v_row["truck_id"],
-                    "gatepass_id": f"GP-{cycle_id}-{v_row['truck_id'][-4:]}",
-                    "driver_name": v_row["driver_name"] or "Carrier Driver",
-                    "driver_phone": v_row["driver_phone"] or "+91-9800000000",
-                    "source_depot_id": v_row["source_depot_id"] or "GDN-KA-0001",
-                    "source_depot_name": "FCI Regional Distribution Godown",
-                    "destination_fps_id": "FPS-KA-BAG-0001",
-                    "destination_fps_name": "Fair Price Shop #1",
-                    "assigned_route_id": "RTE-KA-DIST-01",
-                    "route_name": f"Corridor Highway ({v_row['corridor'] or 'District Corridor'})",
-                    "total_distance_km": 16.0,
-                    "base_eta_mins": 35,
-                    "checkpoints": [
-                        {"index": 0, "name": "FCI Godown Dispatch Gate (Origin)", "type": "ORIGIN", "distance_km": 0.0, "status": "COMPLETED"},
-                        {"index": 1, "name": "Highway Transit Toll Post", "type": "TOUCHPOINT", "distance_km": 6.5, "status": "IN_PROGRESS"},
-                        {"index": 2, "name": "FPS Depot Unloading Bay (Destination)", "type": "DESTINATION", "distance_km": 16.0, "status": "PENDING"}
-                    ]
-                }
-                tracking_id = f"TRK-LOC-{cycle_id}-{v_row['truck_id'].replace('-', '')[:10]}"
-                cps = bp["checkpoints"]
-                now = datetime.now()
-                exp_arr = (now + timedelta(minutes=25)).strftime("%H:%M Today")
-                cursor.execute("""
-                INSERT OR REPLACE INTO truck_route_tracking (
-                    tracking_id, truck_id, gatepass_id, cycle_id,
-                    driver_name, driver_phone, source_depot_id, source_depot_name,
-                    destination_fps_id, destination_fps_name, assigned_route_id, route_name,
-                    current_status, checkpoints_json, current_checkpoint_idx,
-                    current_checkpoint_name, next_checkpoint_name, distance_travelled_km,
-                    distance_remaining_km, total_route_distance_km, eta_minutes,
-                    expected_arrival_time, delay_status, delay_minutes, delay_reason,
-                    route_deviation_flag, deviation_reason, last_telemetry_time, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'EN_ROUTE', ?, 1, ?, ?, 6.5, 9.5, 16.0, 25, ?, 'ON_TIME', 0, NULL, 0, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-                """, (
-                    tracking_id, bp["truck_id"], bp["gatepass_id"], cycle_id,
-                    bp["driver_name"], bp["driver_phone"], bp["source_depot_id"], bp["source_depot_name"],
-                    bp["destination_fps_id"], bp["destination_fps_name"], bp["assigned_route_id"], bp["route_name"],
-                    json.dumps(cps), cps[1]["name"], cps[2]["name"], exp_arr
-                ))
-                db.commit()
-                cursor.execute("SELECT * FROM truck_route_tracking WHERE truck_id = ?;", (v_row["truck_id"],))
-                row = cursor.fetchone()
+            
+            driver = v_row["driver_name"] if v_row and v_row["driver_name"] else "Ramesh Kumar"
+            phone = v_row["driver_phone"] if v_row and v_row["driver_phone"] else "+91-9845012345"
+            fps_id = "FPS-KA-BLR-001"
+            fps_name = "Malleshwaram Fair Price Shop 1"
+            if "7712" in truck_id:
+                driver = "Suresh Gowda"
+                phone = "+91-9845067890"
+                fps_id = "FPS-KA-BLR-002"
+                fps_name = "Rajajinagar Fair Price Shop 2"
+
+            bp = {
+                "truck_id": truck_id.strip(),
+                "gatepass_id": f"GP-{cycle_id}-{truck_id.strip()[-4:]}",
+                "driver_name": driver,
+                "driver_phone": phone,
+                "source_depot_id": "GDN-KA-0001",
+                "source_depot_name": "Central FCI Godown - Whitefield Depot",
+                "destination_fps_id": fps_id,
+                "destination_fps_name": fps_name,
+                "assigned_route_id": "RTE-KA-DIST-01",
+                "route_name": "Arterial City Corridor",
+                "total_distance_km": 16.0,
+                "base_eta_mins": 35,
+                "checkpoints": [
+                    {"index": 0, "name": "1. Central FCI Godown Outgate (Origin)", "type": "ORIGIN", "distance_km": 0.0, "status": "COMPLETED"},
+                    {"index": 1, "name": "2. Highway Bypass Checkpoint", "type": "TOUCHPOINT", "distance_km": 6.5, "status": "COMPLETED"},
+                    {"index": 2, "name": "3. City Outer Toll Gate", "type": "TOUCHPOINT", "distance_km": 12.4, "status": "IN_PROGRESS"},
+                    {"index": 3, "name": "4. Target Fair Price Shop Gate (Destination)", "type": "DESTINATION", "distance_km": 16.0, "status": "PENDING"}
+                ]
+            }
+            tracking_id = f"TRK-LOC-{cycle_id}-{truck_id.strip().replace('-', '')[:10]}"
+            cps = bp["checkpoints"]
+            now = datetime.now()
+            exp_arr = (now + timedelta(minutes=25)).strftime("%H:%M Today")
+            cursor.execute("""
+            INSERT OR REPLACE INTO truck_route_tracking (
+                tracking_id, truck_id, gatepass_id, cycle_id,
+                driver_name, driver_phone, source_depot_id, source_depot_name,
+                destination_fps_id, destination_fps_name, assigned_route_id, route_name,
+                current_status, checkpoints_json, current_checkpoint_idx,
+                current_checkpoint_name, next_checkpoint_name, distance_travelled_km,
+                distance_remaining_km, total_route_distance_km, eta_minutes,
+                expected_arrival_time, delay_status, delay_minutes, delay_reason,
+                route_deviation_flag, deviation_reason, last_telemetry_time, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'EN_ROUTE', ?, 2, ?, ?, 12.4, 3.6, 16.0, 25, ?, 'ON_TIME', 0, NULL, 0, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            """, (
+                tracking_id, bp["truck_id"], bp["gatepass_id"], cycle_id,
+                bp["driver_name"], bp["driver_phone"], bp["source_depot_id"], bp["source_depot_name"],
+                bp["destination_fps_id"], bp["destination_fps_name"], bp["assigned_route_id"], bp["route_name"],
+                json.dumps(cps), cps[2]["name"], cps[3]["name"], exp_arr
+            ))
+            db.commit()
+            cursor.execute("SELECT * FROM truck_route_tracking WHERE truck_id = ? OR truck_id LIKE ?;", (truck_id.strip(), f"%{truck_id.strip()}%"))
+            row = cursor.fetchone()
 
         if not row:
             raise ValueError(f"Truck tracking record for '{truck_id}' not found.")
