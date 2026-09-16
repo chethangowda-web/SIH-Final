@@ -793,6 +793,97 @@ class ApiService {
     }
   }
 
+  /// Fetch authoritative cycle closure checklist and blocking conditions
+  Future<Map<String, dynamic>> fetchWorkflowClosureChecklist(
+      {String cycleId = '2026-09'}) async {
+    final response = await client
+        .get(
+            Uri.parse(
+                '${AppConstants.apiBaseUrl}/admin/workflow/closure-checklist?cycle_id=$cycleId'),
+            headers: {'Accept': 'application/json'})
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response,
+          'Failed to fetch cycle closure checklist: ${response.statusCode}');
+    }
+  }
+
+  /// Authoritatively close planning cycle
+  Future<Map<String, dynamic>> closeWorkflowCycle(
+      {String cycleId = '2026-09', String officerName = 'District Supply Officer'}) async {
+    final response = await client
+        .post(
+            Uri.parse(
+                '${AppConstants.apiBaseUrl}/admin/workflow/close-cycle?cycle_id=$cycleId&officer_name=${Uri.encodeComponent(officerName)}'),
+            headers: {'Accept': 'application/json'})
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response,
+          'Cycle closure failed: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Retrieve unified governance events audit trail
+  Future<List<Map<String, dynamic>>> fetchGovernanceEvents(
+      {String? cycleId, int limit = 100}) async {
+    final uri = Uri.parse(
+        '${AppConstants.apiBaseUrl}/admin/governance/trail?limit=$limit${cycleId != null ? '&cycle_id=$cycleId' : ''}');
+    final response = await client
+        .get(uri, headers: {'Accept': 'application/json'})
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data is List) {
+        return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      } else if (data is Map && data['items'] is List) {
+        return (data['items'] as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      }
+      return [];
+    }
+    return [];
+  }
+
+  /// DSO Manual Allocation Override
+  Future<Map<String, dynamic>> overrideFpsQuotas(
+    String fpsId, {
+    double? overrideRiceKg,
+    double? overrideWheatKg,
+    String? reason,
+  }) async {
+    final response = await client
+        .post(
+          Uri.parse('${AppConstants.apiBaseUrl}/admin/fps/$fpsId/override'),
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: json.encode({
+            if (overrideRiceKg != null) 'override_rice_kg': overrideRiceKg,
+            if (overrideWheatKg != null) 'override_wheat_kg': overrideWheatKg,
+            'safety_buffer_pct': 15.0,
+            'truck_id': 'DEMO-KA-04-E-1021',
+            'emergency_priority': false,
+          }),
+        )
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response, 'Failed to override FPS quota');
+    }
+  }
+
   /// Trigger actual ePoS grain distribution simulation
   Future<ActualDistributionData> triggerSimulateDistribution(
       {String cycleId = '2026-09', bool force = false}) async {

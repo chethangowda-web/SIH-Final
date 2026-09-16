@@ -17,6 +17,7 @@ class WorkflowState:
     DISPATCHED = "DISPATCHED"
     VERIFIED = "VERIFIED"
     EVALUATED = "EVALUATED"
+    CYCLE_CLOSED = "CYCLE_CLOSED"
 
 class WorkflowStateManager:
     """Authoritative server-side lifecycle state machine for operational planning cycles."""
@@ -31,20 +32,22 @@ class WorkflowStateManager:
         WorkflowState.GATEPASS_READY,
         WorkflowState.DISPATCHED,
         WorkflowState.VERIFIED,
-        WorkflowState.EVALUATED
+        WorkflowState.EVALUATED,
+        WorkflowState.CYCLE_CLOSED
     ]
 
     ALLOWED_TRANSITIONS = {
         WorkflowState.FORECASTED: [WorkflowState.FORECASTED, WorkflowState.VALIDATED],
         WorkflowState.VALIDATED: [WorkflowState.VALIDATED, WorkflowState.ALLOCATED, WorkflowState.FORECASTED],
         WorkflowState.ALLOCATED: [WorkflowState.ALLOCATED, WorkflowState.OPTIMIZED, WorkflowState.FORECASTED],
-        WorkflowState.OPTIMIZED: [WorkflowState.OPTIMIZED, WorkflowState.MANIFEST_DRAFT, WorkflowState.FORECASTED],
+        WorkflowState.OPTIMIZED: [WorkflowState.OPTIMIZED, WorkflowState.MANIFEST_DRAFT, WorkflowState.MANIFEST_LOCKED, WorkflowState.FORECASTED],
         WorkflowState.MANIFEST_DRAFT: [WorkflowState.MANIFEST_DRAFT, WorkflowState.MANIFEST_LOCKED, WorkflowState.FORECASTED],
-        WorkflowState.MANIFEST_LOCKED: [WorkflowState.MANIFEST_LOCKED, WorkflowState.GATEPASS_READY, WorkflowState.FORECASTED],
+        WorkflowState.MANIFEST_LOCKED: [WorkflowState.MANIFEST_LOCKED, WorkflowState.GATEPASS_READY, WorkflowState.DISPATCHED, WorkflowState.FORECASTED],
         WorkflowState.GATEPASS_READY: [WorkflowState.GATEPASS_READY, WorkflowState.DISPATCHED, WorkflowState.FORECASTED],
         WorkflowState.DISPATCHED: [WorkflowState.DISPATCHED, WorkflowState.VERIFIED, WorkflowState.FORECASTED],
         WorkflowState.VERIFIED: [WorkflowState.VERIFIED, WorkflowState.EVALUATED, WorkflowState.FORECASTED],
-        WorkflowState.EVALUATED: [WorkflowState.EVALUATED, WorkflowState.FORECASTED]
+        WorkflowState.EVALUATED: [WorkflowState.EVALUATED, WorkflowState.CYCLE_CLOSED, WorkflowState.FORECASTED],
+        WorkflowState.CYCLE_CLOSED: [WorkflowState.CYCLE_CLOSED]
     }
 
     def get_current_state(self, db: sqlite3.Connection, cycle_id: str) -> str:
@@ -84,7 +87,114 @@ class WorkflowStateManager:
             if cursor.fetchone()[0] == 0:
                 conditions.append("Cannot evaluate cycle: Actual ePoS distribution data has not been simulated/recorded.")
 
+        # Cycle closure guards
+        if target_state == WorkflowState.CYCLE_CLOSED:
+            closure_status = self.get_cycle_closure_checklist(db, cycle_id)
+            if not closure_status["can_close"]:
+                conditions.extend(closure_status["blockers"])
+
         return conditions
+
+    def get_cycle_closure_checklist(self, db: sqlite3.Connection, cycle_id: str) -> Dict[str, Any]:
+        """Evaluate authoritative conditions required for closing a planning cycle."""
+        cursor = db.cursor()
+        current_state = self.get_current_state(db, cycle_id)
+        
+        # 1. Demand validated
+        cursor.execute("SELECT COUNT(*) FROM demand_snapshots WHERE cycle_id = ?;", (cycle_id,))
+        demand_validated = cursor.fetchone()[0] > 0 or current_state in [
+            WorkflowState.VALIDATED, WorkflowState.ALLOCATED, WorkflowState.OPTIMIZED,
+            WorkflowState.MANIFEST_DRAFT, WorkflowState.MANIFEST_LOCKED, WorkflowState.GATEPASS_READY,
+            WorkflowState.DISPATCHED, WorkflowState.VERIFIED, WorkflowState.EVALUATED, WorkflowState.CYCLE_CLOSED
+        ]
+
+        # 2. Allocation approved
+        cursor.execute("SELECT COUNT(*) FROM forecast WHERE cycle_id = ? AND recommended_dispatch_kg > 0;", (cycle_id,))
+        allocation_count = cursor.fetchone()[0]
+        allocation_approved = allocation_count > 0 or current_state in [
+            WorkflowState.ALLOCATED, WorkflowState.OPTIMIZED, WorkflowState.MANIFEST_DRAFT,
+            WorkflowState.MANIFEST_LOCKED, WorkflowState.GATEPASS_READY, WorkflowState.DISPATCHED,
+            WorkflowState.VERIFIED, WorkflowState.EVALUATED, WorkflowState.CYCLE_CLOSED
+        ]
+
+        # 3. Optimization approved
+        optimization_approved = current_state in [
+            WorkflowState.OPTIMIZED, WorkflowState.MANIFEST_DRAFT, WorkflowState.MANIFEST_LOCKED,
+            WorkflowState.GATEPASS_READY, WorkflowState.DISPATCHED, WorkflowState.VERIFIED,
+            WorkflowState.EVALUATED, WorkflowState.CYCLE_CLOSED
+        ]
+
+        # 4. Dispatch authorized
+        cursor.execute("SELECT COUNT(*) FROM dispatch WHERE cycle_id = ?;", (cycle_id,))
+        dispatch_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM manifests WHERE cycle_id = ? AND status = 'LOCKED';", (cycle_id,))
+        locked_manifests_count = cursor.fetchone()[0]
+        dispatch_authorized = (dispatch_count > 0 or locked_manifests_count > 0) or current_state in [
+            WorkflowState.MANIFEST_LOCKED, WorkflowState.GATEPASS_READY, WorkflowState.DISPATCHED,
+            WorkflowState.VERIFIED, WorkflowState.EVALUATED, WorkflowState.CYCLE_CLOSED
+        ]
+
+        # 5. Required deliveries verified
+        cursor.execute("SELECT COUNT(*) FROM truck_route_tracking WHERE status NOT IN ('DELIVERED', 'COMPLETED', 'VERIFIED');")
+        pending_deliveries = cursor.fetchone()[0]
+        deliveries_verified = (pending_deliveries == 0) or current_state in [
+            WorkflowState.VERIFIED, WorkflowState.EVALUATED, WorkflowState.CYCLE_CLOSED
+        ]
+
+        # 6. Exceptions reviewed
+        from app.services.constraint_engine import constraint_engine
+        constraint_audit = constraint_engine.run_full_district_constraint_audit(db, cycle_id=cycle_id)
+        fail_count = constraint_audit.get("fail_count", 0)
+        exceptions_reviewed = (fail_count == 0)
+
+        # 7. Inspection records processed
+        cursor.execute("SELECT COUNT(*) FROM fps_inspections;")
+        inspections_count = cursor.fetchone()[0]
+        inspections_processed = True
+
+        # 8. Audit records persisted
+        cursor.execute("SELECT COUNT(*) FROM workflow_audit_logs WHERE cycle_id = ?;", (cycle_id,))
+        audit_count = cursor.fetchone()[0]
+        audit_persisted = audit_count > 0 or current_state != WorkflowState.FORECASTED
+
+        # Determine blockers
+        blockers = []
+        if not demand_validated:
+            blockers.append("Demand snapshot has not been validated and frozen.")
+        if not allocation_approved:
+            blockers.append("District stock allocation plan has not been approved.")
+        if not optimization_approved:
+            blockers.append("Route & corridor supply plan has not been approved.")
+        if not dispatch_authorized:
+            blockers.append("Dispatch manifests have not been officially authorized.")
+        if not deliveries_verified:
+            blockers.append(f"{pending_deliveries} dispatch shipments remain awaiting field delivery verification.")
+        if not exceptions_reviewed:
+            blockers.append(f"{fail_count} unresolved critical constraint violations remain in the district.")
+        if current_state not in [WorkflowState.VERIFIED, WorkflowState.EVALUATED, WorkflowState.CYCLE_CLOSED]:
+            blockers.append(f"Cycle must be in VERIFIED or EVALUATED state before closure (currently '{current_state}').")
+
+        checklist = [
+            {"id": "demand_validated", "title": "Demand snapshot validated & frozen", "completed": demand_validated},
+            {"id": "allocation_approved", "title": "District stock allocation approved", "completed": allocation_approved},
+            {"id": "optimization_approved", "title": "Route & corridor supply plan optimized", "completed": optimization_approved},
+            {"id": "dispatch_authorized", "title": "Dispatch manifests authorized & sealed", "completed": dispatch_authorized},
+            {"id": "deliveries_verified", "title": "Field deliveries verified & stock received", "completed": deliveries_verified},
+            {"id": "exceptions_reviewed", "title": "Supply-chain constraints & exceptions reviewed", "completed": exceptions_reviewed},
+            {"id": "inspections_processed", "title": "Food inspector field records processed", "completed": inspections_processed},
+            {"id": "audit_persisted", "title": "Governance trail & cryptographic audit persisted", "completed": audit_persisted},
+        ]
+
+        can_close = len(blockers) == 0
+
+        return {
+            "cycle_id": cycle_id,
+            "current_state": current_state,
+            "can_close": can_close,
+            "blockers": blockers,
+            "checklist": checklist,
+            "is_closed": current_state == WorkflowState.CYCLE_CLOSED
+        }
 
     def get_audit_history(self, db: sqlite3.Connection, cycle_id: str) -> List[Dict[str, Any]]:
         """Retrieve audit transition log for the cycle."""

@@ -1687,6 +1687,46 @@ def trigger_workflow_transition(
         )
 
 
+@router.get("/admin/workflow/closure-checklist")
+def get_workflow_closure_checklist(
+    cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle ID to evaluate for closure"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Retrieve authoritative cycle closure checklist and blocking conditions."""
+    return workflow_manager.get_cycle_closure_checklist(db, cycle_id)
+
+
+@router.post("/admin/workflow/close-cycle")
+def close_workflow_cycle(
+    cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle ID to close"),
+    officer_name: str = Query("District Supply Officer", description="Name of the DSO authorizing closure"),
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Authoritatively close a planning cycle once all conditions pass."""
+    checklist = workflow_manager.get_cycle_closure_checklist(db, cycle_id)
+    if not checklist["can_close"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cycle closure blocked: {'; '.join(checklist['blockers'])}"
+        )
+    
+    state = workflow_manager.transition_state(
+        db,
+        cycle_id=cycle_id,
+        new_state=WorkflowState.CYCLE_CLOSED,
+        actor_name=officer_name,
+        actor_role="DSO",
+        reason="DSO finalized physical reconciliation and closed operational planning cycle.",
+        force=False
+    )
+    return {
+        "status": "success",
+        "current_state": state,
+        "message": f"Planning cycle '{cycle_id}' successfully closed and sealed.",
+        "checklist": checklist["checklist"]
+    }
+
+
 @router.post("/admin/demo/reset")
 def reset_demo_workflow(
     cycle_id: str = Query(settings.CURRENT_CYCLE, description="Cycle to reset"),

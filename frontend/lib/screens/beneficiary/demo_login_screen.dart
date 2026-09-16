@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/localization.dart';
 import '../../services/api_service.dart';
 import 'beneficiary_home_screen.dart';
-import '../admin/admin_dashboard_screen.dart';
+import '../admin/dso_dashboard_screen.dart';
+import '../admin/system_admin_dashboard_screen.dart';
 import '../admin/field_food_inspector_dashboard_screen.dart';
 import '../admin/fps_owner_dashboard_screen.dart';
 import '../admin/auditor_dashboard_screen.dart';
@@ -240,10 +241,12 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         targetScreen = FpsOwnerDashboardScreen(apiService: _apiService, username: uName);
       } else if (role == 'AUDITOR' || uName == 'auditor_user') {
         targetScreen = AuditorDashboardScreen(apiService: _apiService, username: uName);
+      } else if (role == 'ADMIN' && (uName == 'admin_user' || uName.contains('admin'))) {
+        targetScreen = SystemAdminDashboardScreen(apiService: _apiService, username: uName);
       } else {
-        targetScreen = AdminDashboardScreen(
+        // DSO Role & Department Supply Officer Command Console
+        targetScreen = DsoDashboardScreen(
           apiService: _apiService,
-          userRole: role,
           username: uName,
         );
       }
