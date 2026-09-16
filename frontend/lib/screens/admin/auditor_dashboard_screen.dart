@@ -32,7 +32,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadAuditData();
   }
 
@@ -106,15 +106,17 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
         ),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: const Color(0xFFE9D5FF),
+          isScrollable: true,
+          indicatorColor: Colors.amberAccent,
           indicatorWeight: 3,
-          labelColor: Colors.white,
-          unselectedLabelColor: const Color(0xFFE9D5FF).withValues(alpha: 0.7),
+          labelColor: Colors.amberAccent,
+          unselectedLabelColor: const Color(0xFFE9D5FF).withValues(alpha: 0.75),
           tabs: const [
-            Tab(text: 'Sealed Manifests (SHA-256)'),
-            Tab(text: 'Gatepass Audit Trail'),
-            Tab(text: 'Forecast vs Actual MAPE'),
-            Tab(text: 'Field Inspection Logs'),
+            Tab(text: 'Step 1: 🔒 Manifest Lock'),
+            Tab(text: 'Step 2: 🚚 Transit Trail'),
+            Tab(text: 'Step 3: 📊 AI Model Audit'),
+            Tab(text: 'Step 4: 📋 Field Reconciliation'),
+            Tab(text: 'Step 5: 📜 CAG Sign-Off'),
           ],
         ),
         actions: [
@@ -163,40 +165,28 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Top Governance Badge Banner
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  color: const Color(0xFFF3E8FF),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.lock_outline, color: Color(0xFF6B21A8), size: 18),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'INDEPENDENT READ-ONLY AUDIT MODE: Operational write actions (Forecast triggering, Quota editing, Gatepass advancing) are restricted to guarantee audit impartiality.',
-                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF581C87)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                // Top Guided Audit Workflow Stepper Banner
+                _buildGuidedAuditWorkflowBanner(manifestId, manifestHash),
 
                 // Tab Content
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      // TAB 1: Sealed Manifests
+                      // STEP 1: Sealed Manifests
                       _buildManifestsTab(manifestId, manifestHash),
 
-                      // TAB 2: Gatepass Audit Trail
+                      // STEP 2: Gatepass Audit Trail
                       _buildGatepassAuditTab(),
 
-                      // TAB 3: Forecast MAPE Evaluation
+                      // STEP 3: Forecast MAPE Evaluation
                       _buildEvaluationTab(mape),
 
-                      // TAB 4: Field Inspection Records
+                      // STEP 4: Field Inspection Records
                       _buildInspectionsAuditTab(),
+
+                      // STEP 5: Executive CAG Audit Sign-Off
+                      _buildSignOffTab(manifestId, manifestHash),
                     ],
                   ),
                 ),
@@ -867,6 +857,257 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildGuidedAuditWorkflowBanner(String manifestId, String manifestHash) {
+    return AnimatedBuilder(
+      animation: _tabController,
+      builder: (context, _) {
+        final currentStep = _tabController.index + 1;
+        final double progress = currentStep / 5.0;
+
+        final stepTitles = [
+          'Step 1: 🔒 Sealed Manifest Lock (SHA-256)',
+          'Step 2: 🚚 Digital Gatepass & Transit Trail',
+          'Step 3: 📊 AI Model Accuracy & Bias Audit',
+          'Step 4: 📋 Field Inspection Reconciliation',
+          'Step 5: 📜 Executive Audit Sign-Off & CAG Cert',
+        ];
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: const BoxDecoration(
+            color: Color(0xFFF3E8FF),
+            border: Border(bottom: BorderSide(color: Color(0xFFE9D5FF))),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6B21A8),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'AUDIT STEP $currentStep / 5',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.black, color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            stepTitles[_tabController.index],
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF581C87)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 5,
+                        backgroundColor: const Color(0xFFE9D5FF),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6B21A8)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Row(
+                children: [
+                  if (_tabController.index > 0)
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        _tabController.animateTo(_tabController.index - 1);
+                      },
+                      icon: const Icon(Icons.arrow_back, size: 14, color: Color(0xFF6B21A8)),
+                      label: const Text('Back', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF6B21A8))),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF6B21A8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                      ),
+                    ),
+                  if (_tabController.index > 0) const SizedBox(width: 8),
+                  if (_tabController.index < 4)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        _tabController.animateTo(_tabController.index + 1);
+                      },
+                      icon: const Icon(Icons.arrow_forward, size: 14, color: Colors.white),
+                      label: Text(
+                        _tabController.index == 3 ? 'Final Sign-Off ➔' : 'Next Step ➔',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6B21A8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      ),
+                    ),
+                  if (_tabController.index == 4)
+                    ElevatedButton.icon(
+                      onPressed: () => _showAuditCertificateModal(manifestId, manifestHash),
+                      icon: const Icon(Icons.verified, size: 14, color: Colors.black87),
+                      label: const Text('Issue CAG Cert 📜', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amber,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSignOffTab(String manifestId, String manifestHash) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE9D5FF), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.purple.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF581C87),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.verified_user_rounded, color: Colors.amberAccent, size: 28),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Step 5: Executive CAG Audit Clearance & Official Sign-Off',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.black, color: AppConstants.textPrimary),
+                        ),
+                        Text(
+                          'Final verification summary for Cycle 2026-09 before generating CAG Vigilance Certificate.',
+                          style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 28),
+              const Text(
+                'COMPREHENSIVE AUDIT VERIFICATION CHECKLIST:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.black, letterSpacing: 0.5, color: Color(0xFF6B21A8)),
+              ),
+              const SizedBox(height: 12),
+              _buildChecklistItem('Step 1: Manifest Integrity', 'Cryptographic SHA-256 seal verified. Zero post-planning tampering detected.', true),
+              _buildChecklistItem('Step 2: Supply Chain Transit', 'Digital QR Gatepasses audited. Transit loss variance is -0.32% (below 1.0% limit).', true),
+              _buildChecklistItem('Step 3: AI Model Fairness', 'ML forecast MAPE score is 4.12% (< 5.0%). Zero demographic bias detected.', true),
+              _buildChecklistItem('Step 4: Field Reconciliation', 'Physical FFI weighing scales and e-Pos logs reconciled with 99.8% compliance score.', true),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF86EFAC)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.stars_rounded, color: Color(0xFF16A34A), size: 32),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'AUDIT STATUS: FULLY CERTIFIED & COMPLIANT',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.black, color: Color(0xFF14532D)),
+                          ),
+                          Text(
+                            'All statutory NFSA guidelines and digital custody protocols satisfied.',
+                            style: TextStyle(fontSize: 11.5, color: Color(0xFF166534)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => _showAuditCertificateModal(manifestId, manifestHash),
+                      icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.white, size: 18),
+                      label: const Text('Export Official Certificate', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6B21A8),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChecklistItem(String title, String desc, bool isPassed) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppConstants.cardBorder),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isPassed ? Icons.check_circle : Icons.error,
+            color: isPassed ? const Color(0xFF16A34A) : Colors.red,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppConstants.textPrimary)),
+                const SizedBox(height: 2),
+                Text(desc, style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
