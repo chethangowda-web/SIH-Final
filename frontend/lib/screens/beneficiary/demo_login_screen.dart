@@ -419,7 +419,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                       Row(
                         children: [
                           Text(
-                            'PDS DemandSync',
+                            tr('login.portal_title'),
                             style: TextStyle(
                               fontSize: isMobile ? 15 : 17,
                               fontWeight: FontWeight.w800,
@@ -435,9 +435,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(color: _govBlueBorder),
                             ),
-                            child: const Text(
-                              'GOVT PORTAL',
-                              style: TextStyle(
+                            child: Text(
+                              tr('login.govt_badge'),
+                              style: const TextStyle(
                                 fontSize: 8.5,
                                 fontWeight: FontWeight.w800,
                                 color: _govBlue,
@@ -449,7 +449,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                       ),
                       const SizedBox(height: 1),
                       Text(
-                        'Department of Food & Civil Supplies • Government of Karnataka',
+                        tr('login.dept_header'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -496,7 +496,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   const Icon(Icons.verified_outlined, size: 13, color: _govBlue),
                   const SizedBox(width: 5),
                   Text(
-                    'FOOD SECURITY & PUBLIC DISTRIBUTION SYSTEM',
+                    tr('login.service_badge'),
                     style: TextStyle(
                       fontSize: isMobile ? 9.5 : 10.5,
                       fontWeight: FontWeight.w800,
@@ -511,7 +511,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         ),
         const SizedBox(height: 10),
         Text(
-          'Secure Digital Access Portal',
+          tr('login.service_title'),
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: isMobile ? 20 : 24,
@@ -522,7 +522,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Access authorized food distribution and supply-chain services.',
+          tr('login.service_sub'),
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: isMobile ? 12 : 13.5,
@@ -576,7 +576,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Welcome to PDS DemandSync',
+                      tr('login.welcome_title'),
                       style: TextStyle(
                         fontSize: isMobile ? 17 : 19,
                         fontWeight: FontWeight.w800,
@@ -586,7 +586,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Secure Government Service Portal',
+                      tr('login.card_subtitle'),
                       style: TextStyle(
                         fontSize: isMobile ? 11.5 : 12.5,
                         color: _slate500,
@@ -626,14 +626,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                     children: [
                       _buildTabButton(
                         index: 0,
-                        label: 'CITIZEN LOGIN',
+                        label: tr('login.tab_citizen'),
                         icon: Icons.person_rounded,
                         isMobile: isMobile,
                         activeColor: _govGreen,
                       ),
                       _buildTabButton(
                         index: 1,
-                        label: 'DEPARTMENT OFFICIAL',
+                        label: tr('login.tab_official'),
                         icon: Icons.admin_panel_settings_rounded,
                         isMobile: isMobile,
                         activeColor: _govNavy,
@@ -673,48 +673,51 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   }) {
     final isSelected = _selectedTabIndex == index;
     return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => _selectedTabIndex = index),
-        borderRadius: BorderRadius.circular(7),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: EdgeInsets.symmetric(vertical: isMobile ? 8 : 10),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(7),
-            boxShadow: isSelected
-                ? const [
-                    BoxShadow(
-                      color: Color(0x0D000000),
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _selectedTabIndex = index),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: EdgeInsets.symmetric(vertical: isMobile ? 8 : 10),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+              boxShadow: isSelected
+                  ? const [
+                      BoxShadow(
+                        color: Color(0x0D000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: isMobile ? 14 : 16,
+                  color: isSelected ? activeColor : _slate500,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: isMobile ? 11 : 12.5,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      color: isSelected ? activeColor : _slate500,
+                      letterSpacing: isSelected ? 0.2 : 0,
                     ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: isMobile ? 14 : 16,
-                color: isSelected ? activeColor : _slate500,
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: isMobile ? 11 : 12.5,
-                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                    color: isSelected ? activeColor : _slate500,
-                    letterSpacing: isSelected ? 0.2 : 0,
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -744,7 +747,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Anti-Fraud Enforcement Active: Ration Card Number and Phone Number are cross-verified against the official NFSA Master Dataset.',
+                  tr('login.anti_fraud_notice'),
                   style: TextStyle(
                     fontSize: isMobile ? 10.5 : 11.5,
                     fontWeight: FontWeight.w600,
@@ -761,7 +764,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
         // Field 1: Ration Card Number
         Text(
-          'Ration Card Number',
+          tr('login.ration_card_label'),
           style: TextStyle(
             fontSize: isMobile ? 11.5 : 12.5,
             fontWeight: FontWeight.w700,
@@ -774,7 +777,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           enabled: !_isSendingOtp && !_isVerifyingOtp,
           style: TextStyle(fontSize: isMobile ? 13.5 : 14.5, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'Enter your ration card number (e.g. RC-KA-000001)',
+            hintText: tr('login.ration_card_input_hint'),
             hintStyle: const TextStyle(color: _slate400, fontSize: 13),
             prefixIcon: Icon(Icons.credit_card_rounded, size: isMobile ? 18 : 20, color: _slate500),
             filled: true,
@@ -790,7 +793,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
         // Field 2: Phone Number
         Text(
-          'Registered Mobile Number',
+          tr('login.phone_label'),
           style: TextStyle(
             fontSize: isMobile ? 11.5 : 12.5,
             fontWeight: FontWeight.w700,
@@ -804,7 +807,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           enabled: !_isSendingOtp && !_isVerifyingOtp,
           style: TextStyle(fontSize: isMobile ? 13.5 : 14.5, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'Enter registered mobile number (e.g. 9876543210)',
+            hintText: tr('login.phone_input_hint'),
             hintStyle: const TextStyle(color: _slate400, fontSize: 13),
             prefixIcon: Icon(Icons.phone_rounded, size: isMobile ? 18 : 20, color: _slate500),
             filled: true,
@@ -840,7 +843,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                       const Icon(Icons.send_rounded, size: 16),
                       const SizedBox(width: 8),
                       Text(
-                        'GET OTP',
+                        tr('login.get_otp'),
                         style: TextStyle(
                           fontSize: isMobile ? 13.5 : 14.5,
                           fontWeight: FontWeight.w800,
@@ -870,7 +873,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                         const Icon(Icons.mark_email_read_outlined, size: 16, color: _govGreen),
                         const SizedBox(width: 6),
                         Text(
-                          'Enter 6-Digit OTP',
+                          tr('login.enter_6_digit_otp'),
                           style: TextStyle(
                             fontSize: isMobile ? 12 : 13,
                             fontWeight: FontWeight.w800,
@@ -928,18 +931,21 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Code sent via official SMS gateway',
+                      tr('login.sms_dispatched_notice'),
                       style: TextStyle(fontSize: isMobile ? 10 : 11, color: _slate500),
                     ),
-                    InkWell(
-                      onTap: _isSendingOtp ? null : _handleSendOtp,
-                      child: Text(
-                        'Resend OTP',
-                        style: TextStyle(
-                          fontSize: isMobile ? 11 : 12,
-                          fontWeight: FontWeight.w800,
-                          color: _govNavy,
-                          decoration: TextDecoration.underline,
+                    MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        onTap: _isSendingOtp ? null : _handleSendOtp,
+                        child: Text(
+                          tr('login.resend_otp_btn'),
+                          style: TextStyle(
+                            fontSize: isMobile ? 11 : 12,
+                            fontWeight: FontWeight.w800,
+                            color: _govNavy,
+                            decoration: TextDecoration.underline,
+                          ),
                         ),
                       ),
                     ),
@@ -972,7 +978,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                       const Icon(Icons.lock_open_rounded, size: 16),
                       const SizedBox(width: 8),
                       Text(
-                        'VERIFY OTP & SIGN IN',
+                        tr('login.verify_signin_btn'),
                         style: TextStyle(
                           fontSize: isMobile ? 13.5 : 14.5,
                           fontWeight: FontWeight.w800,
@@ -996,7 +1002,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Select Official Role Window:',
+          tr('login.select_role_window'),
           style: TextStyle(
             fontSize: isMobile ? 11.5 : 12.5,
             fontWeight: FontWeight.w800,
@@ -1015,8 +1021,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           childAspectRatio: isMobile ? 2.3 : 2.7,
           children: [
             _buildRoleWindowCard(
-              title: '🏛️ DSO (Command)',
-              subtitle: 'Planning & Decision Authority',
+              title: tr('login.role_dso_title'),
+              subtitle: tr('login.role_dso_sub'),
               icon: Icons.account_balance_outlined,
               color: const Color(0xFF166534),
               bgColor: const Color(0xFFF0FDF4),
@@ -1026,8 +1032,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               isMobile: isMobile,
             ),
             _buildRoleWindowCard(
-              title: '🔍 Field Inspector',
-              subtitle: 'Physical Inspection & Checklist',
+              title: tr('login.role_inspector_title'),
+              subtitle: tr('login.role_inspector_sub'),
               icon: Icons.assignment_turned_in_outlined,
               color: const Color(0xFF92400E),
               bgColor: const Color(0xFFFFFBEB),
@@ -1037,8 +1043,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               isMobile: isMobile,
             ),
             _buildRoleWindowCard(
-              title: '🏪 FPS Officer',
-              subtitle: 'Current Stock, Register & e-PoS',
+              title: tr('login.role_fps_title'),
+              subtitle: tr('login.role_fps_sub'),
               icon: Icons.storefront_outlined,
               color: const Color(0xFF0F766E),
               bgColor: const Color(0xFFF0FDFA),
@@ -1048,8 +1054,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               isMobile: isMobile,
             ),
             _buildRoleWindowCard(
-              title: '🛡️ Auditor',
-              subtitle: 'Audit Ledger & Compliance Trail',
+              title: tr('login.role_auditor_title'),
+              subtitle: tr('login.role_auditor_sub'),
               icon: Icons.verified_user_outlined,
               color: const Color(0xFF6B21A8),
               bgColor: const Color(0xFFF3E8FF),
@@ -1065,7 +1071,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
         // Field 1: Official User ID
         Text(
-          'Official User ID',
+          tr('login.official_user_id'),
           style: TextStyle(
             fontSize: isMobile ? 11.5 : 12.5,
             fontWeight: FontWeight.w700,
@@ -1078,7 +1084,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           enabled: !_isAdminLoggingIn,
           style: TextStyle(fontSize: isMobile ? 13.5 : 14.5, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'Enter official username / employee ID',
+            hintText: tr('login.official_user_placeholder'),
             hintStyle: const TextStyle(color: _slate400, fontSize: 13),
             prefixIcon: Icon(Icons.person_outline_rounded, size: isMobile ? 18 : 20, color: _slate500),
             filled: true,
@@ -1094,7 +1100,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
         // Field 2: Password
         Text(
-          'Password',
+          tr('login.password_field'),
           style: TextStyle(
             fontSize: isMobile ? 11.5 : 12.5,
             fontWeight: FontWeight.w700,
@@ -1108,7 +1114,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           enabled: !_isAdminLoggingIn,
           style: TextStyle(fontSize: isMobile ? 13.5 : 14.5, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'Enter your secure password',
+            hintText: tr('login.password_placeholder'),
             hintStyle: const TextStyle(color: _slate400, fontSize: 13),
             prefixIcon: Icon(Icons.lock_outline_rounded, size: isMobile ? 18 : 20, color: _slate500),
             suffixIcon: IconButton(
@@ -1151,7 +1157,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                     const Icon(Icons.login_rounded, size: 16),
                     const SizedBox(width: 8),
                     Text(
-                      'SIGN IN TO OFFICIAL WORKSPACE',
+                      tr('login.signin_workspace_btn'),
                       style: TextStyle(
                         fontSize: isMobile ? 13 : 14,
                         fontWeight: FontWeight.w800,
@@ -1177,65 +1183,68 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     required bool isMobile,
   }) {
     final isSelected = _selectedOfficialRole == role || _adminUsernameController.text.trim() == username;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedOfficialRole = role;
-          _adminUsernameController.text = username;
-          _adminPasswordController.text = password;
-        });
-      },
-      borderRadius: BorderRadius.circular(8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? bgColor : Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? color : _slate200,
-            width: isSelected ? 1.8 : 1,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          setState(() {
+            _selectedOfficialRole = role;
+            _adminUsernameController.text = username;
+            _adminPasswordController.text = password;
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? bgColor : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? color : _slate200,
+              width: isSelected ? 1.8 : 1,
+            ),
+            boxShadow: isSelected
+                ? [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 4, offset: const Offset(0, 2))]
+                : null,
           ),
-          boxShadow: isSelected
-              ? [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 4, offset: const Offset(0, 2))]
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: isMobile ? 14 : 16, color: color),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: isMobile ? 11 : 12,
-                      fontWeight: FontWeight.w800,
-                      color: color,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: isMobile ? 14 : 16, color: color),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: isMobile ? 11 : 12,
+                        fontWeight: FontWeight.w800,
+                        color: color,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                if (isSelected)
-                  Icon(Icons.check_circle_rounded, size: 14, color: color),
-              ],
-            ),
-            const SizedBox(height: 3),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: isMobile ? 9 : 10,
-                fontWeight: FontWeight.w500,
-                color: _slate500,
-                height: 1.2,
+                  if (isSelected)
+                    Icon(Icons.check_circle_rounded, size: 14, color: color),
+                ],
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: isMobile ? 9 : 10,
+                  fontWeight: FontWeight.w500,
+                  color: _slate500,
+                  height: 1.2,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1261,7 +1270,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'SECURE GOVERNMENT ACCESS',
+                  tr('login.security_badge'),
                   style: TextStyle(
                     fontSize: isMobile ? 9.5 : 10.5,
                     fontWeight: FontWeight.w800,
@@ -1271,7 +1280,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  'Your credentials are verified against the authorized PDS DemandSync system.',
+                  tr('login.security_desc'),
                   style: TextStyle(
                     fontSize: isMobile ? 10 : 11,
                     color: _slate500,
@@ -1298,7 +1307,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             const Icon(Icons.shield_rounded, size: 14, color: _govNavy),
             const SizedBox(width: 6),
             Text(
-              'National Food Security Portal • Govt. of Karnataka & India',
+              tr('login.footer_portal_title'),
               style: TextStyle(
                 fontSize: isMobile ? 10.5 : 11.5,
                 color: _slate700,
@@ -1309,7 +1318,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          'PDS DemandSync • Department of Food & Civil Supplies\nUnauthorized access or tampering is strictly prohibited and subject to legal prosecution under the IT Act.',
+          tr('login.footer_legal'),
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: isMobile ? 9.5 : 10.5,

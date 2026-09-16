@@ -82,6 +82,44 @@ const Map<String, Map<String, String>> _translations = {
     'lang.kannada': 'ಕನ್ನಡ',
 
     // Login Screen Comprehensive
+    'login.portal_title': 'PDS DemandSync',
+    'login.dept_header': 'Department of Food & Civil Supplies • Government of Karnataka',
+    'login.govt_badge': 'GOVT PORTAL',
+    'login.service_badge': 'FOOD SECURITY & PUBLIC DISTRIBUTION SYSTEM',
+    'login.service_title': 'Secure Digital Access Portal',
+    'login.service_sub': 'Access authorized food distribution and supply-chain services.',
+    'login.welcome_title': 'Welcome to PDS DemandSync',
+    'login.card_subtitle': 'Secure Government Service Portal',
+    'login.tab_citizen': 'CITIZEN LOGIN',
+    'login.tab_official': 'DEPARTMENT OFFICIAL',
+    'login.anti_fraud_notice': 'Anti-Fraud Enforcement Active: Ration Card Number and Phone Number are cross-verified against the official NFSA Master Dataset.',
+    'login.ration_card_label': 'Ration Card Number',
+    'login.ration_card_input_hint': 'Enter your ration card number (e.g. RC-KA-000001)',
+    'login.phone_label': 'Registered Mobile Number',
+    'login.phone_input_hint': 'Enter registered mobile number (e.g. 9876543210)',
+    'login.get_otp': 'GET OTP',
+    'login.enter_6_digit_otp': 'Enter 6-Digit OTP',
+    'login.sms_dispatched_notice': 'Code sent via official SMS gateway',
+    'login.resend_otp_btn': 'Resend OTP',
+    'login.verify_signin_btn': 'VERIFY OTP & SIGN IN',
+    'login.select_role_window': 'Select Official Role Window:',
+    'login.role_dso_title': '🏛️ DSO (Command)',
+    'login.role_dso_sub': 'Planning & Decision Authority',
+    'login.role_inspector_title': '🔍 Field Inspector',
+    'login.role_inspector_sub': 'Physical Inspection & Checklist',
+    'login.role_fps_title': '🏪 FPS Officer',
+    'login.role_fps_sub': 'Current Stock, Register & e-PoS',
+    'login.role_auditor_title': '🛡️ Auditor',
+    'login.role_auditor_sub': 'Audit Ledger & Compliance Trail',
+    'login.official_user_id': 'Official User ID',
+    'login.official_user_placeholder': 'Enter official username / employee ID',
+    'login.password_field': 'Password',
+    'login.password_placeholder': 'Enter your secure password',
+    'login.signin_workspace_btn': 'SIGN IN TO OFFICIAL WORKSPACE',
+    'login.security_badge': 'SECURE GOVERNMENT ACCESS',
+    'login.security_desc': 'Your credentials are verified against the authorized PDS DemandSync system.',
+    'login.footer_portal_title': 'National Food Security Portal • Govt. of Karnataka & India',
+    'login.footer_legal': 'PDS DemandSync • Department of Food & Civil Supplies\nUnauthorized access or tampering is strictly prohibited and subject to legal prosecution under the IT Act.',
     'login.tagline': 'Transparent • Efficient • Citizen First',
     'login.motto_line_1': 'Right Grain,',
     'login.motto_line_2': 'Right Shop,',
@@ -545,6 +583,44 @@ const Map<String, Map<String, String>> _translations = {
     'lang.kannada': 'ಕನ್ನಡ',
 
     // Login Screen Comprehensive
+    'login.portal_title': 'पीडीएस डिमांडसिंक (PDS DemandSync)',
+    'login.dept_header': 'खाद्य एवं नागरिक आपूर्ति विभाग • कर्नाटक सरकार',
+    'login.govt_badge': 'सरकारी पोर्टल',
+    'login.service_badge': 'खाद्य सुरक्षा एवं सार्वजनिक वितरण प्रणाली',
+    'login.service_title': 'सुरक्षित डिजिटल सेवा पोर्टल',
+    'login.service_sub': 'अधिकृत खाद्य वितरण और आपूर्ति श्रृंखला सेवाओं तक पहुंचें।',
+    'login.welcome_title': 'पीडीएस डिमांडसिंक में आपका स्वागत है',
+    'login.card_subtitle': 'सुरक्षित सरकारी सेवा पोर्टल',
+    'login.tab_citizen': 'नागरिक लॉगिन',
+    'login.tab_official': 'विभागीय अधिकारी',
+    'login.anti_fraud_notice': 'धोखाधड़ी रोकथाम सक्रिय: राशन कार्ड नंबर और फोन नंबर का आधिकारिक NFSA मास्टर डेटाबेस से सत्यापन किया जाता है।',
+    'login.ration_card_label': 'राशन कार्ड नंबर',
+    'login.ration_card_input_hint': 'अपना राशन कार्ड नंबर दर्ज करें (उदा. RC-KA-000001)',
+    'login.phone_label': 'पंजीकृत मोबाइल नंबर',
+    'login.phone_input_hint': 'पंजीकृत मोबाइल नंबर दर्ज करें (उदा. 9876543210)',
+    'login.get_otp': 'ओटीपी प्राप्त करें',
+    'login.enter_6_digit_otp': '6-अंकीय ओटीपी दर्ज करें',
+    'login.sms_dispatched_notice': 'कोड आधिकारिक एसएमएस गेटवे के माध्यम से भेजा गया',
+    'login.resend_otp_btn': 'ओटीपी पुनः भेजें',
+    'login.verify_signin_btn': 'ओटीपी सत्यापित करें और साइन इन करें',
+    'login.select_role_window': 'अधिकारिक भूमिका विंडो चुनें:',
+    'login.role_dso_title': '🏛️ डीएसओ (कमांड)',
+    'login.role_dso_sub': 'योजना एवं निर्णय प्राधिकरण',
+    'login.role_inspector_title': '🔍 फील्ड इंस्पेक्टर',
+    'login.role_inspector_sub': 'भौतिक निरीक्षण एवं चेकलिस्ट',
+    'login.role_fps_title': '🏪 राशन दुकान अधिकारी',
+    'login.role_fps_sub': 'स्टॉक, रजिस्टर एवं ई-पॉस',
+    'login.role_auditor_title': '🛡️ ऑडिटर',
+    'login.role_auditor_sub': 'ऑडिट लेजर एवं अनुपालन ट्रेल',
+    'login.official_user_id': 'अधिकारी यूजर आईडी',
+    'login.official_user_placeholder': 'अधिकारिक यूजरनेम / कर्मचारी आईडी दर्ज करें',
+    'login.password_field': 'पासवर्ड',
+    'login.password_placeholder': 'अपना सुरक्षित पासवर्ड दर्ज करें',
+    'login.signin_workspace_btn': 'आधिकारिक कार्यक्षेत्र में साइन इन करें',
+    'login.security_badge': 'सुरक्षित सरकारी पहुंच',
+    'login.security_desc': 'आपके क्रेडेंशियल का अधिकृत पीडीएस डिमांडसिंक सिस्टम से सत्यापन किया जाता है।',
+    'login.footer_portal_title': 'राष्ट्रीय खाद्य सुरक्षा पोर्टल • कर्नाटक सरकार एवं भारत सरकार',
+    'login.footer_legal': 'पीडीएस डिमांडसिंक • खाद्य एवं नागरिक आपूर्ति विभाग\nअनधिकृत पहुंच या छेड़छाड़ सख्त वर्जित है तथा आईटी अधिनियम के तहत कानूनी दंडनीय है।',
     'login.tagline': 'पारदर्शी • कुशल • नागरिक प्रथम',
     'login.motto_line_1': 'सही अनाज,',
     'login.motto_line_2': 'सही दुकान,',
@@ -960,6 +1036,44 @@ const Map<String, Map<String, String>> _translations = {
     'lang.kannada': 'ಕನ್ನಡ',
 
     // Login Screen Comprehensive
+    'login.portal_title': 'ಪಿಡಿಎಸ್ ಡಿಮಾಂಡ್‌ಸಿಂಕ್ (PDS DemandSync)',
+    'login.dept_header': 'ಆಹಾರ ಮತ್ತು ನಾಗರಿಕ ಸರಬರಾಜು ಇಲಾಖೆ • ಕರ್ನಾಟಕ ಸರ್ಕಾರ',
+    'login.govt_badge': 'ಸರ್ಕಾರಿ ಪೋರ್ಟಲ್',
+    'login.service_badge': 'ಆಹಾರ ಭದ್ರತೆ ಮತ್ತು ಸಾರ್ವಜನಿಕ ವಿತರಣಾ ವ್ಯವಸ್ಥೆ',
+    'login.service_title': 'ಸುರಕ್ಷಿತ ಡಿಜಿಟಲ್ ಪ್ರವೇಶ ಪೋರ್ಟಲ್',
+    'login.service_sub': 'ಅಧಿಕೃತ ಆಹಾರ ವಿತರಣೆ ಮತ್ತು ಸರಬರಾಜು ಸೇವೆಗಳನ್ನು ಪ್ರವೇಶಿಸಿ.',
+    'login.welcome_title': 'ಪಿಡಿಎಸ್ ಡಿಮಾಂಡ್‌ಸಿಂಕ್‌ಗೆ ಸುಸ್ವಾಗತ',
+    'login.card_subtitle': 'ಸುರಕ್ಷಿತ ಸರ್ಕಾರಿ ಸೇವಾ ಪೋರ್ಟಲ್',
+    'login.tab_citizen': 'ನಾಗರಿಕ ಲಾಗಿನ್',
+    'login.tab_official': 'ಇಲಾಖಾ ಅಧಿಕಾರಿ',
+    'login.anti_fraud_notice': 'ವಂಚನೆ ತಡೆ ಜಾರಿಯಲ್ಲಿದೆ: ಪಡಿತರ ಚೀಟಿ ಸಂಖ್ಯೆ ಮತ್ತು ಫೋನ್ ಸಂಖ್ಯೆಯನ್ನು ಅಧಿಕೃತ NFSA ಮಾಸ್ಟರ್ ಡೇಟಾಸೆಟ್‌ನೊಂದಿಗೆ ಪರಿಶೀಲಿಸಲಾಗುತ್ತದೆ.',
+    'login.ration_card_label': 'ಪಡಿತರ ಚೀಟಿ ಸಂಖ್ಯೆ',
+    'login.ration_card_input_hint': 'ನಿಮ್ಮ ಪಡಿತರ ಚೀಟಿ ಸಂಖ್ಯೆ ನಮೂದಿಸಿ (ಉದಾ: RC-KA-000001)',
+    'login.phone_label': 'ನೋಂದಾಯಿತ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ',
+    'login.phone_input_hint': 'ನೋಂದಾಯಿತ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ನಮೂದಿಸಿ (ಉದಾ: 9876543210)',
+    'login.get_otp': 'OTP ಪಡೆಯಿರಿ',
+    'login.enter_6_digit_otp': '6-ಅಂಕಿಯ OTP ನಮೂದಿಸಿ',
+    'login.sms_dispatched_notice': 'ಅಧಿಕೃತ SMS ಗೇಟ್‌ವೇ ಮೂಲಕ ಕೋಡ್ ಕಳುಹಿಸಲಾಗಿದೆ',
+    'login.resend_otp_btn': 'OTP ಮರುಕಳುಹಿಸಿ',
+    'login.verify_signin_btn': 'OTP ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಸೈನ್ ಇನ್ ಮಾಡಿ',
+    'login.select_role_window': 'ಅಧಿಕೃತ ಹುದ್ದೆಯ ವಿಂಡೋ ಆಯ್ಕೆಮಾಡಿ:',
+    'login.role_dso_title': '🏛️ ಡಿಎಸ್ಒ (ಕಮಾಂಡ್)',
+    'login.role_dso_sub': 'ಯೋಜನೆ ಮತ್ತು ನಿರ್ಧಾರ ಪ್ರಾಧಿಕಾರ',
+    'login.role_inspector_title': '🔍 ಆಹಾರ ಪರಿವೀಕ್ಷಕರು',
+    'login.role_inspector_sub': 'ಭೌತಿಕ ತಪಾಸಣೆ ಮತ್ತು ಪರಿಶೀಲನಾ ಪಟ್ಟಿ',
+    'login.role_fps_title': '🏪 ಎಫ್‌ಪಿಎಸ್ ಅಧಿಕಾರಿ',
+    'login.role_fps_sub': 'ದಾಸ್ತಾನು, ರಿಜಿಸ್ಟರ್ ಮತ್ತು ಇ-ಪಾಸ್',
+    'login.role_auditor_title': '🛡️ ಆಡಿಟರ್',
+    'login.role_auditor_sub': 'ಆಡಿಟ್ ಲೆಡ್ಜರ್ ಮತ್ತು ಅನುಸರಣಾ ವಿವರ',
+    'login.official_user_id': 'ಅಧಿಕೃತ ಬಳಕೆದಾರ ಐಡಿ',
+    'login.official_user_placeholder': 'ಅಧಿಕೃತ ಬಳಕೆದಾರ ಹೆಸರು / ಉದ್ಯೋಗಿ ಐಡಿ ನಮೂದಿಸಿ',
+    'login.password_field': 'ಪಾಸ್‌ವರ್ಡ್',
+    'login.password_placeholder': 'ನಿಮ್ಮ ಸುರಕ್ಷಿತ ಪಾಸ್‌ವರ್ಡ್ ನಮೂದಿಸಿ',
+    'login.signin_workspace_btn': 'ಅಧಿಕೃತ ಕಾರ್ಯಕ್ಷೇತ್ರಕ್ಕೆ ಸೈನ್ ಇನ್ ಮಾಡಿ',
+    'login.security_badge': 'ಸುರಕ್ಷಿತ ಸರ್ಕಾರಿ ಪ್ರವೇಶ',
+    'login.security_desc': 'ನಿಮ್ಮ ರುಜುವಾತುಗಳನ್ನು ಅಧಿಕೃತ ಪಿಡಿಎಸ್ ಡಿಮಾಂಡ್‌ಸಿಂಕ್ ವ್ಯವಸ್ಥೆಯ ವಿರುದ್ಧ ಪರಿಶೀಲಿಸಲಾಗುತ್ತದೆ.',
+    'login.footer_portal_title': 'ರಾಷ್ಟ್ರೀಯ ಆಹಾರ ಭದ್ರತಾ ಪೋರ್ಟಲ್ • ಕರ್ನಾಟಕ ಸರ್ಕಾರ ಮತ್ತು ಭಾರತ ಸರ್ಕಾರ',
+    'login.footer_legal': 'ಪಿಡಿಎಸ್ ಡಿಮಾಂಡ್‌ಸಿಂಕ್ • ಆಹಾರ ಮತ್ತು ನಾಗರಿಕ ಸರಬರಾಜು ಇಲಾಖೆ\nಅನಧಿಕೃತ ಪ್ರವೇಶ ಅಥವಾ ತಿರುಚುವಿಕೆ ಕಟ್ಟುನಿಟ್ಟಾಗಿ ನಿಷೇಧಿಸಲಾಗಿದೆ ಮತ್ತು ಐಟಿ ಕಾಯ್ದೆಯಡಿ ಶಿಕ್ಷಾರ್ಹವಾಗಿದೆ.',
     'login.tagline': 'ಪಾರದರ್ಶಕ • ದಕ್ಷ • ಉತ್ತಮ ನಾಳೆಗಾಗಿ',
     'login.welcome_back': 'ಮರಳಿ ಸ್ವಾಗತ',
     'login.welcome_sub': 'ನಿಮ್ಮ ಪಡಿತರ ಮತ್ತು ಸೇವಾ ನಿರ್ವಹಣಾ ಪೋರ್ಟಲ್ ಅನ್ನು ಪ್ರವೇಶಿಸಲು ಲಾಗಿನ್ ಮಾಡಿ',
@@ -1425,40 +1539,46 @@ class LanguageSelectorWidget extends StatelessWidget {
               ),
               ...AppLanguage.values.map((lang) {
                 final isSelected = lang == current;
-                return InkWell(
-                  onTap: () => LanguageController.instance.setLanguage(lang),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isCompact ? 8 : 11,
-                      vertical: isCompact ? 3 : 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? (lightMode ? AppConstants.primaryNavy : Colors.white)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: isSelected && lightMode
-                          ? const [
-                              BoxShadow(
-                                color: Color(0x220F2942),
-                                blurRadius: 4,
-                                offset: Offset(0, 1),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Text(
-                      lang.nativeName,
-                      style: TextStyle(
-                        fontSize: isCompact ? 11 : 12,
-                        fontWeight:
-                            isSelected ? FontWeight.w800 : FontWeight.w600,
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      LanguageController.instance.setLanguage(lang);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCompact ? 9 : 12,
+                        vertical: isCompact ? 4 : 6,
+                      ),
+                      decoration: BoxDecoration(
                         color: isSelected
-                            ? (lightMode ? Colors.white : AppConstants.primaryNavy)
-                            : (lightMode
-                                ? const Color(0xFF1E293B)
-                                : Colors.white.withValues(alpha: 0.9)),
+                            ? (lightMode ? AppConstants.primaryNavy : Colors.white)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: isSelected && lightMode
+                            ? const [
+                                BoxShadow(
+                                  color: Color(0x220F2942),
+                                  blurRadius: 4,
+                                  offset: Offset(0, 1),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Text(
+                        lang.nativeName,
+                        style: TextStyle(
+                          fontSize: isCompact ? 11.5 : 12.5,
+                          fontWeight:
+                              isSelected ? FontWeight.w800 : FontWeight.w600,
+                          color: isSelected
+                              ? (lightMode ? Colors.white : AppConstants.primaryNavy)
+                              : (lightMode
+                                  ? const Color(0xFF1E293B)
+                                  : Colors.white.withValues(alpha: 0.9)),
+                        ),
                       ),
                     ),
                   ),
