@@ -27,7 +27,10 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
 
   // Cycle & State Machine
   final String _currentCycle = '2026-09';
-  final int _planningDay = 22;
+  int _planningDay = 22;
+  bool _isChoiceWindowOpen = true;
+  bool _isDemandLocked = false;
+  String? _snapshotHash;
   String _workflowState = 'FORECASTED';
   int _activeStageIndex = 0; // 0..6
   int _viewingStageIndex = 0; // 0..6
@@ -151,6 +154,17 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
       // 2. Fetch District Dashboard Analytics
       try {
         _adminSummary = await _apiService.fetchAdminDashboard();
+        if (_adminSummary?.planningCycleState != null) {
+          final pcs = _adminSummary!.planningCycleState!;
+          _planningDay = pcs['planning_day'] as int? ?? 22;
+          _isChoiceWindowOpen = pcs['is_open'] as bool? ?? (_planningDay < 25);
+          _isDemandLocked = pcs['is_demand_locked'] as bool? ?? (_planningDay >= 25);
+          _snapshotHash = pcs['snapshot_hash'] as String?;
+        } else if (_adminSummary != null) {
+          _planningDay = _adminSummary!.planningDay;
+          _isChoiceWindowOpen = _adminSummary!.isChoiceWindowOpen;
+          _isDemandLocked = _adminSummary!.isDemandLocked;
+        }
       } catch (_) {}
 
       // 3. Fetch FPS Master Records
@@ -161,6 +175,12 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
       // 4. Fetch Demand Snapshot
       try {
         _demandSnapshot = await _apiService.fetchDemandSnapshot(cycleId: _currentCycle);
+        if (_demandSnapshot != null && _demandSnapshot!['snapshot'] != null) {
+          final snap = _demandSnapshot!['snapshot'] as Map<String, dynamic>;
+          _snapshotHash ??= snap['canonical_hash'] as String?;
+          _isDemandLocked = true;
+          _isChoiceWindowOpen = false;
+        }
       } catch (_) {}
 
       // 5. Fetch Dispatch Manifests & Gatepasses
@@ -354,6 +374,360 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
     }
   }
 
+  // ----------------- CHOICE WINDOW & PLANNING CYCLE ACTIONS ----------------- //
+  Future<void> _simulateAdvancePlanningDay(int day) async {
+    setState(() => _isActionInProgress = true);
+    try {
+      await _apiService.setPlanningCycleDay(day, cycleId: _currentCycle);
+      await _loadAllAuthoritativeData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(day >= 25
+              ? 'Planning cycle advanced to Day $day. Choice window closed, demand baseline locked.'
+              : 'Planning cycle set to Day $day. Choice window open for citizen declarations.'),
+          backgroundColor: day >= 25 ? _govNavy : _amber,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to set planning day: $e'), backgroundColor: _dangerRed),
+      );
+    } finally {
+      if (mounted) setState(() => _isActionInProgress = false);
+    }
+  }
+
+  Future<void> _lockChoiceWindow() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        title: const Row(
+          children: [
+            Icon(Icons.lock_clock_rounded, color: _govNavy, size: 22),
+            SizedBox(width: 8),
+            Text('Lock Beneficiary Demand Snapshot?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _govNavy)),
+          ],
+        ),
+        content: const SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Closing the Choice Window (Day 25) will freeze all beneficiary preference declarations and generate an immutable SHA-256 canonical hash.',
+                style: TextStyle(fontSize: 13, height: 1.4, color: _slate700),
+              ),
+              SizedBox(height: 12),
+              Text(
+                '• Upstream citizen preference modifications will be disabled.\n• Aggregated Demand Baseline (D̂) is passed to allocation and corridor routing engines.\n• Workflow transitions to VALIDATED / FORECAST_LOCKED.',
+                style: TextStyle(fontSize: 12, height: 1.5, color: _slate900),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _govNavy,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.lock_rounded, size: 16),
+            label: const Text('Confirm Lock'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isActionInProgress = true);
+    try {
+      final res = await _apiService.closeChoiceWindow(cycleId: _currentCycle);
+      try {
+        await _apiService.triggerLockForecast();
+      } catch (_) {}
+      try {
+        await _apiService.transitionWorkflowState(
+          cycleId: _currentCycle,
+          newState: 'VALIDATED',
+          actorName: widget.username ?? 'District Supply Officer',
+          actorRole: 'DSO',
+          reason: 'Choice window closed and demand snapshot locked on Day 25.',
+        );
+      } catch (_) {}
+      await _loadAllAuthoritativeData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'Choice window closed and aggregated demand (D̂) locked with SHA-256 seal!'),
+          backgroundColor: _govGreen,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to close choice window: $e'), backgroundColor: _dangerRed),
+      );
+    } finally {
+      if (mounted) setState(() => _isActionInProgress = false);
+    }
+  }
+
+  Future<void> _viewDemandSnapshotDetails() async {
+    setState(() => _isActionInProgress = true);
+    try {
+      final snapData = await _apiService.fetchDemandSnapshot(cycleId: _currentCycle);
+      if (!mounted) return;
+      final snap = snapData['snapshot'] as Map<String, dynamic>;
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Row(
+            children: [
+              const Icon(Icons.verified_rounded, color: _govGreen, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Frozen Demand Snapshot (${snap['snapshot_id'] ?? _currentCycle})',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _govNavy),
+                ),
+              ),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _govGreenBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _govGreen.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.security_rounded, size: 16, color: _govGreen),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SelectableText(
+                            'Canonical SHA-256 Seal:\n${snap['canonical_hash'] ?? _snapshotHash ?? 'Pending Seal'}',
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Color(0xFF166534), fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildProvenanceRow('Planning Cycle', '${snap['cycle_id'] ?? _currentCycle} (Frozen on Day 25)'),
+                  _buildProvenanceRow('Locked Timestamp', '${snap['lock_timestamp'] ?? 'Official Lock'}'),
+                  _buildProvenanceRow('Authorized Officer', '${snap['locked_by'] ?? 'District Supply Officer'}'),
+                  _buildProvenanceRow('Beneficiary Declarations', '${snap['total_beneficiary_requests'] ?? _adminSummary?.activeIntentsCount ?? 0} requests'),
+                  _buildProvenanceRow('Total Declared Intent', '${snap['total_declared_intent_kg'] ?? _adminSummary?.totalDeclaredIntentKg ?? 0.0} kg'),
+                  _buildProvenanceRow('Total Locked Baseline (D̂)', '${snap['total_locked_demand_kg'] ?? _adminSummary?.totalForecastDemandKg ?? 0.0} kg'),
+                  const Divider(height: 16),
+                  const Text(
+                    'Governance Guarantee: This demand snapshot is permanently sealed. Downstream corridor routing and fleet allocation execute strictly against this frozen baseline.',
+                    style: TextStyle(fontSize: 11, color: _slate500, fontStyle: FontStyle.italic),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Demand snapshot unavailable: $e'), backgroundColor: _amber),
+      );
+    } finally {
+      if (mounted) setState(() => _isActionInProgress = false);
+    }
+  }
+
+  Widget _buildChoiceWindowBanner() {
+    final isLocked = _isDemandLocked || !_isChoiceWindowOpen;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isLocked ? _govGreenBg : _amberBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isLocked ? const Color(0xFF86EFAC) : const Color(0xFFFCD34D),
+          width: 1.4,
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 750;
+
+          final headerContent = Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Icon(
+                isLocked ? Icons.lock_rounded : Icons.schedule_rounded,
+                size: 18,
+                color: isLocked ? _govGreen : _amber,
+              ),
+              Text(
+                'PDS PLANNING CYCLE: DAY $_planningDay OF 30',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: isLocked ? _govNavy : const Color(0xFF92400E),
+                  letterSpacing: 0.4,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: isLocked ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: isLocked ? const Color(0xFF86EFAC) : const Color(0xFFFDE68A)),
+                ),
+                child: Text(
+                  isLocked ? '🔒 DEMAND BASELINE LOCKED (DAY 25+)' : 'CHOICE WINDOW OPEN (DAY 21–24)',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: isLocked ? _govGreen : const Color(0xFFB45309),
+                  ),
+                ),
+              ),
+              if (_snapshotHash != null)
+                InkWell(
+                  onTap: _viewDemandSnapshotDetails,
+                  child: Text(
+                    'SHA-256: ${_snapshotHash!.length > 10 ? _snapshotHash!.substring(0, 10) : _snapshotHash}...',
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: _govAccent,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+            ],
+          );
+
+          final descriptionText = Text(
+            isLocked
+                ? 'Beneficiary choice window is closed and demand baseline (D̂) is frozen with SHA-256 canonical seal. Pre-dispatch pipeline is executing on this baseline.'
+                : 'Beneficiaries are submitting preferred FPS / doorstep requests. District Supply Officer locks demand on Day 25 to initiate pre-dispatch allocation.',
+            style: TextStyle(fontSize: 12, color: isLocked ? const Color(0xFF166534) : const Color(0xFF78350F), height: 1.35),
+          );
+
+          final actionsWidget = Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (!isLocked) ...[
+                OutlinedButton.icon(
+                  onPressed: _isActionInProgress ? null : () => _simulateAdvancePlanningDay(25),
+                  icon: const Icon(Icons.fast_forward_rounded, size: 14),
+                  label: const Text('Simulate Day 25', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    side: const BorderSide(color: Color(0xFFF59E0B)),
+                    foregroundColor: const Color(0xFF92400E),
+                    backgroundColor: Colors.white.withOpacity(0.8),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _isActionInProgress ? null : _lockChoiceWindow,
+                  icon: const Icon(Icons.lock_outline_rounded, size: 14),
+                  label: const Text('Lock Demand', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _govNavy,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                ),
+              ] else ...[
+                OutlinedButton.icon(
+                  onPressed: _viewDemandSnapshotDetails,
+                  icon: const Icon(Icons.verified_outlined, size: 14, color: _govGreen),
+                  label: const Text('View Sealed Snapshot', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: _govGreen)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    side: const BorderSide(color: Color(0xFF86EFAC)),
+                    backgroundColor: Colors.white.withOpacity(0.8),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _isActionInProgress ? null : () => _simulateAdvancePlanningDay(22),
+                  child: const Text('Re-open (Demo Day 22)', style: TextStyle(fontSize: 11, color: _slate700, decoration: TextDecoration.underline)),
+                ),
+              ],
+            ],
+          );
+
+          if (isCompact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                headerContent,
+                const SizedBox(height: 6),
+                descriptionText,
+                const SizedBox(height: 8),
+                actionsWidget,
+              ],
+            );
+          } else {
+            return Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      headerContent,
+                      const SizedBox(height: 4),
+                      descriptionText,
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                actionsWidget,
+              ],
+            );
+          }
+        },
+      ),
+    );
+  }
+
   // =========================================================================
   // MAIN BUILD METHOD
   // =========================================================================
@@ -375,6 +749,7 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        _buildChoiceWindowBanner(),
                         _buildStageContextBanner(),
                         const SizedBox(height: 16),
                         _buildActiveStageContent(),
@@ -971,6 +1346,60 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
         const SizedBox(height: 20),
 
         // 3. Validation Confirmation Panel
+        if (!_isDemandLocked)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _amberBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _amber.withOpacity(0.4)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: _amber, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Choice window is currently OPEN (Day $_planningDay). Validating demand will freeze all citizen preferences, compute immutable SHA-256 canonical hash, and advance planning cycle to Day 25 (Demand Lock).',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF92400E), height: 1.3),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _govGreenBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _govGreen.withOpacity(0.4)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.verified_user_rounded, color: _govGreen, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Demand snapshot is SEALED & LOCKED for Cycle $_currentCycle. Downstream allocation & corridor routing are authorized.',
+                    style: const TextStyle(fontSize: 12, color: _govGreen, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (_snapshotHash != null)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      side: const BorderSide(color: Color(0xFF86EFAC)),
+                    ),
+                    icon: const Icon(Icons.verified_outlined, size: 14, color: _govGreen),
+                    onPressed: _viewDemandSnapshotDetails,
+                    label: const Text('View Sealed Snapshot', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govGreen)),
+                  ),
+              ],
+            ),
+          ),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -1009,10 +1438,15 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
                     : () {
                         _advanceStage(
                           targetState: 'VALIDATED',
-                          actionLabel: 'Demand snapshot validation',
+                          actionLabel: 'Demand snapshot validation & choice window lock',
                           reason: 'DSO validated and locked pre-dispatch demand snapshot vector for cycle $_currentCycle.',
                           preTransitionHook: () async {
-                            await _apiService.triggerLockForecast();
+                            try {
+                              await _apiService.closeChoiceWindow(cycleId: _currentCycle);
+                            } catch (_) {}
+                            try {
+                              await _apiService.triggerLockForecast();
+                            } catch (_) {}
                           },
                         );
                       },
@@ -1150,20 +1584,22 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
         title: Text('Forecast Causal Trace: ${row.fpsId}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         content: SizedBox(
           width: 450,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(row.name, style: const TextStyle(fontSize: 13, color: _slate700)),
-              const SizedBox(height: 12),
-              _buildProvenanceRow('Forecast Demand', '${(row.forecastKg / 1000).toStringAsFixed(2)} MT'),
-              _buildProvenanceRow('Historical Component', '${(row.historicalDemandKg / 1000).toStringAsFixed(2)} MT'),
-              _buildProvenanceRow('Intent Component', '${(row.declaredIntentKg / 1000).toStringAsFixed(2)} MT'),
-              _buildProvenanceRow('Confidence Score', '${(row.confidenceScore * 100).toStringAsFixed(1)}%'),
-              _buildProvenanceRow('Risk Attribution', row.riskReason.isNotEmpty ? row.riskReason : 'Nominal baseline consumption profile'),
-              const SizedBox(height: 10),
-              const Text('Causal Equation: Forecast = (0.35 × Hist) + (0.65 × Intent) + Seasonal Buffer', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: _slate500)),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(row.name, style: const TextStyle(fontSize: 13, color: _slate700)),
+                const SizedBox(height: 12),
+                _buildProvenanceRow('Forecast Demand', '${(row.forecastKg / 1000).toStringAsFixed(2)} MT'),
+                _buildProvenanceRow('Historical Component', '${(row.historicalDemandKg / 1000).toStringAsFixed(2)} MT'),
+                _buildProvenanceRow('Intent Component', '${(row.declaredIntentKg / 1000).toStringAsFixed(2)} MT'),
+                _buildProvenanceRow('Confidence Score', '${(row.confidenceScore * 100).toStringAsFixed(1)}%'),
+                _buildProvenanceRow('Risk Attribution', row.riskReason.isNotEmpty ? row.riskReason : 'Nominal baseline consumption profile'),
+                const SizedBox(height: 10),
+                const Text('Causal Equation: Forecast = (0.35 × Hist) + (0.65 × Intent) + Seasonal Buffer', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: _slate500)),
+              ],
+            ),
           ),
         ),
         actions: [
