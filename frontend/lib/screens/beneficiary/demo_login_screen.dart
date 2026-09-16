@@ -21,7 +21,7 @@ class DemoLoginScreen extends StatefulWidget {
 
 class _DemoLoginScreenState extends State<DemoLoginScreen> {
   late final ApiService _apiService;
-  int _selectedTabIndex = 0; // 0: Citizen OTP, 1: Department
+  int _selectedTabIndex = 0; // 0: Citizen OTP, 1: Department Official
 
   // Controllers for Citizen Login (Ration Card Number + Phone Number)
   final TextEditingController _citizenCardController = TextEditingController();
@@ -38,9 +38,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   final TextEditingController _adminPasswordController = TextEditingController();
   bool _isAdminLoggingIn = false;
   bool _isPasswordObscured = true;
+  String _selectedOfficialRole = 'DSO';
 
-  // Modern GovTech Design System Tokens
+  // Government Portal Design System Tokens
   static const Color _govNavy = Color(0xFF0F2942);
+  static const Color _govBlue = Color(0xFF1E40AF);
+  static const Color _govBlueLight = Color(0xFFEFF6FF);
+  static const Color _govBlueBorder = Color(0xFFBFDBFE);
   static const Color _govGreen = Color(0xFF15803D);
   static const Color _govGreenLight = Color(0xFF16A34A);
   static const Color _govGreenBg = Color(0xFFF0FDF4);
@@ -64,7 +68,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.sessionExpiredMessage!),
+            content: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text(widget.sessionExpiredMessage!)),
+              ],
+            ),
             backgroundColor: Colors.red.shade700,
             behavior: SnackBarBehavior.floating,
           ),
@@ -123,7 +133,11 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
     if (cardId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('login.enter_ration_card'))),
+        SnackBar(
+          content: Text(tr('login.enter_ration_card')),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -144,7 +158,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
       String displayText;
       if (mode == 'TWILIO_LIVE' || mode == 'LIVE') {
-        displayText = 'SMS OTP sent to $phone. Please check your phone.';
+        displayText = 'SMS OTP sent to $phone. Please enter the code below.';
       } else {
         displayText = 'Demo Mode: OTP sent to $phone (Test code: $mockOtp)';
         if (mockOtp != null) {
@@ -158,9 +172,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             children: [
               const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
               const SizedBox(width: 8),
-              Expanded(
-                child: Text(displayText),
-              ),
+              Expanded(child: Text(displayText)),
             ],
           ),
           backgroundColor: _govGreen,
@@ -174,6 +186,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         SnackBar(
           content: Text(tr('login.otp_send_failed', params: {'error': _cleanErrorMessage(e)})),
           backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
@@ -187,7 +200,11 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     final otp = _citizenOtpController.text.trim();
     if (otp.isEmpty || otp.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('login.enter_valid_otp'))),
+        SnackBar(
+          content: Text(tr('login.enter_valid_otp')),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -210,6 +227,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         SnackBar(
           content: Text(tr('login.otp_verify_failed', params: {'error': _cleanErrorMessage(e)})),
           backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
@@ -223,7 +241,11 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     final password = _adminPasswordController.text.trim();
     if (username.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('login.enter_creds_hint'))),
+        SnackBar(
+          content: Text(tr('login.enter_creds_hint')),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -261,6 +283,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         SnackBar(
           content: Text(tr('login.dept_login_failed', params: {'error': _cleanErrorMessage(e)})),
           backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
@@ -271,43 +294,70 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallMobile = screenWidth < 380;
-    final isTabletOrDesktop = screenWidth >= 600;
-    final horizontalPad = isSmallMobile ? 12.0 : (isTabletOrDesktop ? 28.0 : 16.0);
-    final verticalPad = isSmallMobile ? 16.0 : 24.0;
+    final isMobile = screenWidth < 600;
 
     return ListenableBuilder(
       listenable: LanguageController.instance,
       builder: (context, child) {
         return Scaffold(
-          backgroundColor: _slate50,
-          body: SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(horizontal: horizontalPad, vertical: verticalPad),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 460),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Top Responsive Brand Header
-                      _buildHeader(isSmallMobile),
-
-                      SizedBox(height: isSmallMobile ? 12 : 16),
-
-                      // Main Login Card
-                      _buildCard(isSmallMobile),
-
-                      SizedBox(height: isSmallMobile ? 16 : 20),
-
-                      // Footer with Diagnostics & NIC Branding
-                      _buildFooter(isSmallMobile),
+          backgroundColor: _slate100,
+          body: Column(
+            children: [
+              // Top Government Accent Bar (Tricolor Band)
+              Container(
+                height: 4,
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFFFF9933),
+                      Color(0xFFFF9933),
+                      Color(0xFFFFFFFF),
+                      Color(0xFF138808),
+                      Color(0xFF138808),
                     ],
+                    stops: [0.0, 0.33, 0.5, 0.67, 1.0],
                   ),
                 ),
               ),
-            ),
+
+              // Government Header (Full-width bar with official identity and language selector)
+              _buildGovernmentHeader(isMobile),
+
+              // Main Centered Content Area
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 16.0 : 24.0,
+                    vertical: isMobile ? 20.0 : 32.0,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 560),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Service Identity Banner
+                          _buildServiceIdentity(isMobile),
+
+                          const SizedBox(height: 20),
+
+                          // Main Official Login Card
+                          _buildLoginCard(isMobile),
+
+                          const SizedBox(height: 24),
+
+                          // Restrained Government Footer
+                          _buildGovernmentFooter(isMobile),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -315,72 +365,179 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   }
 
   // ================================================================
-  // HEADER (Mobile Responsive)
+  // 1. TOP GOVERNMENT IDENTITY HEADER
   // ================================================================
-  Widget _buildHeader(bool isSmall) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _slate200),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x08000000), blurRadius: 4, offset: Offset(0, 2)),
-                ],
-              ),
-              child: Image.asset(
-                'assets/images/emblem_gold.png',
-                height: isSmall ? 28 : 34,
-                width: isSmall ? 28 : 34,
-                errorBuilder: (_, __, ___) => Icon(
-                  Icons.account_balance_rounded,
-                  size: isSmall ? 24 : 30,
-                  color: _govNavy,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildGovernmentHeader(bool isMobile) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 16 : 32,
+        vertical: isMobile ? 10 : 12,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: _slate200, width: 1)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x060F172A),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Left: Emblem + Department Branding
+          Expanded(
+            child: Row(
               children: [
-                Text(
-                  'PDS DemandSync',
-                  style: TextStyle(
-                    fontSize: isSmall ? 16 : 18,
-                    fontWeight: FontWeight.w800,
-                    color: _govNavy,
-                    letterSpacing: -0.3,
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: _slate50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _slate200),
+                  ),
+                  child: Image.asset(
+                    'assets/images/emblem_gold.png',
+                    height: isMobile ? 32 : 38,
+                    width: isMobile ? 32 : 38,
+                    errorBuilder: (_, __, ___) => Icon(
+                      Icons.account_balance_rounded,
+                      size: isMobile ? 28 : 34,
+                      color: _govNavy,
+                    ),
                   ),
                 ),
-                Text(
-                  tr('login.dept_title'),
-                  style: TextStyle(
-                    fontSize: isSmall ? 10 : 11.5,
-                    fontWeight: FontWeight.w500,
-                    color: _slate500,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'PDS DemandSync',
+                            style: TextStyle(
+                              fontSize: isMobile ? 15 : 17,
+                              fontWeight: FontWeight.w800,
+                              color: _govNavy,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: _govBlueLight,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: _govBlueBorder),
+                            ),
+                            child: const Text(
+                              'GOVT PORTAL',
+                              style: TextStyle(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w800,
+                                color: _govBlue,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        'Department of Food & Civil Supplies • Government of Karnataka',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: isMobile ? 10.5 : 12,
+                          fontWeight: FontWeight.w500,
+                          color: _slate500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // Right: Official Multilingual Selector
+          const LanguageSelectorWidget(isCompact: true, isLight: true),
+        ],
+      ),
+    );
+  }
+
+  // ================================================================
+  // 2. SERVICE IDENTITY SECTION
+  // ================================================================
+  Widget _buildServiceIdentity(bool isMobile) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _govBlueLight,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _govBlueBorder),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.verified_outlined, size: 13, color: _govBlue),
+                  const SizedBox(width: 5),
+                  Text(
+                    'FOOD SECURITY & PUBLIC DISTRIBUTION SYSTEM',
+                    style: TextStyle(
+                      fontSize: isMobile ? 9.5 : 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: _govBlue,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
-        // Language Toggle inside Login Screen Header
-        const LanguageSelectorWidget(isCompact: true, isLight: true),
+        const SizedBox(height: 10),
+        Text(
+          'Secure Digital Access Portal',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: isMobile ? 20 : 24,
+            fontWeight: FontWeight.w800,
+            color: _slate900,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Access authorized food distribution and supply-chain services.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: isMobile ? 12 : 13.5,
+            color: _slate500,
+          ),
+        ),
       ],
     );
   }
 
   // ================================================================
-  // MAIN CARD CONTAINER (Mobile Responsive)
+  // 3. MAIN LOGIN CARD
   // ================================================================
-  Widget _buildCard(bool isSmall) {
+  Widget _buildLoginCard(bool isMobile) {
     return Container(
-      padding: EdgeInsets.all(isSmall ? 16 : 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -388,83 +545,132 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         boxShadow: const [
           BoxShadow(
             color: Color(0x0A0F172A),
-            blurRadius: 16,
-            offset: Offset(0, 4),
+            blurRadius: 20,
+            offset: Offset(0, 6),
+          ),
+          BoxShadow(
+            color: Color(0x050F172A),
+            blurRadius: 4,
+            offset: Offset(0, 1),
           ),
         ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    tr('login.welcome_back'),
-                    style: TextStyle(
-                      fontSize: isSmall ? 19 : 22,
-                      fontWeight: FontWeight.w800,
-                      color: _slate900,
-                      letterSpacing: -0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    tr('login.subtitle'),
-                    style: TextStyle(
-                      fontSize: isSmall ? 11.5 : 13,
-                      color: _slate500,
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Container(width: 8, height: 4, decoration: BoxDecoration(color: _saffron, borderRadius: BorderRadius.circular(2))),
-                  const SizedBox(width: 2),
-                  Container(width: 8, height: 4, decoration: BoxDecoration(color: _slate200, borderRadius: BorderRadius.circular(2))),
-                  const SizedBox(width: 2),
-                  Container(width: 8, height: 4, decoration: BoxDecoration(color: _govGreenLight, borderRadius: BorderRadius.circular(2))),
-                ],
-              ),
-            ],
-          ),
-
-          SizedBox(height: isSmall ? 16 : 20),
-
-          // 2-Tab Segment Selector (Citizen OTP & Department)
+          // Card Header Banner
           Container(
-            padding: const EdgeInsets.all(3.5),
-            decoration: BoxDecoration(
-              color: _slate100,
-              borderRadius: BorderRadius.circular(10),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 18 : 24,
+              vertical: isMobile ? 16 : 18,
+            ),
+            decoration: const BoxDecoration(
+              color: _slate50,
+              border: Border(bottom: BorderSide(color: _slate200)),
             ),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildSegmentTab(0, Icons.phone_android_rounded, tr('login.tab_citizen_otp'), _govGreen, isSmall),
-                _buildSegmentTab(1, Icons.badge_outlined, tr('login.tab_dept_official'), _govNavy, isSmall),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Welcome to PDS DemandSync',
+                      style: TextStyle(
+                        fontSize: isMobile ? 17 : 19,
+                        fontWeight: FontWeight.w800,
+                        color: _slate900,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Secure Government Service Portal',
+                      style: TextStyle(
+                        fontSize: isMobile ? 11.5 : 12.5,
+                        color: _slate500,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                // Tri-color indicator badge
+                Row(
+                  children: [
+                    Container(width: 8, height: 4, decoration: BoxDecoration(color: _saffron, borderRadius: BorderRadius.circular(2))),
+                    const SizedBox(width: 3),
+                    Container(width: 8, height: 4, decoration: BoxDecoration(color: _slate400, borderRadius: BorderRadius.circular(2))),
+                    const SizedBox(width: 3),
+                    Container(width: 8, height: 4, decoration: BoxDecoration(color: _govGreenLight, borderRadius: BorderRadius.circular(2))),
+                  ],
+                ),
               ],
             ),
           ),
 
-          SizedBox(height: isSmall ? 16 : 20),
+          Padding(
+            padding: EdgeInsets.all(isMobile ? 16 : 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Clean Tab Switcher: CITIZEN vs DEPARTMENT OFFICIAL
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: _slate100,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _slate200),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildTabButton(
+                        index: 0,
+                        label: 'CITIZEN LOGIN',
+                        icon: Icons.person_rounded,
+                        isMobile: isMobile,
+                        activeColor: _govGreen,
+                      ),
+                      _buildTabButton(
+                        index: 1,
+                        label: 'DEPARTMENT OFFICIAL',
+                        icon: Icons.admin_panel_settings_rounded,
+                        isMobile: isMobile,
+                        activeColor: _govNavy,
+                      ),
+                    ],
+                  ),
+                ),
 
-          // Tab Content
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
-            child: _selectedTabIndex == 0
-                ? _buildCitizenOtpTab(isSmall)
-                : _buildDepartmentLoginTab(isSmall),
+                const SizedBox(height: 20),
+
+                // Active Tab Content
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: _selectedTabIndex == 0
+                      ? _buildCitizenTab(isMobile)
+                      : _buildDepartmentTab(isMobile),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Professional Security Information Box
+                _buildSecurityAssurance(isMobile),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSegmentTab(int index, IconData icon, String label, Color activeColor, bool isSmall) {
+  Widget _buildTabButton({
+    required int index,
+    required String label,
+    required IconData icon,
+    required bool isMobile,
+    required Color activeColor,
+  }) {
     final isSelected = _selectedTabIndex == index;
     return Expanded(
       child: InkWell(
@@ -472,12 +678,18 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         borderRadius: BorderRadius.circular(7),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: EdgeInsets.symmetric(vertical: isSmall ? 7 : 8),
+          padding: EdgeInsets.symmetric(vertical: isMobile ? 8 : 10),
           decoration: BoxDecoration(
             color: isSelected ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(7),
             boxShadow: isSelected
-                ? const [BoxShadow(color: Color(0x0D000000), blurRadius: 4, offset: Offset(0, 2))]
+                ? const [
+                    BoxShadow(
+                      color: Color(0x0D000000),
+                      blurRadius: 4,
+                      offset: Offset(0, 2),
+                    ),
+                  ]
                 : null,
           ),
           child: Row(
@@ -485,19 +697,20 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             children: [
               Icon(
                 icon,
-                size: isSmall ? 12 : 14,
+                size: isMobile ? 14 : 16,
                 color: isSelected ? activeColor : _slate500,
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: isSmall ? 10.5 : 12,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: isMobile ? 11 : 12.5,
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                     color: isSelected ? activeColor : _slate500,
+                    letterSpacing: isSelected ? 0.2 : 0,
                   ),
                 ),
               ),
@@ -508,104 +721,102 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     );
   }
 
-
-
   // ================================================================
-  // CITIZEN OTP TAB (Mobile Responsive)
+  // 4. CITIZEN LOGIN TAB
   // ================================================================
-  Widget _buildCitizenOtpTab(bool isSmall) {
+  Widget _buildCitizenTab(bool isMobile) {
     return Column(
-      key: const ValueKey('citizen_otp'),
-      crossAxisAlignment: CrossAxisAlignment.start,
+      key: const ValueKey('citizen_tab'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                tr('login.citizen_portal_credentials'),
-                style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: _govGreenBg,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: _govGreenBorder),
-              ),
-              child: Text(
-                tr('login.three_factor_auth'),
-                style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: _govGreen),
-              ),
-            ),
-          ],
-        ),
-        // Anti-Fraud & Dataset Verification Banner
+        // Verified NFSA Dataset Notice
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: const Color(0xFFEFF6FF),
+            color: _govBlueLight,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFBFDBFE)),
+            border: Border.all(color: _govBlueBorder),
           ),
-          child: const Row(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.shield_outlined, size: 18, color: Color(0xFF1D4ED8)),
-              SizedBox(width: 8),
+              const Icon(Icons.shield_outlined, size: 18, color: _govBlue),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   'Anti-Fraud Enforcement Active: Ration Card Number and Phone Number are cross-verified against the official NFSA Master Dataset.',
-                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF1E40AF), height: 1.3),
+                  style: TextStyle(
+                    fontSize: isMobile ? 10.5 : 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF1E40AF),
+                    height: 1.35,
+                  ),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
+
+        const SizedBox(height: 16),
 
         // Field 1: Ration Card Number
-        Text(tr('login.ration_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
-        const SizedBox(height: 4),
+        Text(
+          'Ration Card Number',
+          style: TextStyle(
+            fontSize: isMobile ? 11.5 : 12.5,
+            fontWeight: FontWeight.w700,
+            color: _slate700,
+          ),
+        ),
+        const SizedBox(height: 6),
         TextField(
           controller: _citizenCardController,
-          style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
+          enabled: !_isSendingOtp && !_isVerifyingOtp,
+          style: TextStyle(fontSize: isMobile ? 13.5 : 14.5, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'e.g. RC-KA-000001',
-            prefixIcon: Icon(Icons.credit_card_rounded, size: isSmall ? 16 : 18, color: _slate500),
+            hintText: 'Enter your ration card number (e.g. RC-KA-000001)',
+            hintStyle: const TextStyle(color: _slate400, fontSize: 13),
+            prefixIcon: Icon(Icons.credit_card_rounded, size: isMobile ? 18 : 20, color: _slate500),
             filled: true,
             fillColor: _slate50,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.5)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.8)),
+            contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: isMobile ? 10 : 12),
           ),
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
 
         // Field 2: Phone Number
-        Text('Phone Number', style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
-        const SizedBox(height: 4),
+        Text(
+          'Registered Mobile Number',
+          style: TextStyle(
+            fontSize: isMobile ? 11.5 : 12.5,
+            fontWeight: FontWeight.w700,
+            color: _slate700,
+          ),
+        ),
+        const SizedBox(height: 6),
         TextField(
           controller: _citizenPhoneController,
           keyboardType: TextInputType.phone,
-          style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
+          enabled: !_isSendingOtp && !_isVerifyingOtp,
+          style: TextStyle(fontSize: isMobile ? 13.5 : 14.5, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'e.g. 9876543210',
-            prefixIcon: Icon(Icons.phone_rounded, size: isSmall ? 16 : 18, color: _slate500),
+            hintText: 'Enter registered mobile number (e.g. 9876543210)',
+            hintStyle: const TextStyle(color: _slate400, fontSize: 13),
+            prefixIcon: Icon(Icons.phone_rounded, size: isMobile ? 18 : 20, color: _slate500),
             filled: true,
             fillColor: _slate50,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.5)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.8)),
+            contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: isMobile ? 10 : 12),
           ),
         ),
 
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
 
         if (!_otpSent)
           ElevatedButton(
@@ -613,42 +824,76 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: _govNavy,
               foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 44),
+              minimumSize: const Size(double.infinity, 46),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               elevation: 0,
             ),
             child: _isSendingOtp
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Text(tr('login.get_otp_sms'), style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.send_rounded, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'GET OTP',
+                        style: TextStyle(
+                          fontSize: isMobile ? 13.5 : 14.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
           )
         else ...[
-          // OTP Received Input Section
+          // OTP Received Section
           Container(
-            padding: EdgeInsets.all(isSmall ? 10 : 14),
+            padding: EdgeInsets.all(isMobile ? 12 : 16),
             decoration: BoxDecoration(
               color: _govGreenBg,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: _govGreenBorder),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.sms_outlined, size: isSmall ? 13 : 14, color: _govGreen),
-                        const SizedBox(width: 4),
+                        const Icon(Icons.mark_email_read_outlined, size: 16, color: _govGreen),
+                        const SizedBox(width: 6),
                         Text(
-                          tr('login.enter_sms_code'),
-                          style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700, color: _govGreen),
+                          'Enter 6-Digit OTP',
+                          style: TextStyle(
+                            fontSize: isMobile ? 12 : 13,
+                            fontWeight: FontWeight.w800,
+                            color: _govGreen,
+                          ),
                         ),
                       ],
                     ),
-                    Text(
-                      _formatTimer(_otpCountdownSeconds),
-                      style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w700, color: _govGreen),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: _govGreenBorder),
+                      ),
+                      child: Text(
+                        _formatTimer(_otpCountdownSeconds),
+                        style: TextStyle(
+                          fontSize: isMobile ? 11 : 12,
+                          fontWeight: FontWeight.w800,
+                          color: _govGreen,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -660,7 +905,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   maxLength: 6,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: isSmall ? 18 : 22,
+                    fontSize: isMobile ? 20 : 24,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 8,
                     color: _slate900,
@@ -678,19 +923,24 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      tr('login.sms_dispatched'),
-                      style: TextStyle(fontSize: isSmall ? 9.5 : 10.5, color: _slate500),
+                      'Code sent via official SMS gateway',
+                      style: TextStyle(fontSize: isMobile ? 10 : 11, color: _slate500),
                     ),
                     InkWell(
                       onTap: _isSendingOtp ? null : _handleSendOtp,
                       child: Text(
-                        tr('login.resend_otp'),
-                        style: TextStyle(fontSize: isSmall ? 10 : 11, fontWeight: FontWeight.w700, color: _govNavy),
+                        'Resend OTP',
+                        style: TextStyle(
+                          fontSize: isMobile ? 11 : 12,
+                          fontWeight: FontWeight.w800,
+                          color: _govNavy,
+                          decoration: TextDecoration.underline,
+                        ),
                       ),
                     ),
                   ],
@@ -699,25 +949,36 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             ),
           ),
 
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
 
           ElevatedButton(
             onPressed: _isVerifyingOtp ? null : _handleVerifyOtpAndLogin,
             style: ElevatedButton.styleFrom(
               backgroundColor: _govGreen,
               foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 44),
+              minimumSize: const Size(double.infinity, 46),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               elevation: 0,
             ),
             child: _isVerifyingOtp
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                  )
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_circle_rounded, size: isSmall ? 15 : 16),
-                      const SizedBox(width: 6),
-                      Text(tr('login.verify_login_btn'), style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
+                      const Icon(Icons.lock_open_rounded, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'VERIFY OTP & SIGN IN',
+                        style: TextStyle(
+                          fontSize: isMobile ? 13.5 : 14.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ],
                   ),
           ),
@@ -726,19 +987,194 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     );
   }
 
-  String _selectedOfficialRole = 'DSO';
+  // ================================================================
+  // 5. DEPARTMENT OFFICIAL LOGIN TAB
+  // ================================================================
+  Widget _buildDepartmentTab(bool isMobile) {
+    return Column(
+      key: const ValueKey('dept_tab'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Select Official Role Window:',
+          style: TextStyle(
+            fontSize: isMobile ? 11.5 : 12.5,
+            fontWeight: FontWeight.w800,
+            color: _slate900,
+          ),
+        ),
+        const SizedBox(height: 8),
 
-  Widget _buildRoleCard({
+        // Grid of 4 Role Windows
+        GridView.count(
+          crossAxisCount: isMobile ? 2 : 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: isMobile ? 2.3 : 2.7,
+          children: [
+            _buildRoleWindowCard(
+              title: '🏛️ DSO (Command)',
+              subtitle: 'Planning & Decision Authority',
+              icon: Icons.account_balance_outlined,
+              color: const Color(0xFF166534),
+              bgColor: const Color(0xFFF0FDF4),
+              username: 'dso_user',
+              password: 'dso_pass',
+              role: 'DSO',
+              isMobile: isMobile,
+            ),
+            _buildRoleWindowCard(
+              title: '🔍 Field Inspector',
+              subtitle: 'Physical Inspection & Checklist',
+              icon: Icons.assignment_turned_in_outlined,
+              color: const Color(0xFF92400E),
+              bgColor: const Color(0xFFFFFBEB),
+              username: 'inspector_user',
+              password: 'inspector_pass',
+              role: 'FIELD_FOOD_INSPECTOR',
+              isMobile: isMobile,
+            ),
+            _buildRoleWindowCard(
+              title: '🏪 FPS Officer',
+              subtitle: 'Current Stock, Register & e-PoS',
+              icon: Icons.storefront_outlined,
+              color: const Color(0xFF0F766E),
+              bgColor: const Color(0xFFF0FDFA),
+              username: 'fps_user',
+              password: 'fps_pass',
+              role: 'FPS_OWNER',
+              isMobile: isMobile,
+            ),
+            _buildRoleWindowCard(
+              title: '🛡️ Auditor',
+              subtitle: 'Audit Ledger & Compliance Trail',
+              icon: Icons.verified_user_outlined,
+              color: const Color(0xFF6B21A8),
+              bgColor: const Color(0xFFF3E8FF),
+              username: 'auditor_user',
+              password: 'auditor_pass',
+              role: 'AUDITOR',
+              isMobile: isMobile,
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 14),
+
+        // Field 1: Official User ID
+        Text(
+          'Official User ID',
+          style: TextStyle(
+            fontSize: isMobile ? 11.5 : 12.5,
+            fontWeight: FontWeight.w700,
+            color: _slate700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _adminUsernameController,
+          enabled: !_isAdminLoggingIn,
+          style: TextStyle(fontSize: isMobile ? 13.5 : 14.5, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: 'Enter official username / employee ID',
+            hintStyle: const TextStyle(color: _slate400, fontSize: 13),
+            prefixIcon: Icon(Icons.person_outline_rounded, size: isMobile ? 18 : 20, color: _slate500),
+            filled: true,
+            fillColor: _slate50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govNavy, width: 1.8)),
+            contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: isMobile ? 10 : 12),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Field 2: Password
+        Text(
+          'Password',
+          style: TextStyle(
+            fontSize: isMobile ? 11.5 : 12.5,
+            fontWeight: FontWeight.w700,
+            color: _slate700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _adminPasswordController,
+          obscureText: _isPasswordObscured,
+          enabled: !_isAdminLoggingIn,
+          style: TextStyle(fontSize: isMobile ? 13.5 : 14.5, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: 'Enter your secure password',
+            hintStyle: const TextStyle(color: _slate400, fontSize: 13),
+            prefixIcon: Icon(Icons.lock_outline_rounded, size: isMobile ? 18 : 20, color: _slate500),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                size: isMobile ? 18 : 20,
+                color: _slate500,
+              ),
+              onPressed: () => setState(() => _isPasswordObscured = !_isPasswordObscured),
+            ),
+            filled: true,
+            fillColor: _slate50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govNavy, width: 1.8)),
+            contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: isMobile ? 10 : 12),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        ElevatedButton(
+          onPressed: _isAdminLoggingIn ? null : _handleDepartmentLogin,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _govNavy,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 46),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            elevation: 0,
+          ),
+          child: _isAdminLoggingIn
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.login_rounded, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'SIGN IN TO OFFICIAL WORKSPACE',
+                      style: TextStyle(
+                        fontSize: isMobile ? 13 : 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoleWindowCard({
     required String title,
     required String subtitle,
     required IconData icon,
     required Color color,
     required Color bgColor,
-    required Color borderColor,
     required String username,
     required String password,
     required String role,
-    required bool isSmall,
+    required bool isMobile,
   }) {
     final isSelected = _selectedOfficialRole == role || _adminUsernameController.text.trim() == username;
     return InkWell(
@@ -751,8 +1187,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       },
       borderRadius: BorderRadius.circular(8),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? bgColor : Colors.white,
           borderRadius: BorderRadius.circular(8),
@@ -770,23 +1206,32 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           children: [
             Row(
               children: [
-                Icon(icon, size: isSmall ? 14 : 15, color: color),
-                const SizedBox(width: 4),
+                Icon(icon, size: isMobile ? 14 : 16, color: color),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     title,
-                    style: TextStyle(fontSize: isSmall ? 10.5 : 11.5, fontWeight: FontWeight.w800, color: color),
+                    style: TextStyle(
+                      fontSize: isMobile ? 11 : 12,
+                      fontWeight: FontWeight.w800,
+                      color: color,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 if (isSelected)
-                  Icon(Icons.check_circle_rounded, size: 12, color: color),
+                  Icon(Icons.check_circle_rounded, size: 14, color: color),
               ],
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 3),
             Text(
               subtitle,
-              style: TextStyle(fontSize: isSmall ? 8.5 : 9.5, fontWeight: FontWeight.w600, color: _slate500, height: 1.2),
+              style: TextStyle(
+                fontSize: isMobile ? 9 : 10,
+                fontWeight: FontWeight.w500,
+                color: _slate500,
+                height: 1.2,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -797,166 +1242,80 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   }
 
   // ================================================================
-  // DEPARTMENT LOGIN TAB (Responsive)
+  // 6. SECURITY ASSURANCE FOOTNOTE
   // ================================================================
-  Widget _buildDepartmentLoginTab(bool isSmall) {
-    return Column(
-      key: const ValueKey('dept_login'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 4 Specialized Official Role Window Cards
-        Text(
-          'Select Official Role Window:',
-          style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w800, color: _slate900),
-        ),
-        const SizedBox(height: 8),
-        GridView.count(
-          crossAxisCount: isSmall ? 2 : 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: isSmall ? 2.5 : 2.8,
-          children: [
-            _buildRoleCard(
-              title: '🏛️ DSO (Command)',
-              subtitle: 'Planning & Decision Authority',
-              icon: Icons.account_balance_outlined,
-              color: const Color(0xFF166534),
-              bgColor: const Color(0xFFF0FDF4),
-              borderColor: const Color(0xFF86EFAC),
-              username: 'dso_user',
-              password: 'dso_pass',
-              role: 'DSO',
-              isSmall: isSmall,
+  Widget _buildSecurityAssurance(bool isMobile) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: _slate50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _slate200),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_rounded, size: 16, color: _govNavy),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SECURE GOVERNMENT ACCESS',
+                  style: TextStyle(
+                    fontSize: isMobile ? 9.5 : 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: _govNavy,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  'Your credentials are verified against the authorized PDS DemandSync system.',
+                  style: TextStyle(
+                    fontSize: isMobile ? 10 : 11,
+                    color: _slate500,
+                    height: 1.25,
+                  ),
+                ),
+              ],
             ),
-            _buildRoleCard(
-              title: '🔍 Field Food Inspector',
-              subtitle: 'Physical Inspection & Checklist',
-              icon: Icons.assignment_turned_in_outlined,
-              color: const Color(0xFF92400E),
-              bgColor: const Color(0xFFFFFBEB),
-              borderColor: const Color(0xFFFDE68A),
-              username: 'inspector_user',
-              password: 'inspector_pass',
-              role: 'FIELD_FOOD_INSPECTOR',
-              isSmall: isSmall,
-            ),
-            _buildRoleCard(
-              title: '🏪 FPS Officer',
-              subtitle: 'Current Stock, Register & e-PoS',
-              icon: Icons.storefront_outlined,
-              color: const Color(0xFF0F766E),
-              bgColor: const Color(0xFFF0FDFA),
-              borderColor: const Color(0xFF99F6E4),
-              username: 'fps_user',
-              password: 'fps_pass',
-              role: 'FPS_OWNER',
-              isSmall: isSmall,
-            ),
-            _buildRoleCard(
-              title: '🛡️ Vigilance Auditor',
-              subtitle: 'Audit Ledger & Compliance Trail',
-              icon: Icons.verified_user_outlined,
-              color: const Color(0xFF6B21A8),
-              bgColor: const Color(0xFFF3E8FF),
-              borderColor: const Color(0xFFE9D5FF),
-              username: 'auditor_user',
-              password: 'auditor_pass',
-              role: 'AUDITOR',
-              isSmall: isSmall,
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text(
-          tr('login.official_user_label'),
-          style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700, color: _slate900),
-        ),
-        const SizedBox(height: 4),
-        TextField(
-          controller: _adminUsernameController,
-          style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
-          decoration: InputDecoration(
-            hintText: tr('login.official_user_hint'),
-            prefixIcon: Icon(Icons.person_outline_rounded, size: isSmall ? 16 : 18, color: _slate500),
-            filled: true,
-            fillColor: _slate50,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govNavy, width: 1.5)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
           ),
-        ),
-        SizedBox(height: isSmall ? 8 : 10),
-
-        Text(
-          tr('login.password_label'),
-          style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700, color: _slate900),
-        ),
-        const SizedBox(height: 4),
-        TextField(
-          controller: _adminPasswordController,
-          obscureText: _isPasswordObscured,
-          style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
-          decoration: InputDecoration(
-            hintText: '••••••••',
-            prefixIcon: Icon(Icons.lock_outline_rounded, size: isSmall ? 16 : 18, color: _slate500),
-            suffixIcon: IconButton(
-              icon: Icon(_isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: isSmall ? 16 : 18, color: _slate500),
-              onPressed: () => setState(() => _isPasswordObscured = !_isPasswordObscured),
-            ),
-            filled: true,
-            fillColor: _slate50,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govNavy, width: 1.5)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
-          ),
-        ),
-
-
-        SizedBox(height: isSmall ? 12 : 14),
-
-        ElevatedButton(
-          onPressed: _isAdminLoggingIn ? null : _handleDepartmentLogin,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _govNavy,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 44),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            elevation: 0,
-          ),
-          child: _isAdminLoggingIn
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : Text('Sign In to ${_selectedOfficialRole.replaceAll('_', ' ')} Workspace', style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   // ================================================================
-  // OFFICIAL GOVERNMENT FOOTER (Responsive)
+  // 7. RESTRAINED GOVERNMENT FOOTER
   // ================================================================
-  Widget _buildFooter(bool isSmall) {
+  Widget _buildGovernmentFooter(bool isMobile) {
     return Column(
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.shield_outlined, size: 14, color: _govNavy),
+            const Icon(Icons.shield_rounded, size: 14, color: _govNavy),
             const SizedBox(width: 6),
             Text(
               'National Food Security Portal • Govt. of Karnataka & India',
-              style: TextStyle(fontSize: isSmall ? 10 : 11, color: _slate700, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: isMobile ? 10.5 : 11.5,
+                color: _slate700,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 6),
         Text(
-          tr('login.footer_disclaimer'),
+          'PDS DemandSync • Department of Food & Civil Supplies\nUnauthorized access or tampering is strictly prohibited and subject to legal prosecution under the IT Act.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: isSmall ? 9.5 : 10.5, color: _slate400),
+          style: TextStyle(
+            fontSize: isMobile ? 9.5 : 10.5,
+            color: _slate400,
+            height: 1.35,
+          ),
         ),
       ],
     );
