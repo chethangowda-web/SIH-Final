@@ -911,27 +911,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ),
         ),
 
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: _slate100,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: _slate200),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.shield_outlined, size: isSmall ? 14 : 16, color: _govNavy),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  tr('login.official_creds_hint'),
-                  style: TextStyle(fontSize: isSmall ? 10 : 11, color: _slate700, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-        ),
 
         SizedBox(height: isSmall ? 12 : 14),
 
