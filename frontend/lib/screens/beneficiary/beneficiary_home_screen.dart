@@ -648,6 +648,10 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                                 _buildPlanningCycleBanner(),
                                 const SizedBox(height: AppConstants.space16),
 
+                                // 0c. Voice & Pictorial Accessibility Assistant (Low Literacy / Illiterate Mode)
+                                _buildVoicePictorialAssistBanner(),
+                                const SizedBox(height: AppConstants.space16),
+
                                 // 1. Beneficiary Profile & Card Identity Card
                                 _buildBeneficiaryProfileCard(),
                                 const SizedBox(height: AppConstants.space16),
@@ -2282,8 +2286,413 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                 ),
               );
             }),
-          ],
+  // 0c. VOICE & PICTORIAL ACCESSIBILITY ASSISTANT BANNER (FOR LOW-LITERACY BENEFICIARIES)
+  Widget _buildVoicePictorialAssistBanner() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E3A5F), Color(0xFF0F2942)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF0F2942).withValues(alpha: 0.15), blurRadius: 8, offset: const Offset(0, 4)),
         ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFF38BDF8)),
+            ),
+            child: const Icon(Icons.mic_rounded, color: Color(0xFF38BDF8), size: 24),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('🎙️ Voice & Pictorial Assist', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.bold)),
+                    SizedBox(width: 8),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: Color(0xFF16A34A), borderRadius: BorderRadius.all(Radius.circular(4))),
+                      child: Text('ACCESSIBILITY MODE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 2),
+                Text('Tap to speak intent or use visual picture cards in English, Hindi, or Kannada.', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: _showVoicePictorialAssistModal,
+            icon: const Icon(Icons.record_voice_over_rounded, size: 16),
+            label: const Text('Voice Assist', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF16A34A),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showVoicePictorialAssistModal() {
+    String selectedLang = 'KN'; // EN, HI, KN
+    double voiceRiceKg = (_eligibleMembersCount * 4.0).clamp(0.0, 40.0);
+    double voiceWheatKg = (_eligibleMembersCount * 1.0).clamp(0.0, 20.0);
+    String selectedFpsId = _beneficiary?.registeredFpsId ?? 'FPS-KA-BLR-001';
+    bool isListening = false;
+    bool isSubmitting = false;
+    String feedbackText = '🔊 "ನಿಮ್ಮ 5 ಸದಸ್ಯರ ಕುಟುಂಬಕ್ಕೆ 16 ಕೆಜಿ ಅಕ್ಕಿ ಮತ್ತು 4 ಕೆಜಿ ಗೋಧಿ ಧಾನ್ಯ ಅರ್ಹತೆಯಿದೆ. ಧ್ವನಿ ಮೂಲಕ ನೋಂದಾಯಿಸಲು ಮೈಕ್ ಒತ್ತಿ."';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(color: Color(0xFF15803D), shape: BoxShape.circle),
+                  child: const Icon(Icons.record_voice_over_rounded, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Voice & Pictorial Assist', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text('ಧ್ವನಿ ಮತ್ತು ಚಿತ್ರಾತ್ಮಕ ನೆರವು • आवाज सहायता (Low Literacy Mode)', style: TextStyle(fontSize: 10.5, color: AppConstants.textSecondary)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Regional Language Selector Chips
+                  Row(
+                    children: [
+                      const Text('Language / ಭಾಷೆ:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('🇬🇧 EN', style: TextStyle(fontSize: 11)),
+                        selected: selectedLang == 'EN',
+                        selectedColor: AppConstants.primaryNavy,
+                        labelStyle: TextStyle(color: selectedLang == 'EN' ? Colors.white : Colors.black87),
+                        onSelected: (_) {
+                          setModalState(() {
+                            selectedLang = 'EN';
+                            feedbackText = '🔊 "Your family entitlement is ${voiceRiceKg.toInt()} kg Rice & ${voiceWheatKg.toInt()} kg Wheat. Tap microphone to speak your intent."';
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 6),
+                      ChoiceChip(
+                        label: const Text('🇮🇳 हिंदी', style: TextStyle(fontSize: 11)),
+                        selected: selectedLang == 'HI',
+                        selectedColor: AppConstants.primaryNavy,
+                        labelStyle: TextStyle(color: selectedLang == 'HI' ? Colors.white : Colors.black87),
+                        onSelected: (_) {
+                          setModalState(() {
+                            selectedLang = 'HI';
+                            feedbackText = '🔊 "आपके परिवार के लिए ${voiceRiceKg.toInt()} किग्रा चावल और ${voiceWheatKg.toInt()} किग्रा गेहूं का कोटा है। बोलने के लिए माइक दबाएं।"';
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 6),
+                      ChoiceChip(
+                        label: const Text('🇮🇳 ಕನ್ನಡ', style: TextStyle(fontSize: 11)),
+                        selected: selectedLang == 'KN',
+                        selectedColor: AppConstants.primaryNavy,
+                        labelStyle: TextStyle(color: selectedLang == 'KN' ? Colors.white : Colors.black87),
+                        onSelected: (_) {
+                          setModalState(() {
+                            selectedLang = 'KN';
+                            feedbackText = '🔊 "ನಿಮ್ಮ ಕುಟುಂಬಕ್ಕೆ ${voiceRiceKg.toInt()} ಕೆಜಿ ಅಕ್ಕಿ ಮತ್ತು ${voiceWheatKg.toInt()} ಕೆಜಿ ಗೋಧಿ ಧಾನ್ಯ ಅರ್ಹತೆಯಿದೆ. ಧ್ವನಿ ಮೂಲಕ ನೋಂದಾಯಿಸಲು ಮೈಕ್ ಒತ್ತಿ."';
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // 2. Audio Speech Output Banner
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF86EFAC)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.volume_up_rounded, color: Color(0xFF16A34A), size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            feedbackText,
+                            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF166534)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // 3. Pictorial Commodity Selection Cards (Zero-Text Touch Targets)
+                  const Text('1. Tap Pictures to Select Commodities:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+
+                  Row(
+                    children: [
+                      // Fortified Rice Card
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF16A34A), width: 1.5),
+                          ),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.rice_bowl_rounded, size: 36, color: Color(0xFF16A34A)),
+                              const SizedBox(height: 4),
+                              Text(selectedLang == 'KN' ? 'ಅಕ್ಕಿ (Rice)' : (selectedLang == 'HI' ? 'चावल (Rice)' : 'Fortified Rice'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline, size: 20),
+                                    onPressed: () {
+                                      setModalState(() {
+                                        if (voiceRiceKg > 0) voiceRiceKg -= 1.0;
+                                      });
+                                    },
+                                  ),
+                                  Text('${voiceRiceKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF16A34A))),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle_outline, size: 20),
+                                    onPressed: () {
+                                      setModalState(() {
+                                        voiceRiceKg += 1.0;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+
+                      // Whole Wheat Card
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFD97706), width: 1.5),
+                          ),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.grain_rounded, size: 36, color: Color(0xFFD97706)),
+                              const SizedBox(height: 4),
+                              Text(selectedLang == 'KN' ? 'ಗೋಧಿ (Wheat)' : (selectedLang == 'HI' ? 'गेहूं (Wheat)' : 'Whole Wheat'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline, size: 20),
+                                    onPressed: () {
+                                      setModalState(() {
+                                        if (voiceWheatKg > 0) voiceWheatKg -= 1.0;
+                                      });
+                                    },
+                                  ),
+                                  Text('${voiceWheatKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFFD97706))),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle_outline, size: 20),
+                                    onPressed: () {
+                                      setModalState(() {
+                                        voiceWheatKg += 1.0;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // 4. Microphone Voice Command Simulator
+                  const Text('2. Speak Intent Command:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Center(
+                    child: Column(
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            setModalState(() {
+                              isListening = true;
+                              feedbackText = selectedLang == 'KN'
+                                  ? '🎙️ "ಕೇಳಿಸಿಕೊಳ್ಳುತ್ತಿದ್ದೇವೆ... ಅಕ್ಕಿ ${voiceRiceKg.toInt()}ಕೆಜಿ, ಗೋಧಿ ${voiceWheatKg.toInt()}ಕೆಜಿ ಆಯ್ಕೆಯಾಗಿದೆ."'
+                                  : '🎙️ "Listening... Selected ${voiceRiceKg.toInt()}kg Rice & ${voiceWheatKg.toInt()}kg Wheat."';
+                            });
+                            Future.delayed(const Duration(milliseconds: 1200), () {
+                              setModalState(() {
+                                isListening = false;
+                                feedbackText = selectedLang == 'KN'
+                                    ? '✅ "ಧ್ವನಿ ಸ್ವೀಕರಿಸಲಾಗಿದೆ! ಸಲ್ಲಿಸಲು ಕೆಳಗಿನ ಬಟನ್ ಒತ್ತಿ."'
+                                    : '✅ "Voice Command Captured! Press Confirm to submit."';
+                              });
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: isListening ? const Color(0xFFDC2626) : const Color(0xFF15803D),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (isListening ? const Color(0xFFDC2626) : const Color(0xFF15803D)).withValues(alpha: 0.4),
+                                  blurRadius: isListening ? 20 : 10,
+                                  spreadRadius: isListening ? 6 : 2,
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              isListening ? Icons.graphic_eq_rounded : Icons.mic_rounded,
+                              color: Colors.white,
+                              size: 32,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          isListening
+                              ? (selectedLang == 'KN' ? 'ಧ್ವನಿ ಗ್ರಹಿಸಲಾಗುತ್ತಿದೆ...' : 'Listening to your voice...')
+                              : (selectedLang == 'KN' ? 'ಮಾತನಾಡಲು ಮೈಕ್ ಒತ್ತಿ' : 'Tap Mic to Speak Intent'),
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isListening ? const Color(0xFFDC2626) : AppConstants.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Quick Voice Presets
+                  const Text('Quick Spoken Presets:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppConstants.textSecondary)),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      ActionChip(
+                        avatar: const Icon(Icons.mic, size: 14),
+                        label: Text(selectedLang == 'KN' ? 'ನನ್ನ ಅಂಗಡಿಯಲ್ಲಿ ಪೂರ್ಣ ಪಡಿತರ' : 'Full Quota at Home Shop', style: const TextStyle(fontSize: 10.5)),
+                        onPressed: () {
+                          setModalState(() {
+                            voiceRiceKg = (_eligibleMembersCount * 4.0).clamp(0.0, 40.0);
+                            voiceWheatKg = (_eligibleMembersCount * 1.0).clamp(0.0, 20.0);
+                            feedbackText = selectedLang == 'KN'
+                                ? '🔊 "ಪೂರ್ಣ ಕೋಟಾ ಆಯ್ಕೆಯಾಗಿದೆ: ${voiceRiceKg.toInt()} ಕೆಜಿ ಅಕ್ಕಿ, ${voiceWheatKg.toInt()} ಕೆಜಿ ಗೋಧಿ."'
+                                : '🔊 "Full Quota Selected: ${voiceRiceKg.toInt()} kg Rice, ${voiceWheatKg.toInt()} kg Wheat."';
+                          });
+                        },
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.local_shipping, size: 14),
+                        label: Text(selectedLang == 'KN' ? 'ಮನೆ ಬಾಗಿಲಿಗೆ ವಿತರಣೆ' : 'Doorstep Delivery', style: const TextStyle(fontSize: 10.5)),
+                        onPressed: () {
+                          setModalState(() {
+                            feedbackText = selectedLang == 'KN'
+                                ? '🔊 "ಮನೆ ಬಾಗಿಲಿಗೆ ವಿತರಣೆ ಆಯ್ಕೆಯಾಗಿದೆ."'
+                                : '🔊 "Doorstep Home Delivery Selected."';
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel / ರದ್ದು'),
+              ),
+              ElevatedButton.icon(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        setModalState(() => isSubmitting = true);
+                        try {
+                          await _apiService.submitIntent(
+                            beneficiaryId: widget.beneficiaryId,
+                            intendedFpsId: selectedFpsId,
+                            commodityOption: 'Both',
+                            riceQuantityKg: voiceRiceKg,
+                            wheatQuantityKg: voiceWheatKg,
+                            cycleId: '2026-09',
+                          );
+                          if (!mounted) return;
+                          Navigator.of(ctx).pop();
+                          _loadBeneficiaryData();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                selectedLang == 'KN'
+                                    ? '✅ ಧ್ವನಿ ಮೂಲಕ ಬೇಡಿಕೆ ಯಶಸ್ವಿಯಾಗಿ ಸಲ್ಲಿಸಲಾಗಿದೆ! (Intent Registered via Voice)'
+                                    : '✅ Intent Registered via Voice Assistant! Ticket QR Generated.',
+                              ),
+                              backgroundColor: const Color(0xFF15803D),
+                            ),
+                          );
+                        } catch (e) {
+                          setModalState(() => isSubmitting = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Submission Error: $e'), backgroundColor: AppConstants.dangerRed),
+                          );
+                        }
+                      },
+                icon: isSubmitting
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.check_circle_rounded, size: 16),
+                label: Text(selectedLang == 'KN' ? 'ಸಲ್ಲಿಸಿ (Confirm)' : 'Confirm Voice Intent'),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF15803D), foregroundColor: Colors.white),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
