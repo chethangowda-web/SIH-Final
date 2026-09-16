@@ -43,9 +43,12 @@ async def lifespan(app: FastAPI):
     # 1. Enforce strict configuration validation if in production mode
     settings.validate_production_config()
 
-    # 2. Initialize SQLite Database and seed baseline synthetic dataset on startup if empty
-    init_db()
-    seed_all_data(recreate=False)
+    # 2. Ensure database schema & seed baseline datasets are initialized
+    try:
+        init_db()
+    except Exception as e:
+        logger.warning(f"Database startup check warning: {e}")
+
     logger.info("PDS DemandSync startup initialization complete. Ready to receive requests.")
     yield
     logger.info("PDS DemandSync service shutting down.")

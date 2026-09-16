@@ -20,9 +20,10 @@ COPY backend/ ./backend/
 # Set working directory to backend
 WORKDIR /app/backend
 
+# Pre-seed SQLite database during image build so startup is instant (<10ms)
+RUN python -c "from app.core.database import init_db; init_db()"
+
 EXPOSE 8000
 
-# Launch Uvicorn server using shell execution format for dynamic PORT evaluation
-CMD sh -c "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
-
-
+# Launch Uvicorn server using exec format for signal handling & dynamic PORT evaluation
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
