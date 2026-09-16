@@ -22,9 +22,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   late final ApiService _apiService;
   int _selectedTabIndex = 0; // 0: Citizen OTP, 1: Department
 
-  // Controllers for Citizen Login (Ration Card Number + Home FPS Center ID)
+  // Controllers for Citizen Login (Ration Card Number + Phone Number)
   final TextEditingController _citizenCardController = TextEditingController();
-  final TextEditingController _citizenFpsIdController = TextEditingController();
+  final TextEditingController _citizenPhoneController = TextEditingController();
   final TextEditingController _citizenOtpController = TextEditingController();
   bool _otpSent = false;
   bool _isSendingOtp = false;
@@ -76,7 +76,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   void dispose() {
     _countdownTimer?.cancel();
     _citizenCardController.dispose();
-    _citizenFpsIdController.dispose();
+    _citizenPhoneController.dispose();
     _citizenOtpController.dispose();
     _adminUsernameController.dispose();
     _adminPasswordController.dispose();
@@ -118,7 +118,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   // Action: Send Real OTP to Citizen via Twilio SMS
   Future<void> _handleSendOtp() async {
     final cardId = _citizenCardController.text.trim();
-    final homeFpsId = _citizenFpsIdController.text.trim();
+    final inputPhone = _citizenPhoneController.text.trim();
 
     if (cardId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -129,7 +129,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
     setState(() => _isSendingOtp = true);
     try {
-      final res = await _apiService.sendCitizenOtp(cardId, homeFpsId: homeFpsId.isNotEmpty ? homeFpsId : null);
+      final res = await _apiService.sendCitizenOtp(cardId, phoneNumber: inputPhone.isNotEmpty ? inputPhone : null);
       if (!mounted) return;
 
       setState(() {
@@ -554,7 +554,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Anti-Fraud Enforcement Active: Ration Card Number and Home FPS Center ID are cross-verified against the official NFSA Master Dataset.',
+                  'Anti-Fraud Enforcement Active: Ration Card Number and Phone Number are cross-verified against the official NFSA Master Dataset.',
                   style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF1E40AF), height: 1.3),
                 ),
               ),
@@ -583,15 +583,16 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
         const SizedBox(height: 10),
 
-        // Field 2: Home FPS Center ID
-        Text('Home Fair Price Shop (FPS) Center ID', style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
+        // Field 2: Phone Number
+        Text('Phone Number', style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
         const SizedBox(height: 4),
         TextField(
-          controller: _citizenFpsIdController,
+          controller: _citizenPhoneController,
+          keyboardType: TextInputType.phone,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'e.g. FPS-KA-BAG-0001',
-            prefixIcon: Icon(Icons.storefront_rounded, size: isSmall ? 16 : 18, color: _slate500),
+            hintText: 'e.g. 9876543210',
+            prefixIcon: Icon(Icons.phone_rounded, size: isSmall ? 16 : 18, color: _slate500),
             filled: true,
             fillColor: _slate50,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
