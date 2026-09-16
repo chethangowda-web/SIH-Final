@@ -21,7 +21,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
   int _activeTab = 0; // 0: Current Stock, 1: Digital Register, 2: e-PoS Screen
   bool _isLoading = true;
 
-  // Selected FPS
+  // Selected FPS State
   String _selectedFpsId = 'FPS-KA-BAG-0001';
   String _selectedFpsName = 'Malleshwaram Fair Price Shop #1';
   List<FpsShop> _fpsList = [];
@@ -32,26 +32,44 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
   double _sugarStockKg = 120.0;
   double _keroseneStockL = 90.0;
 
-  // Digital Register State
+  // Digital Register State & Filter
   List<Map<String, dynamic>> _digitalRegister = [];
+  final TextEditingController _registerSearchController = TextEditingController();
+  String _authFilterMode = 'ALL'; // ALL, AADHAAR_BIOMETRIC, IRIS_SCAN
 
-  // e-PoS State
+  // e-PoS Terminal State
   final TextEditingController _cardSearchController = TextEditingController(text: 'RC-KA-000001');
   bool _isSearching = false;
   Map<String, dynamic>? _searchedBeneficiary;
   bool _isBiometricVerified = false;
+  bool _isScanningBiometrics = false;
   bool _isDispensing = false;
-  double _dispenseRiceKg = 10.0;
-  double _dispenseWheatKg = 2.0;
+  double _dispenseRiceKg = 20.0;
+  double _dispenseWheatKg = 5.0;
 
+  // Indent Form State
+  bool _isSubmittingIndent = false;
+  final TextEditingController _indentRiceController = TextEditingController(text: '2000');
+  final TextEditingController _indentWheatController = TextEditingController(text: '500');
+
+  // Statutory Design Tokens
   static const Color _govNavy = Color(0xFF0F2942);
   static const Color _govGreen = Color(0xFF15803D);
   static const Color _amber = Color(0xFFD97706);
   static const Color _slate900 = Color(0xFF0F172A);
+  static const Color _slate800 = Color(0xFF1E293B);
   static const Color _slate700 = Color(0xFF334155);
   static const Color _slate500 = Color(0xFF64748B);
   static const Color _slate200 = Color(0xFFE2E8F0);
   static const Color _slate100 = Color(0xFFF1F5F9);
+
+  // Quick Preset Sample Ration Cards for One-Click Testing
+  final List<Map<String, String>> _sampleRationCards = [
+    {'cardId': 'RC-KA-000001', 'name': 'Suresh Kumar', 'label': 'RC-KA-000001 (BPHH)'},
+    {'cardId': 'RC-KA-000005', 'name': 'Lakshmi Amma', 'label': 'RC-KA-000005 (AAY)'},
+    {'cardId': 'RC-KA-000012', 'name': 'Ramesh Babu', 'label': 'RC-KA-000012 (ONORC Portable)'},
+    {'cardId': 'RC-KA-000020', 'name': 'Devappa Gowda', 'label': 'RC-KA-000020 (BPHH)'},
+  ];
 
   @override
   void initState() {
@@ -66,13 +84,16 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
   @override
   void dispose() {
     _cardSearchController.dispose();
+    _registerSearchController.dispose();
+    _indentRiceController.dispose();
+    _indentWheatController.dispose();
     super.dispose();
   }
 
   Future<void> _loadAllFpsData() async {
     setState(() => _isLoading = true);
     try {
-      // 1. Fetch FPS list
+      // 1. Fetch FPS Shops List
       try {
         final list = await _apiService.fetchFPSList();
         if (list.isNotEmpty) {
@@ -86,7 +107,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
         }
       } catch (_) {}
 
-      // 2. Load live inventory
+      // 2. Load persistent shop inventory
       await _loadInventory();
 
       // 3. Load digital register transactions
@@ -123,9 +144,13 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     } catch (_) {}
   }
 
-  Future<void> _handleSearchBeneficiary() async {
-    final query = _cardSearchController.text.trim();
+  Future<void> _handleSearchBeneficiary({String? targetCardId}) async {
+    final query = (targetCardId ?? _cardSearchController.text).trim();
     if (query.isEmpty) return;
+
+    if (targetCardId != null) {
+      _cardSearchController.text = targetCardId;
+    }
 
     setState(() {
       _isSearching = true;
@@ -162,7 +187,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
         return;
       } catch (_) {}
 
-      // 2. Direct search from master beneficiaries dataset
+      // 2. Search master beneficiary database
       final beneficiaries = await _apiService.fetchBeneficiaries(search: query, limit: 1);
       if (!mounted) return;
 
@@ -171,7 +196,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
         final scheme = b.schemeType ?? 'PHH';
         final catLabel = scheme == 'AAY'
             ? 'Antyodaya Anna Yojana (AAY)'
-            : 'Priority Household (BPHH / PHH)';
+            : 'Priority Household (BPHH)';
         final rKg = (b.monthlyRiceKg != null && b.monthlyRiceKg! > 0)
             ? b.monthlyRiceKg!
             : (scheme == 'AAY' ? 30.0 : ((b.membersCount ?? 4) * 4.0));
@@ -195,7 +220,6 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
           _dispenseWheatKg = wKg;
         });
       } else {
-        // Fallback for search query
         setState(() {
           _searchedBeneficiary = {
             'cardId': query,
@@ -217,7 +241,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
             'cardId': query,
             'name': 'Citizen ($query)',
             'members': 4,
-            'cardCategory': 'BPHH',
+            'cardCategory': 'Priority Household (BPHH)',
             'riceEntitlementKg': 20.0,
             'wheatEntitlementKg': 5.0,
             'alreadyCollected': false,
@@ -228,6 +252,17 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
       }
     } finally {
       if (mounted) setState(() => _isSearching = false);
+    }
+  }
+
+  Future<void> _simulateBiometricScan() async {
+    setState(() => _isScanningBiometrics = true);
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (mounted) {
+      setState(() {
+        _isScanningBiometrics = false;
+        _isBiometricVerified = true;
+      });
     }
   }
 
@@ -251,107 +286,158 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
         _searchedBeneficiary!['alreadyCollected'] = true;
       });
 
-      // Reload inventory & transactions
+      // Reload inventory & digital register transactions
       await _loadInventory();
       await _loadTransactions();
 
       final txId = res['transaction_id'] ?? 'TX-EPOS-OK';
 
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.check_circle_rounded, color: _govGreen, size: 28),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text('e-PoS Ration Dispensed & Sealed', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Transaction recorded in digital register and deducted from inventory.'),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF86EFAC)),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Transaction ID:', style: TextStyle(fontSize: 12, color: _slate500)),
-                        Text(txId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _slate900)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Beneficiary:', style: TextStyle(fontSize: 12, color: _slate500)),
-                        Text(cardId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _slate900)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Fortified Rice:', style: TextStyle(fontSize: 12, color: _slate500)),
-                        Text('${_dispenseRiceKg.toStringAsFixed(1)} kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _govGreen)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Whole Wheat:', style: TextStyle(fontSize: 12, color: _slate500)),
-                        Text('${_dispenseWheatKg.toStringAsFixed(1)} kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _govGreen)),
-                      ],
-                    ),
-                    const Divider(height: 12),
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Citizen Charge:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        Text('₹0.00 (NFSA 100% Free)', style: TextStyle(fontWeight: FontWeight.w800, color: _govGreen)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _govNavy,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Done & Print Slip'),
-            ),
-          ],
-        ),
-      );
+      _showReceiptDialog(txId: txId, cardId: cardId);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isDispensing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('e-PoS Dispensation Failed: $e'),
+          content: Text('e-PoS Dispensation Error: $e'),
           backgroundColor: Colors.red.shade700,
         ),
       );
     }
+  }
+
+  void _showReceiptDialog({required String txId, required String cardId}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.verified_rounded, color: _govGreen, size: 28),
+            SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Official e-PoS Transaction Receipt', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text('Issued under NFSA 2013 & PDS Control Order', style: TextStyle(fontSize: 11, color: _slate500)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Container(
+          width: 440,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _slate200),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
+                child: Column(
+                  children: [
+                    const Text('DEPARTMENT OF FOOD & CIVIL SUPPLIES', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: _govNavy, letterSpacing: 0.5)),
+                    Text('e-PoS Terminal: $_selectedFpsId • $_selectedFpsName', style: const TextStyle(fontSize: 10, color: _slate500)),
+                    const Divider(height: 12),
+                    _buildReceiptLine('Transaction Ref:', txId, isBold: true),
+                    _buildReceiptLine('Ration Card ID:', cardId),
+                    _buildReceiptLine('Citizen Name:', _searchedBeneficiary?['name'] ?? 'Suresh Kumar'),
+                    _buildReceiptLine('Card Category:', _searchedBeneficiary?['cardCategory'] ?? 'BPHH'),
+                    _buildReceiptLine('Auth Mechanism:', 'Aadhaar Biometric (98.6% Match)'),
+                    const Divider(height: 12),
+                    _buildReceiptLine('Fortified Rice Issued:', '${_dispenseRiceKg.toStringAsFixed(1)} kg', valueColor: _govGreen),
+                    _buildReceiptLine('Whole Wheat Issued:', '${_dispenseWheatKg.toStringAsFixed(1)} kg', valueColor: _amber),
+                    const Divider(height: 12),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Total Charge:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        Text('₹0.00 (NFSA 100% Free)', style: TextStyle(fontWeight: FontWeight.w800, color: _govGreen, fontSize: 13)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.lock_rounded, size: 12, color: _govGreen),
+                  SizedBox(width: 4),
+                  Text('SHA-256 Sealed in Central Government Audit Trail', style: TextStyle(fontSize: 10.5, color: _govGreen, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Receipt sent to citizen mobile & printed on e-PoS thermal printer.')),
+              );
+            },
+            icon: const Icon(Icons.print_rounded, size: 16),
+            label: const Text('Print Receipt Slip'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceiptLine(String label, String val, {bool isBold = false, Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, color: _slate500)),
+          Text(val, style: TextStyle(fontSize: 11, fontWeight: isBold ? FontWeight.w800 : FontWeight.w600, color: valueColor ?? _slate900)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleSubmitIndent() async {
+    setState(() => _isSubmittingIndent = true);
+    await Future.delayed(const Duration(seconds: 1));
+    if (!mounted) return;
+    setState(() => _isSubmittingIndent = false);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.send_and_archive_rounded, color: _govNavy, size: 24),
+            SizedBox(width: 8),
+            Text('Stock Indent Requisition Submitted', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          'Indent request for ${_indentRiceController.text} kg Rice and ${_indentWheatController.text} kg Wheat for cycle 2026-10 has been transmitted to the District Supply Officer (DSO) allocation desk.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -365,22 +451,32 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'FPS Owner Operations Portal',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                const Text(
+                  'FPS Owner Operations Portal',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: const BoxDecoration(color: Color(0xFF1E3A8A), borderRadius: BorderRadius.all(Radius.circular(4))),
+                  child: const Text('KA PDS CONTROL', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.white)),
+                ),
+              ],
             ),
             Text(
-              'Fair Price Shop: $_selectedFpsId • $_selectedFpsName',
+              'Fair Price Shop ID: $_selectedFpsId • $_selectedFpsName',
               style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.8)),
             ),
           ],
         ),
         actions: [
-          // Real FPS Switcher (Allows testing different shops from dataset)
+          // FPS Shop Switcher from dataset
           if (_fpsList.isNotEmpty)
             PopupMenuButton<String>(
-              icon: const Icon(Icons.swap_horiz_rounded),
-              tooltip: 'Switch Fair Price Shop',
+              icon: const Icon(Icons.storefront_rounded),
+              tooltip: 'Switch Fair Price Shop (Real Dataset)',
               onSelected: (fpsId) {
                 final selected = _fpsList.firstWhere((f) => f.fpsId == fpsId);
                 setState(() {
@@ -397,6 +493,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
                 );
               }).toList(),
             ),
+
           Container(
             margin: const EdgeInsets.only(right: 12),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -409,7 +506,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
               children: [
                 Icon(Icons.circle, size: 8, color: Color(0xFF4ADE80)),
                 SizedBox(width: 6),
-                Text('e-PoS Terminal Online', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                Text('e-PoS Gateway Online', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -419,7 +516,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // 3 Sub-Navigation Tabs matching user's architecture diagram
+                // Navigation Bar Tabs
                 Container(
                   decoration: const BoxDecoration(
                     color: Colors.white,
@@ -428,11 +525,11 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
                     children: [
-                      _buildTabButton(0, '📦 Current Stock', Icons.inventory_2_outlined),
+                      _buildTabButton(0, '📦 Current Stock & Replenishment', Icons.inventory_2_outlined),
                       const SizedBox(width: 8),
-                      _buildTabButton(1, '📖 Digital Register', Icons.receipt_long_outlined),
+                      _buildTabButton(1, '📖 Statutory Digital Register', Icons.receipt_long_outlined),
                       const SizedBox(width: 8),
-                      _buildTabButton(2, '📱 e-PoS Screen', Icons.point_of_sale_rounded),
+                      _buildTabButton(2, '📱 e-PoS Dispensation Terminal', Icons.point_of_sale_rounded),
                     ],
                   ),
                 ),
@@ -487,7 +584,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
   }
 
   // =========================================================================
-  // TAB 1: CURRENT STOCK (Responsive and clean layout)
+  // TAB 0: CURRENT STOCK & PHYSICAL REPLENISHMENT SUITE
   // =========================================================================
   Widget _buildCurrentStockView() {
     return SingleChildScrollView(
@@ -495,26 +592,73 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Daily Store Status Header Banner
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [_govNavy, Color(0xFF1E3A8A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2)),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.store_rounded, color: Color(0xFF4ADE80), size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'STORE OPERATIONAL • STATUTORY FORM 4B SEAL VERIFIED',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Live physical warehouse inventory for $_selectedFpsId • Synchronized with Central FCI Godown',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 11.5),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _loadInventory,
+                      icon: const Icon(Icons.sync_rounded, size: 14, color: Colors.white),
+                      label: const Text('Sync Stock', style: TextStyle(color: Colors.white, fontSize: 11)),
+                      style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white38)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Daily Dispensation KPI Summary Row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Ration Shop Physical Stock Ledger', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _slate900)),
-                  Text('Live inventory for $_selectedFpsId • Reconciled with central warehouse', style: const TextStyle(fontSize: 12, color: _slate500)),
-                ],
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded, size: 20),
-                tooltip: 'Refresh Stock',
-                onPressed: _loadInventory,
-              ),
+              Expanded(child: _buildKpiCard('Cycle Footfall Served', '42 / 120 Cards', '35.0% Month Coverage', Icons.groups_outlined, const Color(0xFF2563EB))),
+              const SizedBox(width: 12),
+              Expanded(child: _buildKpiCard('Grain Disbursed Today', '840 kg Rice / 210 kg Wheat', '42 Successful e-PoS Tx', Icons.task_alt_rounded, _govGreen)),
+              const SizedBox(width: 12),
+              Expanded(child: _buildKpiCard('e-PoS Device Status', 'Battery 98% • 4G Airtel', 'Weighing Scale Bluetooth OK', Icons.bluetooth_connected_rounded, _amber)),
             ],
           ),
           const SizedBox(height: 16),
 
-          // Stock Commodity Grid (Clean cards with proper heights)
+          // Physical Commodities Grid
+          const Text('Ration Shop Physical Commodities Inventory', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _slate900)),
+          const SizedBox(height: 8),
           LayoutBuilder(builder: (context, constraints) {
             final isWide = constraints.maxWidth > 700;
             return GridView.count(
@@ -523,39 +667,218 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: isWide ? 2.2 : 1.8,
+              childAspectRatio: isWide ? 2.1 : 1.7,
               children: [
-                _buildStockCard('Fortified Rice', '${_riceStockKg.toStringAsFixed(0)} kg', 'Safe Buffer (>500kg)', Icons.rice_bowl, _govGreen, const Color(0xFFF0FDF4)),
-                _buildStockCard('Whole Wheat', '${_wheatStockKg.toStringAsFixed(0)} kg', 'Safe Buffer (>200kg)', Icons.grain, _amber, const Color(0xFFFFFBEB)),
-                _buildStockCard('Refined Sugar', '${_sugarStockKg.toStringAsFixed(0)} kg', 'Adequate Stock', Icons.cake_outlined, const Color(0xFF6B21A8), const Color(0xFFF3E8FF)),
-                _buildStockCard('Kerosene Fuel', '${_keroseneStockL.toStringAsFixed(0)} L', 'Reservoir Normal', Icons.local_gas_station, const Color(0xFF1E3A8A), const Color(0xFFEFF6FF)),
+                _buildStockCard('Fortified Rice (Grade A)', '${_riceStockKg.toStringAsFixed(0)} kg', 'Safe Buffer (>500kg)', 'NFSA ₹0.00/kg', Icons.rice_bowl, _govGreen, const Color(0xFFF0FDF4)),
+                _buildStockCard('Whole Wheat', '${_wheatStockKg.toStringAsFixed(0)} kg', 'Safe Buffer (>200kg)', 'NFSA ₹0.00/kg', Icons.grain, _amber, const Color(0xFFFFFBEB)),
+                _buildStockCard('Refined Sugar', '${_sugarStockKg.toStringAsFixed(0)} kg', 'Adequate Stock', 'Subsidized ₹13.50/kg', Icons.cake_outlined, const Color(0xFF6B21A8), const Color(0xFFF3E8FF)),
+                _buildStockCard('Kerosene Fuel', '${_keroseneStockL.toStringAsFixed(0)} L', 'Reservoir Normal', 'Subsidized ₹25.00/L', Icons.local_gas_station, const Color(0xFF1E3A8A), const Color(0xFFEFF6FF)),
               ],
             );
           }),
           const SizedBox(height: 16),
 
-          // Central Depot Incoming Replenishment Tracker
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _slate200),
-            ),
+          // 2-Column Detailed Operational Workspace (Fills layout cleanly)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left Column: Replenishment Route Tracking & Physical Calibration
+              Expanded(
+                flex: 3,
+                child: Column(
+                  children: [
+                    // Incoming Central Godown Replenishment
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _slate200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.local_shipping_outlined, color: _govNavy, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Central FCI Depot Replenishment Tracking (Phase 14A Route)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                ],
+                              ),
+                              Text('LIVE GPS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _govGreen)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _buildReplenishmentRow('Truck KA-04-GA-9081 (Driver: Ramesh)', '4,500 kg Fortified Rice', 'En Route from Central FCI Godown', 'ETA: 45 Mins'),
+                          const Divider(height: 16),
+                          _buildReplenishmentRow('Truck KA-04-GA-7712 (Driver: Suresh)', '2,000 kg Whole Wheat', 'Loading Verified at Bay #2', 'Scheduled Today'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Statutory Inspection Tag & Weighbridge Calibration
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _slate200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.verified_user_outlined, color: _govNavy, size: 18),
+                              SizedBox(width: 8),
+                              Text('Statutory Weighbridge & Shop Compliance Verification', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _buildComplianceStatusItem('Electronic Weighing Scale Calibration:', 'Tag #LMA-2026-881 (Valid till Dec 2026)', isOK: true),
+                          _buildComplianceStatusItem('Mandatory NFSA Price Display Board:', 'Updated Today • 100% Free Grain Scheme Displayed', isOK: true),
+                          _buildComplianceStatusItem('CCTV Live Surveillance Monitoring:', 'Operational (3 Cameras Active)', isOK: true),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // Right Column: Hardware Diagnostics & Monthly Stock Indent Form
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    // e-PoS Hardware Peripheral Diagnostic Panel
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _slate200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.hardware_rounded, color: _govNavy, size: 18),
+                              SizedBox(width: 8),
+                              Text('e-PoS Terminal Hardware Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _buildDiagnosticRow('Aadhaar Optical Scanner:', 'Ready (SDK v3.4)', Icons.fingerprint_rounded, _govGreen),
+                          _buildDiagnosticRow('Bluetooth Scale Sync:', 'Paired (Scale #01)', Icons.scale_rounded, _govGreen),
+                          _buildDiagnosticRow('Thermal Printer Paper:', 'Paper Level 85%', Icons.print_rounded, _govGreen),
+                          _buildDiagnosticRow('Central DB Sync Latency:', '24ms (Instant)', Icons.cloud_done_rounded, _govGreen),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Monthly Grain Allocation Indent Generator Form
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _slate200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.note_add_outlined, color: _govNavy, size: 18),
+                              SizedBox(width: 8),
+                              Text('Submit Stock Indent (Cycle 2026-10)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text('Request additional allocation quota from District Supply Office.', style: TextStyle(fontSize: 11, color: _slate500)),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _indentRiceController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Rice Indent (kg)',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: _indentWheatController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Wheat Indent (kg)',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _isSubmittingIndent ? null : _handleSubmitIndent,
+                              icon: _isSubmittingIndent
+                                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : const Icon(Icons.send_rounded, size: 14),
+                              label: const Text('Submit Indent to DSO Office', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKpiCard(String title, String val, String sub, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _slate200),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: color.withValues(alpha: 0.1),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
-                  children: [
-                    Icon(Icons.local_shipping_outlined, color: _govNavy, size: 20),
-                    SizedBox(width: 8),
-                    Text('Incoming Depot Replenishment Tracking (Phase 14A Route)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _buildReplenishmentRow('Truck KA-04-GA-9081 (Driver: Ramesh)', '4,500 kg Fortified Rice', 'En Route from Central FCI Godown', 'ETA: 45 Mins'),
-                const Divider(),
-                _buildReplenishmentRow('Truck KA-04-GA-7712 (Driver: Suresh)', '2,000 kg Whole Wheat Buffer', 'Loading Verified at Bay #2', 'Scheduled Today'),
+                Text(title, style: const TextStyle(fontSize: 11, color: _slate500, fontWeight: FontWeight.w600)),
+                Text(val, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color)),
+                Text(sub, style: const TextStyle(fontSize: 10, color: _slate500)),
               ],
             ),
           ),
@@ -564,7 +887,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     );
   }
 
-  Widget _buildStockCard(String title, String qty, String status, IconData icon, Color color, Color bg) {
+  Widget _buildStockCard(String title, String qty, String status, String subText, IconData icon, Color color, Color bg) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -588,7 +911,13 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
           const SizedBox(height: 6),
           Text(qty, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
           const SizedBox(height: 2),
-          Text(status, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color.withValues(alpha: 0.85))),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(status, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+              Text(subText, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: color.withValues(alpha: 0.8))),
+            ],
+          ),
         ],
       ),
     );
@@ -616,34 +945,135 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     );
   }
 
+  Widget _buildComplianceStatusItem(String title, String val, {required bool isOK}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(isOK ? Icons.check_circle_rounded : Icons.warning_amber_rounded, size: 16, color: isOK ? _govGreen : Colors.red),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(fontSize: 11.5, color: _slate900),
+                children: [
+                  TextSpan(text: '$title ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  TextSpan(text: val, style: const TextStyle(color: _slate500)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiagnosticRow(String label, String val, IconData icon, Color statusColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: _slate500),
+              const SizedBox(width: 6),
+              Text(label, style: const TextStyle(fontSize: 11.5, color: _slate700)),
+            ],
+          ),
+          Text(val, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: statusColor)),
+        ],
+      ),
+    );
+  }
+
   // =========================================================================
-  // TAB 2: DIGITAL REGISTER
+  // TAB 1: STATUTORY DIGITAL REGISTER (Searchable & Filterable)
   // =========================================================================
   Widget _buildDigitalRegisterView() {
+    final query = _registerSearchController.text.trim().toLowerCase();
+    final filteredList = _digitalRegister.where((tx) {
+      final cardId = (tx['beneficiary_id'] ?? '').toString().toLowerCase();
+      final name = (tx['name_for_demo'] ?? tx['name'] ?? '').toString().toLowerCase();
+      final mode = (tx['auth_mode'] ?? '').toString().toUpperCase();
+
+      final matchesQuery = query.isEmpty || cardId.contains(query) || name.contains(query);
+      final matchesMode = _authFilterMode == 'ALL' || mode.contains(_authFilterMode);
+
+      return matchesQuery && matchesMode;
+    }).toList();
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Register Header Controls
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Digital Grain Dispensation Register', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _slate900)),
-                  Text('${_digitalRegister.length} Transactions Recorded for Cycle 2026-09', style: const TextStyle(fontSize: 12, color: _slate500)),
+                  const Text('Statutory Digital Grain Dispensation Register', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _slate900)),
+                  Text('${_digitalRegister.length} Total Dispensation Logs for Active Cycle 2026-09 • Reconciled with Master Ledger', style: const TextStyle(fontSize: 12, color: _slate500)),
                 ],
               ),
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded, size: 20),
-                tooltip: 'Refresh Transactions',
-                onPressed: _loadTransactions,
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Statutory Digital Register (Form 5A CSV) exported.')),
+                      );
+                    },
+                    icon: const Icon(Icons.download_rounded, size: 14),
+                    label: const Text('Export Form 5A', style: TextStyle(fontSize: 11)),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, size: 20),
+                    tooltip: 'Refresh Register',
+                    onPressed: _loadTransactions,
+                  ),
+                ],
               ),
             ],
           ),
           const SizedBox(height: 12),
 
+          // Search & Filter Bar
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _registerSearchController,
+                  decoration: InputDecoration(
+                    hintText: 'Filter register by Card ID or Citizen Name...',
+                    prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // Filter Pills
+              _buildFilterPill('ALL', 'All Auths'),
+              const SizedBox(width: 6),
+              _buildFilterPill('AADHAAR', 'Aadhaar Biometric'),
+              const SizedBox(width: 6),
+              _buildFilterPill('IRIS', 'Iris Scan'),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Transactions List Container
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -651,25 +1081,30 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: _slate200),
               ),
-              child: _digitalRegister.isEmpty
+              child: filteredList.isEmpty
                   ? const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.receipt_long_outlined, size: 40, color: _slate500),
+                          Icon(Icons.receipt_long_outlined, size: 44, color: _slate500),
                           SizedBox(height: 8),
-                          Text('No transactions recorded yet in this cycle.', style: TextStyle(color: _slate500, fontSize: 13)),
-                          Text('Use the e-PoS Screen tab to dispense rations to beneficiaries.', style: TextStyle(color: _slate500, fontSize: 11)),
+                          Text('No digital register records match the selected filter.', style: TextStyle(color: _slate500, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('Use the e-PoS Screen tab to perform a live grain dispensation.', style: TextStyle(color: _slate500, fontSize: 11)),
                         ],
                       ),
                     )
                   : ListView.separated(
-                      itemCount: _digitalRegister.length,
+                      itemCount: filteredList.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, idx) {
-                        final tx = _digitalRegister[idx];
+                        final tx = filteredList[idx];
+                        final txId = tx['transaction_id'] ?? 'TX-EPOS-${idx + 100}';
+                        final cardId = tx['beneficiary_id'] ?? 'BEN-KA-0000';
+                        final name = tx['name_for_demo'] ?? tx['name'] ?? 'Citizen Holder';
                         final rice = (tx['rice_kg'] as num?)?.toDouble() ?? 0.0;
                         final wheat = (tx['wheat_kg'] as num?)?.toDouble() ?? 0.0;
+                        final authMode = tx['auth_mode'] ?? 'AADHAAR_BIOMETRIC';
+
                         return ListTile(
                           dense: true,
                           leading: CircleAvatar(
@@ -679,35 +1114,47 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
                           ),
                           title: Row(
                             children: [
-                              Text(
-                                tx['beneficiary_id'] ?? 'BEN-KA-0000',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
+                              Text(cardId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _govNavy)),
                               const SizedBox(width: 8),
-                              Text(
-                                tx['name_for_demo'] ?? tx['name'] ?? 'Citizen Holder',
-                                style: const TextStyle(fontSize: 12, color: _slate700),
+                              Text(name, style: const TextStyle(fontSize: 12, color: _slate700, fontWeight: FontWeight.w600)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(color: _slate100, borderRadius: BorderRadius.circular(4)),
+                                child: Text(txId, style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: _slate500)),
                               ),
                             ],
                           ),
                           subtitle: Text(
-                            'Rice: ${rice.toStringAsFixed(1)} kg • Wheat: ${wheat.toStringAsFixed(1)} kg • Auth: ${tx['auth_mode'] ?? "Aadhaar Biometric"}',
+                            'Fortified Rice: ${rice.toStringAsFixed(1)} kg • Whole Wheat: ${wheat.toStringAsFixed(1)} kg • Charge: ₹0.00 FREE • Auth: $authMode',
                             style: const TextStyle(fontSize: 11, color: _slate500),
                           ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF0FDF4),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text('DISPENSED', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _govGreen)),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF0FDF4),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: const Color(0xFF86EFAC)),
+                                    ),
+                                    child: const Text('DISPENSED ✓', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: _govGreen)),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(tx['created_at'] ?? 'Today', style: const TextStyle(fontSize: 10, color: _slate500)),
+                                ],
                               ),
-                              const SizedBox(height: 2),
-                              Text(tx['created_at'] ?? 'Today', style: const TextStyle(fontSize: 10, color: _slate500)),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.receipt_rounded, size: 18, color: _govNavy),
+                                tooltip: 'View Full Slip',
+                                onPressed: () => _showReceiptDialog(txId: txId, cardId: cardId),
+                              ),
                             ],
                           ),
                         );
@@ -720,8 +1167,28 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     );
   }
 
+  Widget _buildFilterPill(String mode, String label) {
+    final isSelected = _authFilterMode == mode;
+    return InkWell(
+      onTap: () => setState(() => _authFilterMode = mode),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? _govNavy : Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isSelected ? _govNavy : _slate200),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: 11.5, fontWeight: isSelected ? FontWeight.bold : FontWeight.w500, color: isSelected ? Colors.white : _slate700),
+        ),
+      ),
+    );
+  }
+
   // =========================================================================
-  // TAB 3: e-PoS SCREEN (Dispensation Terminal)
+  // TAB 2: e-PoS BIOMETRIC DISPENSATION TERMINAL (Hardware Screen Frame)
   // =========================================================================
   Widget _buildEposScreenView() {
     return SingleChildScrollView(
@@ -729,220 +1196,321 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('e-PoS Biometric Ration Dispensation Terminal', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _slate900)),
-          const Text('Select or search citizen Ration Card Number to verify statutory quota and authorize grain release.', style: TextStyle(fontSize: 12, color: _slate500)),
-          const SizedBox(height: 16),
-
-          // Search Box
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _cardSearchController,
-                  decoration: InputDecoration(
-                    hintText: 'Enter Ration Card ID (e.g. RC-KA-000001 or BEN-KA-0001)...',
-                    hintStyle: const TextStyle(fontSize: 12.5),
-                    prefixIcon: const Icon(Icons.credit_card_rounded, size: 18),
-                    filled: true,
-                    fillColor: Colors.white,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
+          // e-PoS Hardware Frame Container
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _slate800, width: 2),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Hardware Header Bar
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: const BoxDecoration(
+                    color: _slate900,
+                    borderRadius: BorderRadius.only(topLeft: Radius.circular(14), topRight: Radius.circular(14)),
                   ),
-                  onSubmitted: (_) => _handleSearchBeneficiary(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _isSearching ? null : _handleSearchBeneficiary,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _govNavy,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: _isSearching
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Lookup Card', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Beneficiary Details Card
-          if (_searchedBeneficiary != null)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _slate200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+                  child: const Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.account_box_rounded, color: _govNavy, size: 24),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(_searchedBeneficiary!['name'] ?? 'Citizen Name', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              Text('Card: ${_searchedBeneficiary!['cardId']} • ${_searchedBeneficiary!['cardCategory']}', style: const TextStyle(fontSize: 11, color: _slate500)),
-                            ],
-                          ),
+                          Icon(Icons.point_of_sale_rounded, color: Color(0xFF4ADE80), size: 18),
+                          SizedBox(width: 8),
+                          Text('e-PoS HARDWARE TERMINAL v4.2.1 • AADHAAR ONLINE GATEWAY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5)),
                         ],
                       ),
                       Row(
                         children: [
-                          if (_searchedBeneficiary!['isPortability'] == true) ...[
-                            Container(
-                              margin: const EdgeInsets.only(right: 6),
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEFF6FF),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: const Color(0xFF93C5FD)),
-                              ),
-                              child: const Text('ONORC PORTABLE', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8))),
-                            ),
-                          ],
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFFCA5A5) : const Color(0xFF86EFAC)),
-                            ),
-                            child: Text(
-                              (_searchedBeneficiary!['alreadyCollected'] as bool) ? 'ALREADY COLLECTED' : 'ELIGIBLE',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFDC2626) : _govGreen,
+                          Icon(Icons.wifi_rounded, size: 14, color: Color(0xFF4ADE80)),
+                          SizedBox(width: 6),
+                          Text('4G e-SIM LIVE', style: TextStyle(color: Color(0xFF4ADE80), fontWeight: FontWeight.bold, fontSize: 10)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Preset Quick Test Card Chips
+                      Row(
+                        children: [
+                          const Text('Quick Test Preset Cards:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _slate500)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: _sampleRationCards.map((preset) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 6),
+                                    child: ActionChip(
+                                      label: Text(preset['label']!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                      backgroundColor: _cardSearchController.text == preset['cardId'] ? const Color(0xFFEFF6FF) : _slate100,
+                                      side: BorderSide(color: _cardSearchController.text == preset['cardId'] ? const Color(0xFF3B82F6) : _slate200),
+                                      onPressed: () => _handleSearchBeneficiary(targetCardId: preset['cardId']),
+                                    ),
+                                  );
+                                }).toList(),
                               ),
                             ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                  const Divider(height: 20),
+                      const SizedBox(height: 12),
 
-                  // Statutory Quota Rows
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: const Color(0xFFF0FDF4), borderRadius: BorderRadius.circular(8)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Fortified Rice Entitlement', style: TextStyle(fontSize: 11, color: _govGreen, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Text('${_dispenseRiceKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _govGreen)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(8)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Whole Wheat Entitlement', style: TextStyle(fontSize: 11, color: _amber, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Text('${_dispenseWheatKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _amber)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Biometric Authentication Step
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: _slate100,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _slate200),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              _isBiometricVerified ? Icons.check_circle_rounded : Icons.fingerprint_rounded,
-                              size: 24,
-                              color: _isBiometricVerified ? _govGreen : _slate700,
+                      // Ration Card Search Box
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _cardSearchController,
+                              decoration: InputDecoration(
+                                hintText: 'Enter Ration Card ID (e.g. RC-KA-000001 or BEN-KA-0001)...',
+                                prefixIcon: const Icon(Icons.credit_card_rounded, size: 18),
+                                filled: true,
+                                fillColor: const Color(0xFFF8FAFC),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
+                              ),
+                              onSubmitted: (_) => _handleSearchBeneficiary(),
                             ),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Aadhaar Biometric e-KYC Scan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                Text(
-                                  _isBiometricVerified ? 'Identity Verified: Match 98.6%' : 'Place citizen finger on scanner',
-                                  style: TextStyle(fontSize: 10.5, color: _isBiometricVerified ? _govGreen : _slate500),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: _isSearching ? null : () => _handleSearchBeneficiary(),
+                            icon: _isSearching
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.search_rounded, size: 16),
+                            label: const Text('Lookup Card', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _govNavy,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Beneficiary Entitlement Card & Biometric Scanner Panel
+                      if (_searchedBeneficiary != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _slate200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Citizen Header & Status Badges
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const CircleAvatar(
+                                        backgroundColor: _govNavy,
+                                        radius: 18,
+                                        child: Icon(Icons.person_rounded, color: Colors.white, size: 20),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(_searchedBeneficiary!['name'] ?? 'Citizen Name', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: _slate900)),
+                                          Text('Card ID: ${_searchedBeneficiary!['cardId']} • ${_searchedBeneficiary!['members']} Family Members', style: const TextStyle(fontSize: 11.5, color: _slate500)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  Row(
+                                    children: [
+                                      if (_searchedBeneficiary!['isPortability'] == true) ...[
+                                        Container(
+                                          margin: const EdgeInsets.only(right: 6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFEFF6FF),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: const Color(0xFF93C5FD)),
+                                          ),
+                                          child: const Text('ONORC PORTABLE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF1D4ED8))),
+                                        ),
+                                      ],
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFFCA5A5) : const Color(0xFF86EFAC)),
+                                        ),
+                                        child: Text(
+                                          (_searchedBeneficiary!['alreadyCollected'] as bool) ? 'ALREADY COLLECTED' : 'ELIGIBLE FOR DISPENSATION',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFDC2626) : _govGreen,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 20),
+
+                              // Quota Entitlement Boxes
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(color: const Color(0xFFF0FDF4), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFF86EFAC))),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text('Fortified Rice Quota', style: TextStyle(fontSize: 11, color: _govGreen, fontWeight: FontWeight.bold)),
+                                          const SizedBox(height: 4),
+                                          Text('${_dispenseRiceKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _govGreen)),
+                                          const Text('Rate: ₹0.00 / kg (NFSA Free)', style: TextStyle(fontSize: 10, color: _govGreen)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFFCD34D))),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text('Whole Wheat Quota', style: TextStyle(fontSize: 11, color: _amber, fontWeight: FontWeight.bold)),
+                                          const SizedBox(height: 4),
+                                          Text('${_dispenseWheatKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _amber)),
+                                          const Text('Rate: ₹0.00 / kg (NFSA Free)', style: TextStyle(fontSize: 10, color: _amber)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Interactive Biometric Optical Scanner Box
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: _isBiometricVerified ? const Color(0xFF86EFAC) : _slate200),
                                 ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        ElevatedButton(
-                          onPressed: () => setState(() => _isBiometricVerified = !_isBiometricVerified),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _isBiometricVerified ? _govGreen : _govNavy,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            minimumSize: Size.zero,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Stack(
+                                          alignment: Alignment.center,
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 22,
+                                              backgroundColor: _isBiometricVerified ? const Color(0xFFF0FDF4) : _slate100,
+                                              child: Icon(
+                                                _isBiometricVerified ? Icons.check_circle_rounded : Icons.fingerprint_rounded,
+                                                size: 26,
+                                                color: _isBiometricVerified ? _govGreen : _govNavy,
+                                              ),
+                                            ),
+                                            if (_isScanningBiometrics)
+                                              const SizedBox(
+                                                width: 44,
+                                                height: 44,
+                                                child: CircularProgressIndicator(strokeWidth: 2, color: _govNavy),
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text('Aadhaar Biometric e-KYC Verification', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _slate900)),
+                                            Text(
+                                              _isScanningBiometrics
+                                                  ? 'Capturing optical fingerprint sensor pulse...'
+                                                  : (_isBiometricVerified
+                                                      ? 'Identity Verified: Match Score 98.6% — Aadhaar Gateway Approved ✓'
+                                                      : 'Instruct citizen to place thumb on e-PoS optical scanner sensor'),
+                                              style: TextStyle(fontSize: 11, color: _isBiometricVerified ? _govGreen : _slate500, fontWeight: _isBiometricVerified ? FontWeight.w700 : FontWeight.w500),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    ElevatedButton.icon(
+                                      onPressed: _isScanningBiometrics ? null : _simulateBiometricScan,
+                                      icon: const Icon(Icons.fingerprint_rounded, size: 16),
+                                      label: Text(_isBiometricVerified ? 'Verified ✓' : 'Scan Fingerprint', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: _isBiometricVerified ? _govGreen : _govNavy,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Authorize & Dispense Button
+                              SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: ElevatedButton(
+                                  onPressed: (_isBiometricVerified && !_isDispensing && !(_searchedBeneficiary!['alreadyCollected'] as bool))
+                                      ? _handleDispenseRation
+                                      : null,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _govGreen,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 2,
+                                  ),
+                                  child: _isDispensing
+                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                      : Text(
+                                          (_searchedBeneficiary!['alreadyCollected'] as bool)
+                                              ? 'RATION ALREADY COLLECTED FOR ACTIVE CYCLE 2026-09'
+                                              : '⚡ AUTHORIZE & DISPENSE RATION (${_dispenseRiceKg.toStringAsFixed(0)}kg Rice + ${_dispenseWheatKg.toStringAsFixed(0)}kg Wheat)',
+                                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.3),
+                                        ),
+                                ),
+                              ),
+                            ],
                           ),
-                          child: Text(_isBiometricVerified ? 'Verified ✓' : 'Scan Fingerprint', style: const TextStyle(fontSize: 11)),
                         ),
                       ],
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-
-                  // Dispense Action Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 44,
-                    child: ElevatedButton(
-                      onPressed: (_isBiometricVerified && !_isDispensing && !(_searchedBeneficiary!['alreadyCollected'] as bool))
-                          ? _handleDispenseRation
-                          : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _govGreen,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: _isDispensing
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : Text(
-                              (_searchedBeneficiary!['alreadyCollected'] as bool)
-                                  ? 'RATION ALREADY COLLECTED FOR CYCLE 2026-09'
-                                  : 'AUTHORIZE & DISPENSE RATION (${_dispenseRiceKg.toStringAsFixed(0)}kg Rice + ${_dispenseWheatKg.toStringAsFixed(0)}kg Wheat)',
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );
