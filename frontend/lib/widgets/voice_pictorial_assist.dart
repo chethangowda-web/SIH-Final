@@ -616,3 +616,122 @@ class _VoicePictorialAssistModalState extends State<VoicePictorialAssistModal> {
     );
   }
 }
+
+class VoiceAIBanner extends StatelessWidget {
+  final String beneficiaryName;
+  final VoidCallback? onMicTap;
+  final ValueChanged<BeneficiaryVoiceAction>? onVoiceAction;
+
+  const VoiceAIBanner({
+    super.key,
+    required this.beneficiaryName,
+    this.onMicTap,
+    this.onVoiceAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1E3A8A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1E3A8A).withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: Text('🤖', style: TextStyle(fontSize: 24)),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tr('beneficiary.home.ai_welcome', params: {'name': beneficiaryName}),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      tr('beneficiary.home.ai_prompt'),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: Colors.white.withValues(alpha: 0.85),
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const LanguageSelectorWidget(isCompact: true),
+            ],
+          ),
+          const SizedBox(height: 14),
+          InkWell(
+            onTap: onMicTap ?? () {
+              VoicePictorialAssistModal.show(
+                context,
+                onApplyVoiceIntent: (mode, rice, wheat) {
+                  onVoiceAction?.call(BeneficiaryVoiceAction.openRation);
+                },
+              );
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.mic, color: Colors.amberAccent, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    tr('beneficiary.voice.tap_to_speak') ?? 'Tap to Speak / Voice Assist',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

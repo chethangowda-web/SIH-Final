@@ -585,6 +585,101 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         ),
         const SizedBox(height: 12),
 
+        // Voice Kiosk Quick Login Button for Low-Literacy Citizens
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              VoicePictorialAssistModal.show(
+                context,
+                onApplyVoiceIntent: (mode, rice, wheat) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const BeneficiaryHomeScreen(
+                        beneficiaryId: 'KA-BEN-2026-0084',
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0F382C), Color(0xFF006644)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber, width: 1.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x1A006644),
+                    blurRadius: 8,
+                    offset: Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.mic, color: Colors.amberAccent, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tr('beneficiary.voice.tap_to_speak') ?? '🎙️ Tap to Speak / Voice Login',
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          tr('beneficiary.home.ai_prompt') ?? 'Low-literacy and voice-first mode available',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios_rounded, color: Colors.amberAccent, size: 14),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        Row(
+          children: [
+            Expanded(child: Divider(color: _slate200)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(
+                'OR ENTER DETAILS',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: _slate400, letterSpacing: 0.5),
+              ),
+            ),
+            Expanded(child: Divider(color: _slate200)),
+          ],
+        ),
+        const SizedBox(height: 12),
+
         // Field 1: Ration Card Number
         Text(tr('login.ration_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
         const SizedBox(height: 4),
