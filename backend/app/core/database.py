@@ -1198,6 +1198,192 @@ def _migration_010_dso_tables(cursor: sqlite3.Cursor) -> None:
     """)
 
 
+def _migration_011_audit_workflow(cursor: sqlite3.Cursor) -> None:
+    """010: Persistent Audit Sessions and Sealed Audit Reports for Vigilance Auditor."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS audit_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cycle_id TEXT NOT NULL UNIQUE,
+        auditor_id TEXT NOT NULL DEFAULT 'auditor_user',
+        current_step INTEGER NOT NULL DEFAULT 1,
+        completed_steps TEXT NOT NULL DEFAULT '[]',
+        step_status TEXT NOT NULL DEFAULT '{}',
+        manifest_verified INTEGER NOT NULL DEFAULT 0,
+        hash_verification_status TEXT NOT NULL DEFAULT 'PENDING',
+        anomalies_reviewed INTEGER NOT NULL DEFAULT 0,
+        verification_notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_sessions_cycle ON audit_sessions (cycle_id);")
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS audit_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        report_id TEXT NOT NULL UNIQUE,
+        cycle_id TEXT NOT NULL,
+        auditor_id TEXT NOT NULL DEFAULT 'auditor_user',
+        district TEXT NOT NULL DEFAULT 'Bengaluru Urban',
+        scope_text TEXT NOT NULL,
+        manifest_summary TEXT NOT NULL DEFAULT '{}',
+        gatepass_summary TEXT NOT NULL DEFAULT '{}',
+        forecast_actual_summary TEXT NOT NULL DEFAULT '{}',
+        inspection_summary TEXT NOT NULL DEFAULT '{}',
+        anomalies_summary TEXT NOT NULL DEFAULT '{}',
+        evidence_summary TEXT NOT NULL DEFAULT '{}',
+        audit_observations TEXT NOT NULL,
+        integrity_status TEXT NOT NULL DEFAULT 'VERIFIED',
+        report_hash TEXT NOT NULL,
+        sealed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_reports_cycle ON audit_reports (cycle_id);")
+
+
+def _migration_011_fps_operations(cursor: sqlite3.Cursor) -> None:
+    """011: Persistent FPS Daily Operations, Consignment Receipts, and Daily Stock Reconciliations."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS fps_daily_operations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fps_id TEXT NOT NULL,
+        cycle_id TEXT NOT NULL DEFAULT '2026-09',
+        operation_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'OPEN',
+        opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        opened_by TEXT NOT NULL DEFAULT 'fps_user',
+        closed_at TIMESTAMP,
+        closed_by TEXT,
+        opening_checklist_json TEXT NOT NULL DEFAULT '{}',
+        closing_checklist_json TEXT NOT NULL DEFAULT '{}',
+        notes TEXT,
+        UNIQUE(fps_id, cycle_id, operation_date)
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fps_daily_ops ON fps_daily_operations (fps_id, cycle_id);")
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS fps_consignment_receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fps_id TEXT NOT NULL,
+        cycle_id TEXT NOT NULL DEFAULT '2026-09',
+        gatepass_id TEXT NOT NULL,
+        manifest_id TEXT,
+        truck_id TEXT,
+        rice_received_kg REAL NOT NULL DEFAULT 0.0,
+        wheat_received_kg REAL NOT NULL DEFAULT 0.0,
+        received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        received_by TEXT NOT NULL DEFAULT 'fps_user',
+        status TEXT NOT NULL DEFAULT 'CONFIRMED',
+        remarks TEXT,
+        UNIQUE(fps_id, gatepass_id)
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fps_receipts ON fps_consignment_receipts (fps_id, cycle_id);")
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS fps_daily_reconciliations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fps_id TEXT NOT NULL,
+        cycle_id TEXT NOT NULL DEFAULT '2026-09',
+        reconciliation_date TEXT NOT NULL,
+        rice_opening_kg REAL NOT NULL DEFAULT 0.0,
+        rice_received_kg REAL NOT NULL DEFAULT 0.0,
+        rice_dispensed_kg REAL NOT NULL DEFAULT 0.0,
+        rice_expected_closing_kg REAL NOT NULL DEFAULT 0.0,
+        rice_recorded_closing_kg REAL NOT NULL DEFAULT 0.0,
+        rice_variance_kg REAL NOT NULL DEFAULT 0.0,
+        wheat_opening_kg REAL NOT NULL DEFAULT 0.0,
+        wheat_received_kg REAL NOT NULL DEFAULT 0.0,
+        wheat_dispensed_kg REAL NOT NULL DEFAULT 0.0,
+        wheat_expected_closing_kg REAL NOT NULL DEFAULT 0.0,
+        wheat_recorded_closing_kg REAL NOT NULL DEFAULT 0.0,
+        wheat_variance_kg REAL NOT NULL DEFAULT 0.0,
+        status TEXT NOT NULL DEFAULT 'RECONCILED',
+        reconciled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        reconciled_by TEXT NOT NULL DEFAULT 'fps_user',
+        notes TEXT,
+        UNIQUE(fps_id, cycle_id, reconciliation_date)
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fps_reconcile ON fps_daily_reconciliations (fps_id, cycle_id);")
+
+
+
+def _migration_012_inspector_workflow(cursor: sqlite3.Cursor) -> None:
+    """012: Field Food Inspector Operational Workflow, Evidence Attachment, and Cryptographic Sealing."""
+    new_cols = [
+        ("order_id", "TEXT"),
+        ("expected_rice_kg", "REAL DEFAULT 0.0"),
+        ("observed_rice_kg", "REAL"),
+        ("rice_diff_kg", "REAL"),
+        ("expected_wheat_kg", "REAL DEFAULT 0.0"),
+        ("observed_wheat_kg", "REAL"),
+        ("wheat_diff_kg", "REAL"),
+        ("moisture_pct", "REAL"),
+        ("moisture_result", "TEXT"),
+        ("scale_error_g", "REAL"),
+        ("scale_result", "TEXT"),
+        ("seizure_issued", "INTEGER DEFAULT 0"),
+        ("seizure_reason", "TEXT"),
+        ("evidence_json", "TEXT DEFAULT '[]'"),
+        ("sealed_hash", "TEXT"),
+        ("sealed_at", "TIMESTAMP"),
+        ("cycle_id", "TEXT DEFAULT '2026-09'"),
+        ("geofence_verified", "INTEGER DEFAULT 0"),
+        ("geofence_distance_m", "REAL"),
+        ("truck_id", "TEXT"),
+        ("gatepass_id", "TEXT"),
+        ("manifest_id", "TEXT"),
+        ("target_confirmed", "INTEGER DEFAULT 0"),
+    ]
+    for col_name, col_type in new_cols:
+        try:
+            cursor.execute(f"ALTER TABLE fps_inspections ADD COLUMN {col_name} {col_type};")
+        except Exception:
+            pass
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS inspection_evidence (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        evidence_id TEXT NOT NULL UNIQUE,
+        inspection_id TEXT,
+        fps_id TEXT NOT NULL,
+        inspector_id TEXT NOT NULL,
+        evidence_type TEXT NOT NULL,
+        description TEXT,
+        reference_path TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_insp_evidence_fps ON inspection_evidence (fps_id);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_insp_evidence_insp ON inspection_evidence (inspection_id);")
+
+
+def _migration_013_escalation_system(cursor: sqlite3.Cursor) -> None:
+    """013: AI Complaint Escalation System - Cluster table for grouped complaints."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS complaint_clusters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cluster_id TEXT NOT NULL UNIQUE,
+        cluster_label TEXT NOT NULL,
+        ai_summary TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'GENERAL',
+        complaint_count INTEGER NOT NULL DEFAULT 1,
+        ticket_ids_json TEXT NOT NULL DEFAULT '[]',
+        primary_fps_id TEXT,
+        severity TEXT NOT NULL DEFAULT 'MEDIUM',
+        escalation_status TEXT NOT NULL DEFAULT 'PENDING',
+        escalated_at TIMESTAMP,
+        dso_response TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_complaint_clusters_status ON complaint_clusters (escalation_status);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_complaint_clusters_category ON complaint_clusters (category);")
+
+
 # Migration Registry
 MIGRATIONS = [
     (1, "001_core_supply_chain_schema", _migration_001_core_supply_chain),
@@ -1210,6 +1396,10 @@ MIGRATIONS = [
     (8, "008_sih_v2_features", _migration_008_sih_v2_features),
     (9, "009_beneficiary_phone", _migration_009_beneficiary_phone),
     (10, "010_dso_tables", _migration_010_dso_tables),
+    (11, "011_audit_workflow", _migration_011_audit_workflow),
+    (12, "012_fps_operations", _migration_011_fps_operations),
+    (13, "013_inspector_workflow", _migration_012_inspector_workflow),
+    (14, "014_escalation_system", _migration_013_escalation_system),
 ]
 
 

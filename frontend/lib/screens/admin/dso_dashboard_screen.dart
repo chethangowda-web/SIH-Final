@@ -3,6 +3,7 @@ import '../../services/api_service.dart';
 import '../../models/beneficiary_model.dart';
 import '../../models/admin_model.dart';
 import '../beneficiary/demo_login_screen.dart';
+import 'escalation_system_dialog.dart';
 
 class DsoDashboardScreen extends StatefulWidget {
   final ApiService? apiService;
@@ -873,6 +874,25 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
             onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
           const SizedBox(width: 8),
+          // AI Grievance Escalation Button
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7C3AED),
+              foregroundColor: Colors.white,
+              elevation: 2,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
+            icon: const Icon(Icons.escalator_warning_rounded, size: 16),
+            label: const Text('AI Grievance Escalation', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => EscalationSystemDialog(apiService: _apiService),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
           // Help Dialog
           IconButton(
             icon: const Icon(Icons.help_outline_rounded, color: Colors.white70, size: 20),
@@ -1167,6 +1187,10 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
         ),
         const SizedBox(height: 24),
 
+        // 1.5 AI Grievance Escalation Spotlight Banner
+        _buildEscalationSpotlightCard(),
+        const SizedBox(height: 24),
+
         // 2. District Attention Queue
         _buildDistrictAttentionQueue(),
         const SizedBox(height: 24),
@@ -1179,6 +1203,84 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildEscalationSpotlightCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2E1065), Color(0xFF581C87), Color(0xFF6B21A8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF9333EA).withOpacity(0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF581C87).withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.escalator_warning_rounded, color: Colors.white, size: 24),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'AI GRIEVANCE ESCALATION & COMPLAINT CLUSTERING',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5),
+                    ),
+                    SizedBox(width: 8),
+                    Badge(
+                      label: Text('AI ACTIVE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                      backgroundColor: Color(0xFF10B981),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'NLP engine clusters unresolved citizen & FPS grievances by semantic similarity. Clustered complaints not addressed by FPS dealers or field officers escalate directly to DSO as a single priority case.',
+                  style: TextStyle(fontSize: 12, color: Colors.white70, height: 1.3),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF581C87),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.hub_rounded, size: 16),
+            label: const Text('Open Escalation Console', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => EscalationSystemDialog(apiService: _apiService),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 

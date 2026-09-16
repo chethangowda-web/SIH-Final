@@ -3051,7 +3051,500 @@ class ApiService {
     return [];
   }
 
+  Future<List<Map<String, dynamic>>> fetchAuditCycles() async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/cycles'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
 
+    if (response.statusCode == 200) {
+      final list = json.decode(response.body) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    throw parseError(response, 'Failed to fetch audit cycles');
+  }
+
+  Future<Map<String, dynamic>> fetchAuditSession(String cycleId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/session/$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to fetch audit session');
+  }
+
+  Future<void> updateAuditSessionStep(
+    String cycleId, {
+    required int currentStep,
+    List<int>? completedSteps,
+    Map<String, dynamic>? stepStatus,
+    bool? manifestVerified,
+    String? hashVerificationStatus,
+    int? anomaliesReviewed,
+    String? verificationNotes,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/session/$cycleId/step'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'current_step': currentStep,
+        if (completedSteps != null) 'completed_steps': completedSteps,
+        if (stepStatus != null) 'step_status': stepStatus,
+        if (manifestVerified != null) 'manifest_verified': manifestVerified,
+        if (hashVerificationStatus != null) 'hash_verification_status': hashVerificationStatus,
+        if (anomaliesReviewed != null) 'anomalies_reviewed': anomaliesReviewed,
+        if (verificationNotes != null) 'verification_notes': verificationNotes,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode != 200) {
+      throw parseError(response, 'Failed to update audit session step');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAuditTimeline(String cycleId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/timeline/$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      final list = json.decode(response.body) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    throw parseError(response, 'Failed to fetch audit timeline');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAuditManifests(String cycleId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/manifests/$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      final list = json.decode(response.body) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    throw parseError(response, 'Failed to fetch manifests');
+  }
+
+  Future<Map<String, dynamic>> verifyManifestCryptographicSeal(String manifestId) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/manifest/verify'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'manifest_id': manifestId}),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to verify manifest cryptographic seal');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAuditGatepasses(String cycleId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/gatepasses/$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      final list = json.decode(response.body) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    throw parseError(response, 'Failed to fetch gatepasses');
+  }
+
+  Future<Map<String, dynamic>> fetchAuditForecastVsActual(
+    String cycleId, {
+    String? fpsId,
+    String? commodity,
+  }) async {
+    final params = <String, String>{};
+    if (fpsId != null && fpsId.isNotEmpty) params['fps_id'] = fpsId;
+    if (commodity != null && commodity.isNotEmpty) params['commodity'] = commodity;
+
+    final uri = Uri.parse('${AppConstants.apiBaseUrl}/audit/forecast-vs-actual/$cycleId').replace(queryParameters: params.isNotEmpty ? params : null);
+    final response = await client.get(uri, headers: {'Accept': 'application/json'}).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to fetch forecast vs actual evaluation');
+  }
+
+  Future<Map<String, dynamic>> fetchAuditDiscrepancy(int evaluationId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/discrepancy/$evaluationId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to fetch discrepancy underlying records');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAuditInspections(String cycleId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/inspections/$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      final list = json.decode(response.body) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    throw parseError(response, 'Failed to fetch field inspection logs');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAuditAnomalies(String cycleId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/anomalies/$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      final list = json.decode(response.body) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    throw parseError(response, 'Failed to fetch audit anomalies');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAuditEvidenceChain(String cycleId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/evidence-chain/$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      final list = json.decode(response.body) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    throw parseError(response, 'Failed to fetch traceable evidence chain');
+  }
+
+  Future<Map<String, dynamic>> generateAuditReport({
+    required String cycleId,
+    required String auditObservations,
+    String? district,
+    String? scopeText,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/report/generate'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'cycle_id': cycleId,
+        'audit_observations': auditObservations,
+        if (district != null) 'district': district,
+        if (scopeText != null) 'scope_text': scopeText,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to generate sealed audit report');
+  }
+
+  Future<Map<String, dynamic>?> fetchAuditReport(String cycleId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/audit/report/$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      if (response.body.isEmpty || response.body == 'null') return null;
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    return null;
+  }
+
+  // =========================================================================
+  // FPS OWNER OPERATIONS WORKFLOW APIS
+  // =========================================================================
+
+  Future<Map<String, dynamic>> fetchFpsOpsProfile(String fpsId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/profile/$fpsId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to fetch FPS operational profile');
+  }
+
+  Future<Map<String, dynamic>> openFpsDailyShop(String fpsId) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/open-shop/$fpsId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to open Fair Price Shop');
+  }
+
+  Future<Map<String, dynamic>> closeFpsDailyShop(String fpsId) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/close-day/$fpsId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to close daily Fair Price Shop operations');
+  }
+
+  Future<Map<String, dynamic>> fetchFpsOpsStock(String fpsId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/stock/$fpsId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to fetch store inventory');
+  }
+
+  Future<Map<String, dynamic>> fetchFpsOpsStockLedger(String fpsId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/stock-ledger/$fpsId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to fetch stock ledger');
+  }
+
+  Future<Map<String, dynamic>> fetchFpsOpsReplenishments(String fpsId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/replenishments/$fpsId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to fetch incoming consignments');
+  }
+
+  Future<Map<String, dynamic>> confirmFpsReplenishment(
+    String fpsId,
+    Map<String, dynamic> payload,
+  ) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/confirm-replenishment/$fpsId'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode(payload),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to confirm consignment delivery');
+  }
+
+  Future<Map<String, dynamic>> fetchFpsBeneficiaryEntitlement(
+    String fpsId,
+    String beneficiaryId,
+  ) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/beneficiary/$fpsId/$beneficiaryId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Citizen entitlement record unavailable');
+  }
+
+  Future<Map<String, dynamic>> dispenseFpsEposRation(Map<String, dynamic> payload) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/dispense'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode(payload),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'e-PoS dispensation transaction failed');
+  }
+
+  Future<Map<String, dynamic>> fetchFpsOpsRegister(String fpsId, {String? search}) async {
+    final params = <String, String>{};
+    if (search != null && search.isNotEmpty) params['search'] = search;
+
+    final uri = Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/register/$fpsId')
+        .replace(queryParameters: params.isNotEmpty ? params : null);
+    final response = await client.get(uri, headers: {'Accept': 'application/json'}).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to fetch digital register');
+  }
+
+  Future<Map<String, dynamic>> fetchFpsOpsReconciliation(String fpsId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/reconciliation/$fpsId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to calculate stock reconciliation');
+  }
+
+  Future<Map<String, dynamic>> submitFpsReconciliation(
+    String fpsId,
+    Map<String, dynamic> payload,
+  ) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps-ops/reconcile/$fpsId'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode(payload),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to register stock reconciliation');
+  }
+
+  Future<Map<String, dynamic>> fetchMonthlyCycleIntelligence({
+    required String cycleId,
+    bool force = false,
+  }) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/reports/monthly-cycle-intelligence/$cycleId?force=$force'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to fetch monthly cycle intelligence report');
+  }
+
+  Future<Map<String, dynamic>> generateMonthlyCycleIntelligence({
+    required String cycleId,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/reports/monthly-cycle-intelligence/generate'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({'cycle_id': cycleId}),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    }
+    throw parseError(response, 'Failed to generate monthly cycle intelligence report');
+  }
+
+  // =========================================================================
+  // ESCALATION SYSTEM - Feedback, Complaints & AI Complaint Clustering
+  // =========================================================================
+
+  /// Fetch all feedback/complaint tickets (optionally filtered by status)
+  Future<List<Map<String, dynamic>>> fetchFeedbackList({String? statusFilter}) async {
+    String url = '${AppConstants.apiBaseUrl}/feedback/list';
+    if (statusFilter != null && statusFilter.isNotEmpty) {
+      url += '?status_filter=$statusFilter';
+    }
+    final response = await client
+        .get(Uri.parse(url), headers: {'Accept': 'application/json'})
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      final list = json.decode(response.body) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } else {
+      throw parseError(response, 'Failed to fetch feedback tickets');
+    }
+  }
+
+  /// Submit a new feedback/complaint ticket
+  Future<Map<String, dynamic>> submitFeedback({
+    required String senderType,
+    required String senderId,
+    required String targetFpsId,
+    required String category,
+    required String subject,
+    required String message,
+  }) async {
+    final response = await client
+        .post(
+          Uri.parse('${AppConstants.apiBaseUrl}/feedback/submit'),
+          headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+          body: json.encode({
+            'sender_type': senderType,
+            'sender_id': senderId,
+            'target_fps_id': targetFpsId,
+            'category': category,
+            'subject': subject,
+            'message': message,
+          }),
+        )
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 201) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response, 'Failed to submit feedback ticket');
+    }
+  }
+
+  /// Fetch AI escalation analysis — clusters unresolved complaints by similarity
+  Future<Map<String, dynamic>> fetchEscalationAnalysis() async {
+    final response = await client
+        .get(
+          Uri.parse('${AppConstants.apiBaseUrl}/feedback/escalation/analysis'),
+          headers: {'Accept': 'application/json'},
+        )
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response, 'Failed to fetch escalation analysis');
+    }
+  }
+
+  /// Escalate a complaint cluster to DSO as one unified complaint
+  Future<Map<String, dynamic>> escalateCluster({
+    required String clusterId,
+    String? dsoResponse,
+  }) async {
+    final response = await client
+        .post(
+          Uri.parse('${AppConstants.apiBaseUrl}/feedback/escalation/escalate-cluster'),
+          headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+          body: json.encode({
+            'cluster_id': clusterId,
+            if (dsoResponse != null) 'dso_response': dsoResponse,
+          }),
+        )
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response, 'Failed to escalate cluster');
+    }
+  }
 }
 
 class CitizenRequestModel {
