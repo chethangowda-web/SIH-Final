@@ -120,6 +120,8 @@ class AdminDashboardData {
   final List<AdminFpsRow> fpsList;
   final String workflowStatus;
   final Map<String, dynamic>? planningCycleState;
+  final double depotAvailableStockMt;
+  final List<Map<String, dynamic>> attentionQueue;
 
   int get planningDay => planningCycleState?['planning_day'] ?? (workflowStatus == 'PLANNING_OPEN' ? 22 : 25);
   bool get isDemandLocked => planningCycleState?['is_demand_locked'] ?? (workflowStatus != 'PLANNING_OPEN');
@@ -149,6 +151,8 @@ class AdminDashboardData {
     required this.fpsList,
     required this.workflowStatus,
     this.planningCycleState,
+    this.depotAvailableStockMt = 850.0,
+    this.attentionQueue = const [],
   });
 
   factory AdminDashboardData.fromJson(Map<String, dynamic> json) {
@@ -195,6 +199,12 @@ class AdminDashboardData {
       planningCycleState: json['planning_cycle_state'] != null
           ? Map<String, dynamic>.from(json['planning_cycle_state'])
           : null,
+      depotAvailableStockMt:
+          (json['depot_available_stock_mt'] as num?)?.toDouble() ?? 850.0,
+      attentionQueue: (json['attention_queue'] as List<dynamic>?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          [],
     );
   }
 }

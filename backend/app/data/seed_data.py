@@ -491,6 +491,244 @@ def seed_citizen_requests(cursor, conn):
     return len(citizen_request_rows)
 
 
+def seed_dso_operational_baseline(cursor):
+    """
+    Ensure the exact authoritative operational case Fair Price Shops and depot records
+    for DSO operational decision making exist with deterministic figures:
+    - FPS-KA-BLR-015 / FPS-KA-BLR-U-0015 (CRITICAL stock shortage: Stock 350 kg, Requirement 3,200 kg)
+    - FPS-KA-BLR-008 / FPS-KA-BLR-U-0008 (HIGH storage constraint: Stock 3,650 kg of 4,000 kg capacity)
+    - FPS-KA-BLR-003 / FPS-KA-BLR-U-0003 (MEDIUM demand variance: Citizen intent +121% over baseline)
+    - FPS-001 / FPS-KA-BLR-001 / FPS-KA-BLR-U-0001 (Requirement 2,500 kg, Existing 800 kg, Net 1,700 kg, Alloc 1,700 kg)
+    - Real vehicles & routes from Central Godown DEPOT-01
+    - Manifests & Gatepasses with valid linkage
+    """
+    import json
+
+    # 1. Guarantee DEPOT-01 is present with exactly 850 MT available stock
+    cursor.execute("""
+    INSERT OR REPLACE INTO depots (
+        depot_id, name, district, location, capacity_mt,
+        available_stock_mt, loading_capacity_mt_day, rice_stock_mt, wheat_stock_mt, status
+    ) VALUES (
+        'DEPOT-01', 'Bengaluru Central FCI Godown (Hebbal)', 'Bengaluru Urban', 'Hebbal Corridor, Bengaluru',
+        1200.0, 850.0, 150.0, 550.0, 300.0, 'OPERATIONAL'
+    );
+    """)
+
+    # 2. Key FPS Case Records: Support both standard codes and U-codes
+    fps_cases = [
+        ("FPS-KA-BLR-015", "Fair Price Shop 15 (Bengaluru Urban)", "Bengaluru Urban", 12.9784, 77.5912, 5000.0),
+        ("FPS-KA-BLR-U-0015", "Fair Price Shop 15 (Bengaluru Urban)", "Bengaluru Urban", 12.9784, 77.5912, 5000.0),
+        ("FPS-KA-BLR-008", "Fair Price Shop 8 (Bengaluru Urban)", "Bengaluru Urban", 12.9810, 77.6015, 4000.0),
+        ("FPS-KA-BLR-U-0008", "Fair Price Shop 8 (Bengaluru Urban)", "Bengaluru Urban", 12.9810, 77.6015, 4000.0),
+        ("FPS-KA-BLR-003", "Fair Price Shop 3 (Bengaluru Urban)", "Bengaluru Urban", 12.9692, 77.5850, 4000.0),
+        ("FPS-KA-BLR-U-0003", "Fair Price Shop 3 (Bengaluru Urban)", "Bengaluru Urban", 12.9692, 77.5850, 4000.0),
+        ("FPS-001", "Fair Price Shop 1 (Bengaluru Urban)", "Bengaluru Urban", 12.9716, 77.5946, 5000.0),
+        ("FPS-KA-BLR-001", "Fair Price Shop 1 (Bengaluru Urban)", "Bengaluru Urban", 12.9716, 77.5946, 5000.0),
+        ("FPS-KA-BLR-U-0001", "Fair Price Shop 1 (Bengaluru Urban)", "Bengaluru Urban", 12.9716, 77.5946, 5000.0),
+    ]
+
+    for fid, fname, fdist, flat, flng, fcap in fps_cases:
+        cursor.execute("""
+        INSERT OR REPLACE INTO fps (
+            fps_id, name, district, latitude, longitude, capacity_kg,
+            stockout_frequency, portability_rate, seasonal_factor,
+            beneficiaries_count, entitlement_rice_kg, entitlement_wheat_kg, status
+        ) VALUES (?, ?, ?, ?, ?, ?, 0.05, 0.12, 1.05, 120, 25.0, 10.0, 'ACTIVE');
+        """, (fid, fname, fdist, flat, flng, fcap))
+
+    # 3. Inventory for Key FPS Cases
+    for fid in ["FPS-KA-BLR-015", "FPS-KA-BLR-U-0015"]:
+        cursor.execute("INSERT OR REPLACE INTO inventory (fps_id, commodity, available_quantity_kg) VALUES (?, 'Rice', 250.0);", (fid,))
+        cursor.execute("INSERT OR REPLACE INTO inventory (fps_id, commodity, available_quantity_kg) VALUES (?, 'Wheat', 100.0);", (fid,))
+
+    for fid in ["FPS-KA-BLR-008", "FPS-KA-BLR-U-0008"]:
+        cursor.execute("INSERT OR REPLACE INTO inventory (fps_id, commodity, available_quantity_kg) VALUES (?, 'Rice', 2600.0);", (fid,))
+        cursor.execute("INSERT OR REPLACE INTO inventory (fps_id, commodity, available_quantity_kg) VALUES (?, 'Wheat', 1050.0);", (fid,))
+
+    for fid in ["FPS-KA-BLR-003", "FPS-KA-BLR-U-0003"]:
+        cursor.execute("INSERT OR REPLACE INTO inventory (fps_id, commodity, available_quantity_kg) VALUES (?, 'Rice', 1000.0);", (fid,))
+        cursor.execute("INSERT OR REPLACE INTO inventory (fps_id, commodity, available_quantity_kg) VALUES (?, 'Wheat', 400.0);", (fid,))
+
+    for fid in ["FPS-001", "FPS-KA-BLR-001", "FPS-KA-BLR-U-0001"]:
+        cursor.execute("INSERT OR REPLACE INTO inventory (fps_id, commodity, available_quantity_kg) VALUES (?, 'Rice', 800.0);", (fid,))
+        cursor.execute("INSERT OR REPLACE INTO inventory (fps_id, commodity, available_quantity_kg) VALUES (?, 'Wheat', 300.0);", (fid,))
+
+    # 4. Forecasts for Key FPS Cases (Cycle 2026-09)
+    for fid in ["FPS-KA-BLR-015", "FPS-KA-BLR-U-0015"]:
+        cursor.execute("""
+        INSERT OR REPLACE INTO forecast (
+            fps_id, cycle_id, commodity, historical_component, intent_component,
+            inventory_component, predicted_quantity_kg, recommended_dispatch_kg, confidence, risk_level, status
+        ) VALUES (?, '2026-09', 'Rice', 2200.0, 2400.0, 250.0, 2300.0, 2050.0, 0.94, 'CRITICAL', 'DRAFT');
+        """, (fid,))
+        cursor.execute("""
+        INSERT OR REPLACE INTO forecast (
+            fps_id, cycle_id, commodity, historical_component, intent_component,
+            inventory_component, predicted_quantity_kg, recommended_dispatch_kg, confidence, risk_level, status
+        ) VALUES (?, '2026-09', 'Wheat', 900.0, 900.0, 100.0, 900.0, 800.0, 0.95, 'CRITICAL', 'DRAFT');
+        """, (fid,))
+
+    for fid in ["FPS-KA-BLR-008", "FPS-KA-BLR-U-0008"]:
+        cursor.execute("""
+        INSERT OR REPLACE INTO forecast (
+            fps_id, cycle_id, commodity, historical_component, intent_component,
+            inventory_component, predicted_quantity_kg, recommended_dispatch_kg, confidence, risk_level, status
+        ) VALUES (?, '2026-09', 'Rice', 1300.0, 1200.0, 2600.0, 1300.0, 0.0, 0.92, 'HIGH', 'DRAFT');
+        """, (fid,))
+        cursor.execute("""
+        INSERT OR REPLACE INTO forecast (
+            fps_id, cycle_id, commodity, historical_component, intent_component,
+            inventory_component, predicted_quantity_kg, recommended_dispatch_kg, confidence, risk_level, status
+        ) VALUES (?, '2026-09', 'Wheat', 500.0, 500.0, 1050.0, 500.0, 0.0, 0.93, 'HIGH', 'DRAFT');
+        """, (fid,))
+
+    for fid in ["FPS-KA-BLR-003", "FPS-KA-BLR-U-0003"]:
+        cursor.execute("""
+        INSERT OR REPLACE INTO forecast (
+            fps_id, cycle_id, commodity, historical_component, intent_component,
+            inventory_component, predicted_quantity_kg, recommended_dispatch_kg, confidence, risk_level, status
+        ) VALUES (?, '2026-09', 'Rice', 850.0, 1900.0, 1000.0, 1750.0, 750.0, 0.88, 'MEDIUM', 'DRAFT');
+        """, (fid,))
+        cursor.execute("""
+        INSERT OR REPLACE INTO forecast (
+            fps_id, cycle_id, commodity, historical_component, intent_component,
+            inventory_component, predicted_quantity_kg, recommended_dispatch_kg, confidence, risk_level, status
+        ) VALUES (?, '2026-09', 'Wheat', 350.0, 750.0, 400.0, 700.0, 300.0, 0.89, 'MEDIUM', 'DRAFT');
+        """, (fid,))
+
+    for fid in ["FPS-001", "FPS-KA-BLR-001", "FPS-KA-BLR-U-0001"]:
+        cursor.execute("""
+        INSERT OR REPLACE INTO forecast (
+            fps_id, cycle_id, commodity, historical_component, intent_component,
+            inventory_component, predicted_quantity_kg, recommended_dispatch_kg, confidence, risk_level, status
+        ) VALUES (?, '2026-09', 'Rice', 2400.0, 2600.0, 800.0, 2500.0, 1700.0, 0.96, 'NORMAL', 'DRAFT');
+        """, (fid,))
+        cursor.execute("""
+        INSERT OR REPLACE INTO forecast (
+            fps_id, cycle_id, commodity, historical_component, intent_component,
+            inventory_component, predicted_quantity_kg, recommended_dispatch_kg, confidence, risk_level, status
+        ) VALUES (?, '2026-09', 'Wheat', 950.0, 1050.0, 300.0, 1000.0, 700.0, 0.95, 'NORMAL', 'DRAFT');
+        """, (fid,))
+
+    # 5. Real Vehicles from fleet for Bengaluru Urban (Central FCI Hebbal Godown)
+    bengaluru_trucks = [
+        ("TRK-KA-0031", "Logistics Vehicle 0031", "Medium Logistics", "North-West Heavy Corridor", 7000.0, "DEPOT-01", "Harish Sharma", "+91-9875779236", "DEPOT-01", "AVAILABLE"),
+        ("TRK-KA-0032", "Logistics Vehicle 0032", "Heavy Haulage", "East Corridor / IT Belt", 10000.0, "DEPOT-01", "Venkatesh Gowda", "+91-9884880752", "DEPOT-01", "AVAILABLE"),
+        ("TRK-KA-0033", "Logistics Vehicle 0033", "Light Feeder", "Central Heritage Urban Cluster", 5000.0, "DEPOT-01", "Ganesh Hegde", "+91-9833892421", "DEPOT-01", "AVAILABLE"),
+        ("TRK-KA-0034", "Logistics Vehicle 0034", "Medium Logistics", "South Industrial Corridor", 7000.0, "DEPOT-01", "Ramesh Hegde", "+91-9872555645", "DEPOT-01", "AVAILABLE"),
+    ]
+    for tid, tmod, ttyp, tcor, tpay, tloc, tdname, tdphone, tdep, tstat in bengaluru_trucks:
+        cursor.execute("""
+        INSERT OR REPLACE INTO vehicles (
+            truck_id, model, vehicle_type, corridor, max_payload_kg,
+            current_location, operating_cost_per_km, driver_name, driver_phone, source_depot_id, status
+        ) VALUES (?, ?, ?, ?, ?, ?, 32.0, ?, ?, ?, ?);
+        """, (tid, tmod, ttyp, tcor, tpay, tloc, tdname, tdphone, tdep, tstat))
+
+    # 6. Real Routes connecting DEPOT-01 to FPS
+    routes_data = [
+        ("RT-DEPOT-01-BLR-015", "DEPOT-01", "FPS-KA-BLR-015", 18.4, 45, "URBAN_CORRIDOR", "CLEAR"),
+        ("RT-DEPOT-01-BLR-U-0015", "DEPOT-01", "FPS-KA-BLR-U-0015", 18.4, 45, "URBAN_CORRIDOR", "CLEAR"),
+        ("RT-DEPOT-01-BLR-008", "DEPOT-01", "FPS-KA-BLR-008", 9.6, 33, "URBAN_CORRIDOR", "CLEAR"),
+        ("RT-DEPOT-01-BLR-U-0008", "DEPOT-01", "FPS-KA-BLR-U-0008", 9.6, 33, "URBAN_CORRIDOR", "CLEAR"),
+        ("RT-DEPOT-01-BLR-003", "DEPOT-01", "FPS-KA-BLR-003", 5.8, 24, "RURAL_FEEDER", "CLEAR"),
+        ("RT-DEPOT-01-BLR-U-0003", "DEPOT-01", "FPS-KA-BLR-U-0003", 5.8, 24, "RURAL_FEEDER", "CLEAR"),
+        ("RT-DEPOT-01-BLR-001", "DEPOT-01", "FPS-001", 14.9, 46, "URBAN_CORRIDOR", "CLEAR"),
+        ("RT-DEPOT-01-BLR-U-0001", "DEPOT-01", "FPS-KA-BLR-U-0001", 14.9, 46, "URBAN_CORRIDOR", "CLEAR"),
+    ]
+    for rid, sdep, dfps, dist, time_m, road, rest in routes_data:
+        cursor.execute("""
+        INSERT OR REPLACE INTO routes (
+            route_id, source_depot_id, destination_fps_id, distance_km,
+            estimated_time_mins, road_condition, restriction_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?);
+        """, (rid, sdep, dfps, dist, time_m, road, rest))
+
+    # 7. Authoritative Manifests for Stage 5 & 6
+    manifests_data = [
+        (
+            "MAN-2026-0912", "2026-09", "TRK-KA-0032", "DEPOT-01", "East Corridor / IT Belt",
+            2850.0, 0.0, 2850.0, "Venkatesh Gowda", "+91-9884880752", "KA-04-2022-88129",
+            "DIRECT_ARTERIAL", "08:30 AM",
+            json.dumps([{"sequence": 1, "fps_id": "FPS-KA-BLR-015", "fps_name": "Fair Price Shop 15 (Bengaluru Urban)", "commodity": "Rice", "quantity_kg": 2850.0, "estimated_arrival": "09:45 AM"}]),
+            95.5, 92.0, "READY", "v1.0"
+        ),
+        (
+            "MAN-2026-0913", "2026-09", "TRK-KA-0031", "DEPOT-01", "North-West Heavy Corridor",
+            3400.0, 1100.0, 4500.0, "Harish Sharma", "+91-9875779236", "KA-04-2021-41908",
+            "MULTI_DROP_FEEDER", "09:00 AM",
+            json.dumps([{"sequence": 1, "fps_id": "FPS-KA-BLR-003", "fps_name": "Fair Price Shop 3 (Bengaluru Urban)", "commodity": "Rice", "quantity_kg": 1750.0, "estimated_arrival": "09:50 AM"},
+                        {"sequence": 2, "fps_id": "FPS-001", "fps_name": "Fair Price Shop 1 (Bengaluru Urban)", "commodity": "Rice", "quantity_kg": 1700.0, "estimated_arrival": "10:30 AM"}]),
+            98.0, 94.5, "READY", "v1.0"
+        )
+    ]
+    for mid, cyc, trk, dep, corr, r_kg, w_kg, tot, dname, dphone, dlic, rtyp, dep_w, seq, score, eff, stat, ver in manifests_data:
+        cursor.execute("""
+        INSERT OR REPLACE INTO manifests (
+            manifest_id, cycle_id, truck_id, source_depot_id, corridor,
+            total_rice_kg, total_wheat_kg, total_quantity_kg, driver_name, driver_phone,
+            driver_license, route_type, departure_window, delivery_sequence_json,
+            optimization_score, efficiency_pct, status, version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, (mid, cyc, trk, dep, corr, r_kg, w_kg, tot, dname, dphone, dlic, rtyp, dep_w, seq, score, eff, stat, ver))
+
+    # 8. Corresponding Gatepasses
+    gatepasses_data = [
+        ("GP-BLR-0912", "2026-09", "TRK-KA-0032", "DEPOT-01", "MAN-2026-0912", "East Corridor / IT Belt", 2850.0, 0.0, 2850.0, "Bay-02", "Venkatesh Gowda", "+91-9884880752", "TKN-BLR-88129", "GATEPASS_ISSUED"),
+        ("GP-BLR-0913", "2026-09", "TRK-KA-0031", "DEPOT-01", "MAN-2026-0913", "North-West Heavy Corridor", 3400.0, 1100.0, 4500.0, "Bay-01", "Harish Sharma", "+91-9875779236", "TKN-BLR-41908", "GATEPASS_ISSUED")
+    ]
+    for gid, cyc, trk, dep, mid, corr, r_kg, w_kg, tot, bay, dname, dphone, tok, stat in gatepasses_data:
+        cursor.execute("""
+        INSERT OR REPLACE INTO gatepasses (
+            gatepass_id, cycle_id, truck_id, source_depot_id, manifest_id, corridor,
+            total_rice_kg, total_wheat_kg, total_payload_kg, loading_bay, driver_name, driver_phone,
+            security_token, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, (gid, cyc, trk, dep, mid, corr, r_kg, w_kg, tot, bay, dname, dphone, tok, stat))
+
+    # 9. Truck Route Tracking for Stage 6
+    cursor.execute("""
+    INSERT OR REPLACE INTO truck_route_tracking (
+        tracking_id, truck_id, gatepass_id, cycle_id, driver_name, driver_phone,
+        source_depot_id, source_depot_name, destination_fps_id, destination_fps_name,
+        assigned_route_id, route_name, current_status, distance_travelled_km, distance_remaining_km,
+        total_route_distance_km, eta_minutes, expected_arrival_time, delay_status
+    ) VALUES (
+        'TRK-TRK-0912', 'TRK-KA-0032', 'GP-BLR-0912', '2026-09', 'Venkatesh Gowda', '+91-9884880752',
+        'DEPOT-01', 'Bengaluru Central FCI Godown (Hebbal)', 'FPS-KA-BLR-015', 'Fair Price Shop 15 (Bengaluru Urban)',
+        'RT-DEPOT-01-BLR-015', 'Hebbal to East Corridor Arterial Route', 'DISPATCHED', 0.0, 18.4, 18.4, 45, '09:45 AM', 'ON_TIME'
+    );
+    """)
+    cursor.execute("""
+    INSERT OR REPLACE INTO truck_route_tracking (
+        tracking_id, truck_id, gatepass_id, cycle_id, driver_name, driver_phone,
+        source_depot_id, source_depot_name, destination_fps_id, destination_fps_name,
+        assigned_route_id, route_name, current_status, distance_travelled_km, distance_remaining_km,
+        total_route_distance_km, eta_minutes, expected_arrival_time, delay_status
+    ) VALUES (
+        'TRK-TRK-0913', 'TRK-KA-0031', 'GP-BLR-0913', '2026-09', 'Harish Sharma', '+91-9875779236',
+        'DEPOT-01', 'Bengaluru Central FCI Godown (Hebbal)', 'FPS-001', 'Fair Price Shop 1 (Bengaluru Urban)',
+        'RT-DEPOT-01-BLR-001', 'Hebbal to North-West Feeder Route', 'IN_TRANSIT', 6.5, 8.4, 14.9, 25, '10:15 AM', 'ON_TIME'
+    );
+    """)
+
+    # 10. Completed Field Inspection Report (6-Point Statutory Certificate)
+    cursor.execute("""
+    INSERT OR REPLACE INTO fps_inspections (
+        inspection_id, fps_id, inspector_id, inspection_type, scale_certified, display_board_updated,
+        stock_matches_register, cctv_functional, epos_online, hygiene_compliant,
+        compliance_score, moisture_pct, remarks, status, sealed_hash, cycle_id
+    ) VALUES (
+        'INSP-2026-0901', 'FPS-KA-BLR-015', 'INSP-KA-BLR-04', 'PRE_DISPATCH', 1, 1,
+        1, 1, 1, 1,
+        100.0, 10.8,
+        'Full statutory 6-point physical compliance verified. Weighbridge scale calibrated. Moisture content 10.8% (within <=12% ceiling). CCTV operational. Digital seal intact.',
+        'SEALED', 'sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069', '2026-09'
+    );
+    """)
+
+
 def seed_all_data(recreate=False):
     """
     Seeds the SQLite database with real CSV datasets:
@@ -523,6 +761,8 @@ def seed_all_data(recreate=False):
     conn.commit()
 
     if fps_cnt >= 600 and hist_cnt > 1000 and intent_cnt > 1000 and not recreate:
+        seed_dso_operational_baseline(cursor)
+        conn.commit()
         conn.close()
         return {"status": "already_seeded", "message": "Database already contains complete seed data."}
 
@@ -577,12 +817,9 @@ def seed_all_data(recreate=False):
     conn.commit()
 
     # 11. Seed Citizen Requests (after commit so FK lookups work)
-    try:
-        cr_count = seed_citizen_requests(cursor, conn)
-        conn.commit()
-        print(f"  [+] Seeded {cr_count} Citizen Requests with AI Advisory")
-    except Exception as e:
-        print(f"  [!] Citizen request seeding skipped: {e}")
+    # 12. Seed DSO Operational Case Baseline
+    seed_dso_operational_baseline(cursor)
+    conn.commit()
 
     conn.close()
 

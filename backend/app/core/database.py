@@ -187,6 +187,37 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
         FOREIGN KEY (fps_id) REFERENCES fps (fps_id)
     );
     """)
+    for col_def in [
+        ("order_id", "TEXT"),
+        ("geofence_verified", "INTEGER DEFAULT 0"),
+        ("geofence_distance_m", "REAL"),
+        ("truck_id", "TEXT"),
+        ("gatepass_id", "TEXT"),
+        ("manifest_id", "TEXT"),
+        ("target_confirmed", "INTEGER DEFAULT 0"),
+        ("expected_rice_kg", "REAL DEFAULT 0.0"),
+        ("observed_rice_kg", "REAL"),
+        ("rice_diff_kg", "REAL"),
+        ("expected_wheat_kg", "REAL DEFAULT 0.0"),
+        ("observed_wheat_kg", "REAL"),
+        ("wheat_diff_kg", "REAL"),
+        ("moisture_pct", "REAL"),
+        ("moisture_result", "TEXT"),
+        ("scale_error_g", "REAL"),
+        ("scale_result", "TEXT"),
+        ("seizure_issued", "INTEGER DEFAULT 0"),
+        ("seizure_reason", "TEXT"),
+        ("evidence_json", "TEXT DEFAULT '[]'"),
+        ("checklist_json", "TEXT DEFAULT '{}'"),
+        ("sealed_hash", "TEXT"),
+        ("sealed_at", "TIMESTAMP"),
+        ("cycle_id", "TEXT DEFAULT '2026-09'"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE fps_inspections ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
+
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS surprise_inspection_orders (
@@ -1122,6 +1153,51 @@ def _migration_009_beneficiary_phone(cursor: sqlite3.Cursor) -> None:
         cursor.execute("UPDATE beneficiaries SET phone = ? WHERE id = ?;", (phone_val, row_id))
 
 
+def _migration_010_dso_tables(cursor: sqlite3.Cursor) -> None:
+    """010: DSO Workflow State, Validated Demand, Overrides, and Dispatch Authorizations."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS dso_validated_demand (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cycle_id TEXT NOT NULL,
+        fps_id TEXT NOT NULL,
+        commodity TEXT NOT NULL,
+        historical_baseline_kg REAL NOT NULL,
+        intent_demand_kg REAL NOT NULL,
+        forecast_demand_kg REAL NOT NULL,
+        validated_demand_kg REAL NOT NULL,
+        validated_by TEXT NOT NULL,
+        validated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        snapshot_hash TEXT NOT NULL,
+        UNIQUE(cycle_id, fps_id, commodity)
+    );
+    """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS dso_allocation_overrides (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cycle_id TEXT NOT NULL,
+        fps_id TEXT NOT NULL,
+        commodity TEXT NOT NULL,
+        previous_allocation_kg REAL NOT NULL,
+        new_allocation_kg REAL NOT NULL,
+        reason TEXT NOT NULL,
+        officer_name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS dso_dispatch_authorizations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cycle_id TEXT NOT NULL,
+        manifest_id TEXT NOT NULL,
+        authorized_by TEXT NOT NULL,
+        authorization_reference TEXT NOT NULL,
+        authorized_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        notes TEXT,
+        UNIQUE(cycle_id, manifest_id)
+    );
+    """)
+
+
 # Migration Registry
 MIGRATIONS = [
     (1, "001_core_supply_chain_schema", _migration_001_core_supply_chain),
@@ -1133,6 +1209,7 @@ MIGRATIONS = [
     (7, "007_planning_cycle_tables", _migration_007_planning_cycle_tables),
     (8, "008_sih_v2_features", _migration_008_sih_v2_features),
     (9, "009_beneficiary_phone", _migration_009_beneficiary_phone),
+    (10, "010_dso_tables", _migration_010_dso_tables),
 ]
 
 

@@ -884,6 +884,177 @@ class ApiService {
     }
   }
 
+  // ----------------- DSO Authoritative Workflow APIs ----------------- //
+
+  /// Stage 3: Fetch depot stock, net requirement, and proposed allocations per FPS
+  Future<Map<String, dynamic>> fetchDsoAllocationPlan(
+      {String cycleId = '2026-09'}) async {
+    final response = await client
+        .get(
+            Uri.parse(
+                '${AppConstants.apiBaseUrl}/admin/dso/allocation-plan?cycle_id=$cycleId'),
+            headers: {'Accept': 'application/json'})
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response,
+          'Failed to fetch DSO allocation plan: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Stage 3: Submit allocation override with mandatory officer justification
+  Future<Map<String, dynamic>> submitDsoAllocationOverride({
+    required String cycleId,
+    required String fpsId,
+    required String commodity,
+    required double proposedKg,
+    required double overriddenKg,
+    required String reason,
+    String officerName = 'DSO - Bengaluru Urban',
+  }) async {
+    final payload = {
+      'cycle_id': cycleId,
+      'fps_id': fpsId,
+      'commodity': commodity,
+      'proposed_kg': proposedKg,
+      'overridden_kg': overriddenKg,
+      'reason': reason,
+      'officer_name': officerName,
+    };
+    final response = await client
+        .post(
+          Uri.parse('${AppConstants.apiBaseUrl}/admin/dso/allocation-override'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: json.encode(payload),
+        )
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response,
+          'Failed to override allocation: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Stage 3: Approve Allocation Plan (transitions to ALLOCATED)
+  Future<Map<String, dynamic>> approveDsoAllocationPlan({
+    String cycleId = '2026-09',
+    String officerName = 'DSO - Bengaluru Urban',
+  }) async {
+    final response = await client
+        .post(
+            Uri.parse(
+                '${AppConstants.apiBaseUrl}/admin/dso/allocation-approve?cycle_id=$cycleId&officer_name=${Uri.encodeComponent(officerName)}'),
+            headers: {'Accept': 'application/json'})
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response,
+          'Failed to approve allocation: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Stage 4: Fetch physical routes, trucks, stops, and readiness
+  Future<Map<String, dynamic>> fetchDsoSupplyRoutes(
+      {String cycleId = '2026-09'}) async {
+    final response = await client
+        .get(
+            Uri.parse(
+                '${AppConstants.apiBaseUrl}/admin/dso/supply-routes?cycle_id=$cycleId'),
+            headers: {'Accept': 'application/json'})
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response,
+          'Failed to fetch supply routes: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Stage 5: Check 7 pre-authorization dispatch rules
+  Future<Map<String, dynamic>> checkDsoDispatchAuthorization(
+      String manifestId, {String cycleId = '2026-09'}) async {
+    final response = await client
+        .get(
+            Uri.parse(
+                '${AppConstants.apiBaseUrl}/admin/dso/dispatch-check?cycle_id=$cycleId&manifest_id=$manifestId'),
+            headers: {'Accept': 'application/json'})
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response,
+          'Failed to verify dispatch readiness: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Stage 5: Authorize dispatch of manifest
+  Future<Map<String, dynamic>> authorizeDsoDispatch({
+    required String manifestId,
+    String cycleId = '2026-09',
+    String officerName = 'DSO - Bengaluru Urban',
+    String notes = '',
+  }) async {
+    final payload = {
+      'manifest_id': manifestId,
+      'cycle_id': cycleId,
+      'officer_name': officerName,
+      'notes': notes,
+    };
+    final response = await client
+        .post(
+          Uri.parse('${AppConstants.apiBaseUrl}/admin/dso/dispatch-authorize'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: json.encode(payload),
+        )
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response,
+          'Failed to authorize dispatch: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Stage 7: Fetch physical reconciliation (Allocated -> Dispatched -> Received -> Distributed -> Remaining)
+  Future<Map<String, dynamic>> fetchDsoReconciliation(
+      {String cycleId = '2026-09'}) async {
+    final response = await client
+        .get(
+            Uri.parse(
+                '${AppConstants.apiBaseUrl}/admin/dso/reconciliation?cycle_id=$cycleId'),
+            headers: {'Accept': 'application/json'})
+        .timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response,
+          'Failed to fetch reconciliation: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
   /// Trigger actual ePoS grain distribution simulation
   Future<ActualDistributionData> triggerSimulateDistribution(
       {String cycleId = '2026-09', bool force = false}) async {
@@ -2648,6 +2819,152 @@ class ApiService {
     return [];
   }
 
+  /// FPS Owner: Fetch stock ledger (Opening, Received, Dispensed, Closing, Movement Log)
+  Future<Map<String, dynamic>> fetchFpsStockLedger(String fpsId, {String cycleId = '2026-09'}) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/stock-ledger?cycle_id=$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to fetch stock ledger: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Fetch incoming consignments/replenishments
+  Future<Map<String, dynamic>> fetchFpsConsignments(String fpsId, {String cycleId = '2026-09'}) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/consignments?cycle_id=$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to fetch consignments: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Confirm physical receipt of consignment
+  Future<Map<String, dynamic>> confirmConsignmentReceipt(String fpsId, String gatepassId) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/consignments/$gatepassId/confirm-receipt'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to confirm consignment receipt: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Fetch shop daily operational status & checklist
+  Future<Map<String, dynamic>> fetchFpsDailyStatus(String fpsId, {String cycleId = '2026-09'}) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/daily-status?cycle_id=$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to fetch shop daily status: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Mark shop OPEN for today
+  Future<Map<String, dynamic>> openFpsShop(String fpsId) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/open-shop'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to open shop: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Mark shop CLOSED for today
+  Future<Map<String, dynamic>> closeFpsShop(String fpsId) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/close-shop'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to close shop: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Fetch daily reconciliation math
+  Future<Map<String, dynamic>> fetchFpsReconciliation(String fpsId, {String cycleId = '2026-09'}) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/reconciliation?cycle_id=$cycleId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to fetch reconciliation: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Field Food Inspector: Verify arrival at target FPS geofence perimeter
+  Future<Map<String, dynamic>> verifyGeofence({
+    required String fpsId,
+    double? inspectorLat,
+    double? inspectorLon,
+    String? truckId,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/geofence/verify'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'fps_id': fpsId,
+        'inspector_lat': inspectorLat,
+        'inspector_lon': inspectorLon,
+        'truck_id': truckId,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Geofence verification failed: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Field Food Inspector: Fetch full database target inspection context (DB stock, directive, history, truck dispatch)
+  Future<Map<String, dynamic>> fetchFpsInspectionContext(String fpsId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/fps/$fpsId/inspection-context'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to fetch inspection context: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
   /// Field Food Inspector: Submit 6-point physical verification inspection
   Future<Map<String, dynamic>> submitFpsInspectionReport({
     required String fpsId,
@@ -2660,6 +2977,23 @@ class ApiService {
     bool hygieneCompliant = true,
     double complianceScore = 100.0,
     String remarks = '',
+    bool geofenceVerified = false,
+    double? geofenceDistanceM,
+    String? truckId,
+    String? gatepassId,
+    String? manifestId,
+    bool targetConfirmed = true,
+    double? expectedRiceKg,
+    double? observedRiceKg,
+    double? expectedWheatKg,
+    double? observedWheatKg,
+    double? moisturePct,
+    double? scaleErrorG,
+    bool seizureIssued = false,
+    String? seizureReason,
+    List<Map<String, dynamic>>? evidenceItems,
+    Map<String, dynamic>? checklistDetails,
+    String cycleId = '2026-09',
   }) async {
     final response = await client.post(
       Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/submit'),
@@ -2675,6 +3009,23 @@ class ApiService {
         'hygiene_compliant': hygieneCompliant,
         'compliance_score': complianceScore,
         'remarks': remarks,
+        'geofence_verified': geofenceVerified,
+        'geofence_distance_m': geofenceDistanceM,
+        'truck_id': truckId,
+        'gatepass_id': gatepassId,
+        'manifest_id': manifestId,
+        'target_confirmed': targetConfirmed,
+        'expected_rice_kg': expectedRiceKg,
+        'observed_rice_kg': observedRiceKg,
+        'expected_wheat_kg': expectedWheatKg,
+        'observed_wheat_kg': observedWheatKg,
+        'moisture_pct': moisturePct,
+        'scale_error_g': scaleErrorG,
+        'seizure_issued': seizureIssued,
+        'seizure_reason': seizureReason,
+        'evidence_items': evidenceItems,
+        'checklist_details': checklistDetails,
+        'cycle_id': cycleId,
       }),
     ).timeout(AppConstants.apiTimeout);
 

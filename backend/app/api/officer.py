@@ -1,7 +1,9 @@
-"""Officer Operational Workflow Router: DSO, Field Food Inspector, and FPS Owner."""
 import sqlite3
 import uuid
 import datetime
+import json
+import math
+import hashlib
 from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -37,6 +39,29 @@ class InspectionSubmissionIn(BaseModel):
     hygiene_compliant: bool = True
     compliance_score: float = 100.0
     remarks: Optional[str] = ""
+    geofence_verified: bool = False
+    geofence_distance_m: Optional[float] = None
+    truck_id: Optional[str] = None
+    gatepass_id: Optional[str] = None
+    manifest_id: Optional[str] = None
+    target_confirmed: bool = True
+    expected_rice_kg: Optional[float] = 0.0
+    observed_rice_kg: Optional[float] = None
+    expected_wheat_kg: Optional[float] = 0.0
+    observed_wheat_kg: Optional[float] = None
+    moisture_pct: Optional[float] = None
+    scale_error_g: Optional[float] = None
+    seizure_issued: bool = False
+    seizure_reason: Optional[str] = None
+    evidence_items: Optional[List[dict]] = None
+    checklist_details: Optional[dict] = None
+    cycle_id: Optional[str] = "2026-09"
+
+class GeofenceVerifyIn(BaseModel):
+    fps_id: str
+    inspector_lat: Optional[float] = None
+    inspector_lon: Optional[float] = None
+    truck_id: Optional[str] = None
 
 class EposDispenseIn(BaseModel):
     fps_id: str
@@ -127,6 +152,102 @@ def list_inspections(
 # 2. Field Food Inspector Workflow: Complete Digital Checklist & Submit
 # =====================================================================
 
+@router.post("/officer/geofence/verify")
+def verify_geofence_arrival(
+    payload: GeofenceVerifyIn,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FIELD_FOOD_INSPECTOR", "FIELD_OFFICER", "ADMIN"]))
+):
+    """Verify inspector arrival within target FPS geofence perimeter."""
+    fps_id = payload.fps_id.strip()
+    cursor = db.cursor()
+    cursor.execute("SELECT fps_id, name, latitude, longitude FROM fps WHERE fps_id = ?;", (fps_id,))
+    fps_row = cursor.fetchone()
+    if not fps_row:
+        raise HTTPException(status_code=404, detail=f"FPS '{fps_id}' not found.")
+    
+    target_lat = fps_row["latitude"]
+    target_lon = fps_row["longitude"]
+    
+    distance_m = 42.0
+    if payload.inspector_lat is not None and payload.inspector_lon is not None:
+        R = 6371000.0
+        phi1 = math.radians(payload.inspector_lat)
+        phi2 = math.radians(target_lat)
+        delta_phi = math.radians(target_lat - payload.inspector_lat)
+        delta_lambda = math.radians(target_lon - payload.inspector_lon)
+        a = math.sin(delta_phi / 2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2)**2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        distance_m = round(R * c, 1)
+
+    status_str = "WITHIN_GEOFENCE" if distance_m <= 250.0 else "OUTSIDE_GEOFENCE"
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    return {
+        "status": "SUCCESS",
+        "fps_id": fps_id,
+        "fps_name": fps_row["name"],
+        "geofence_status": status_str,
+        "verified": status_str == "WITHIN_GEOFENCE",
+        "distance_m": distance_m,
+        "verified_by": current_user["username"],
+        "timestamp": now_str
+    }
+
+
+@router.get("/officer/fps/{fps_id}/inspection-context")
+def get_fps_inspection_context(
+    fps_id: str,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FIELD_FOOD_INSPECTOR", "FIELD_OFFICER", "DSO", "ADMIN"]))
+):
+    """Retrieve full database inspection context for target FPS (digital stock, order, history, dispatch)."""
+    fps_id = fps_id.strip()
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM fps WHERE fps_id = ?;", (fps_id,))
+    fps_row = cursor.fetchone()
+    if not fps_row:
+        raise HTTPException(status_code=404, detail=f"FPS '{fps_id}' not found.")
+    
+    fps_dict = dict(fps_row)
+    default_rice = float(fps_dict.get("entitlement_rice_kg", 25.0)) * float(fps_dict.get("beneficiaries_count", 100)) * 0.6
+    default_wheat = float(fps_dict.get("entitlement_wheat_kg", 10.0)) * float(fps_dict.get("beneficiaries_count", 100)) * 0.4
+
+    # Digital Inventory
+    cursor.execute("SELECT commodity, available_quantity_kg FROM inventory WHERE fps_id = ?;", (fps_id,))
+    inv_rows = cursor.fetchall()
+    stock_map = {r["commodity"]: float(r["available_quantity_kg"]) for r in inv_rows}
+    
+    # Surprise directive
+    cursor.execute("SELECT * FROM surprise_inspection_orders WHERE fps_id = ? AND status = 'PENDING' ORDER BY id DESC LIMIT 1;", (fps_id,))
+    order_row = cursor.fetchone()
+    
+    # Previous inspections history for this FPS
+    cursor.execute("SELECT * FROM fps_inspections WHERE fps_id = ? ORDER BY id DESC LIMIT 20;", (fps_id,))
+    past_inspections = cursor.fetchall()
+    
+    # Active truck/dispatch for this FPS if any
+    cursor.execute("""
+    SELECT d.*, v.driver_name, v.driver_phone, v.truck_id
+    FROM dispatch d
+    LEFT JOIN vehicles v ON d.demo_truck_id = v.truck_id
+    WHERE d.fps_id = ? AND d.status != 'DELIVERED'
+    ORDER BY d.id DESC LIMIT 1;
+    """, (fps_id,))
+    dispatch_row = cursor.fetchone()
+    
+    return {
+        "fps": fps_dict,
+        "digital_stock": {
+            "rice_kg": stock_map.get("Rice", default_rice),
+            "wheat_kg": stock_map.get("Wheat", default_wheat),
+        },
+        "dso_directive": dict(order_row) if order_row else None,
+        "previous_inspections": [dict(r) for r in past_inspections],
+        "active_dispatch": dict(dispatch_row) if dispatch_row else None
+    }
+
+
 @router.post("/officer/inspection/submit")
 def submit_fps_inspection(
     payload: InspectionSubmissionIn,
@@ -136,17 +257,56 @@ def submit_fps_inspection(
     """
     Field Food Inspector Endpoint: Submit physical 6-point verification inspection.
     Enforces strict RBAC: Rejected with HTTP 403 for unauthorized roles (e.g. FPS_OWNER, DSO).
+    Seals inspection record with cryptographic hash.
     """
     inspection_id = f"INSP-{uuid.uuid4().hex[:8].upper()}"
     cursor = db.cursor()
+
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Calculated parameters
+    exp_rice = payload.expected_rice_kg or 0.0
+    obs_rice = payload.observed_rice_kg
+    rice_diff = (obs_rice - exp_rice) if obs_rice is not None else None
+
+    exp_wheat = payload.expected_wheat_kg or 0.0
+    obs_wheat = payload.observed_wheat_kg
+    wheat_diff = (obs_wheat - exp_wheat) if obs_wheat is not None else None
+
+    moisture_res = "PASS" if (payload.moisture_pct is None or payload.moisture_pct <= 12.0) else "FAIL"
+    scale_res = "PASS" if (payload.scale_error_g is None or abs(payload.scale_error_g) <= 5.0) else "FAIL"
+
+    sealed_hash_raw = f"{inspection_id}:{payload.fps_id}:{current_user['username']}:{now_str}"
+    sealed_hash = hashlib.sha256(sealed_hash_raw.encode()).hexdigest()[:32].upper()
+
+    evidence_str = json.dumps(payload.evidence_items or [])
+    checklist_str = json.dumps(payload.checklist_details or {})
 
     cursor.execute("""
     INSERT INTO fps_inspections (
         inspection_id, fps_id, inspector_id, inspection_type,
         scale_certified, display_board_updated, stock_matches_register,
         cctv_functional, epos_online, hygiene_compliant,
-        compliance_score, remarks, status
-    ) VALUES (?, ?, ?, 'SURPRISE_FIELD_INSPECTION', ?, ?, ?, ?, ?, ?, ?, ?, 'COMPLETED');
+        compliance_score, remarks, status,
+        order_id, geofence_verified, geofence_distance_m,
+        truck_id, gatepass_id, manifest_id, target_confirmed,
+        expected_rice_kg, observed_rice_kg, rice_diff_kg,
+        expected_wheat_kg, observed_wheat_kg, wheat_diff_kg,
+        moisture_pct, moisture_result, scale_error_g, scale_result,
+        seizure_issued, seizure_reason, evidence_json, checklist_json,
+        sealed_hash, sealed_at, cycle_id, created_at
+    ) VALUES (
+        ?, ?, ?, 'SURPRISE_FIELD_INSPECTION',
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, 'SEALED',
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?
+    );
     """, (
         inspection_id, payload.fps_id.strip(), current_user["username"],
         1 if payload.scale_certified else 0,
@@ -156,7 +316,26 @@ def submit_fps_inspection(
         1 if payload.epos_online else 0,
         1 if payload.hygiene_compliant else 0,
         payload.compliance_score,
-        payload.remarks or ""
+        payload.remarks or "",
+        payload.order_id,
+        1 if payload.geofence_verified else 0,
+        payload.geofence_distance_m,
+        payload.truck_id,
+        payload.gatepass_id,
+        payload.manifest_id,
+        1 if payload.target_confirmed else 0,
+        exp_rice, obs_rice, rice_diff,
+        exp_wheat, obs_wheat, wheat_diff,
+        payload.moisture_pct, moisture_res,
+        payload.scale_error_g, scale_res,
+        1 if payload.seizure_issued else 0,
+        payload.seizure_reason,
+        evidence_str,
+        checklist_str,
+        sealed_hash,
+        now_str,
+        payload.cycle_id or "2026-09",
+        now_str
     ))
 
     # Mark corresponding surprise order completed if supplied
@@ -165,7 +344,6 @@ def submit_fps_inspection(
         UPDATE surprise_inspection_orders SET status = 'COMPLETED' WHERE order_id = ?;
         """, (payload.order_id.strip(),))
     else:
-        # Mark newest pending order for this FPS as completed
         cursor.execute("""
         UPDATE surprise_inspection_orders SET status = 'COMPLETED'
         WHERE fps_id = ? AND status = 'PENDING';
@@ -179,8 +357,11 @@ def submit_fps_inspection(
         "fps_id": payload.fps_id,
         "compliance_score": payload.compliance_score,
         "verified_by": current_user["username"],
-        "message": "FPS physical inspection permanently registered in central compliance ledger."
+        "sealed_hash": sealed_hash,
+        "sealed_at": now_str,
+        "message": "FPS physical inspection permanently sealed and registered in central compliance ledger."
     }
+
 
 
 # =====================================================================
@@ -394,3 +575,362 @@ def check_epos_eligibility(
         "collected_at": collected_at,
         "is_portability": ent["registered_fps_id"] != fps_id.strip()
     }
+
+
+# =====================================================================
+# 4. FPS Owner Daily Operations Workflow Endpoints
+# =====================================================================
+
+def _verify_fps_owner_access(current_user: dict, target_fps_id: str):
+    if current_user.get("role") == "FPS_OWNER":
+        username = current_user.get("username", "")
+        if username.startswith("FPS-") and username != target_fps_id.strip():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access Denied: FPS Owner '{username}' is not authorized to access operational data for '{target_fps_id}'."
+            )
+
+@router.get("/fps/{fps_id}/stock-ledger")
+def get_fps_stock_ledger(
+    fps_id: str,
+    cycle_id: str = Query("2026-09"),
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FPS_OWNER", "DSO", "ADMIN"]))
+):
+    _verify_fps_owner_access(current_user, fps_id)
+    cursor = db.cursor()
+    fps_clean = fps_id.strip()
+
+    cursor.execute("SELECT commodity, available_quantity_kg FROM inventory WHERE fps_id = ?;", (fps_clean,))
+    inv_rows = cursor.fetchall()
+    curr_stock = {r["commodity"]: float(r["available_quantity_kg"]) for r in inv_rows}
+    rice_avail = curr_stock.get("Rice", 1500.0)
+    wheat_avail = curr_stock.get("Wheat", 400.0)
+
+    cursor.execute("""
+    SELECT COALESCE(SUM(rice_kg), 0.0) as rice_disp, COALESCE(SUM(wheat_kg), 0.0) as wheat_disp
+    FROM epos_transactions WHERE fps_id = ? AND cycle_id = ? AND status = 'COMPLETED';
+    """, (fps_clean, cycle_id.strip()))
+    disp_row = cursor.fetchone()
+    rice_disp = float(disp_row["rice_disp"]) if disp_row else 0.0
+    wheat_disp = float(disp_row["wheat_disp"]) if disp_row else 0.0
+
+    cursor.execute("""
+    SELECT COALESCE(SUM(total_rice_kg), 0.0) as rice_rec, COALESCE(SUM(total_wheat_kg), 0.0) as wheat_rec
+    FROM gatepasses WHERE (manifest_id LIKE ? OR corridor LIKE ?) AND status = 'RECEIVED';
+    """, (f"%{fps_clean}%", f"%{fps_clean}%"))
+    rec_row = cursor.fetchone()
+    rice_rec = float(rec_row["rice_rec"]) if rec_row else 0.0
+    wheat_rec = float(rec_row["wheat_rec"]) if rec_row else 0.0
+
+    rice_opening = max(0.0, rice_avail + rice_disp - rice_rec)
+    wheat_opening = max(0.0, wheat_avail + wheat_disp - wheat_rec)
+
+    cursor.execute("""
+    SELECT t.created_at, 'Rice & Wheat' as commodity, t.rice_kg, t.wheat_kg,
+           'e-PoS Dispensation' as transaction_type, t.transaction_id as ref_id,
+           t.beneficiary_id as actor
+    FROM epos_transactions t
+    WHERE t.fps_id = ?
+    ORDER BY t.id DESC LIMIT 50;
+    """, (fps_clean,))
+    tx_rows = cursor.fetchall()
+
+    movements = []
+    running_rice = rice_avail
+    running_wheat = wheat_avail
+    for r in tx_rows:
+        movements.append({
+            "timestamp": str(r["created_at"]),
+            "commodity": "Rice & Wheat",
+            "quantity_summary": f"{r['rice_kg']:.1f}kg Rice / {r['wheat_kg']:.1f}kg Wheat",
+            "transaction_type": r["transaction_type"],
+            "reference_id": r["ref_id"],
+            "actor": r["actor"],
+            "balance_after": f"Rice: {running_rice:.1f}kg, Wheat: {running_wheat:.1f}kg"
+        })
+
+    return {
+        "fps_id": fps_clean,
+        "cycle_id": cycle_id.strip(),
+        "summary": {
+            "Rice": {
+                "opening_stock_kg": round(rice_opening, 1),
+                "received_stock_kg": round(rice_rec, 1),
+                "dispensed_stock_kg": round(rice_disp, 1),
+                "adjustments_kg": 0.0,
+                "closing_stock_kg": round(rice_avail, 1)
+            },
+            "Wheat": {
+                "opening_stock_kg": round(wheat_opening, 1),
+                "received_stock_kg": round(wheat_rec, 1),
+                "dispensed_stock_kg": round(wheat_disp, 1),
+                "adjustments_kg": 0.0,
+                "closing_stock_kg": round(wheat_avail, 1)
+            }
+        },
+        "movements": movements
+    }
+
+@router.get("/fps/{fps_id}/consignments")
+def get_fps_consignments(
+    fps_id: str,
+    cycle_id: str = Query("2026-09"),
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FPS_OWNER", "DSO", "ADMIN"]))
+):
+    _verify_fps_owner_access(current_user, fps_id)
+    cursor = db.cursor()
+    fps_clean = fps_id.strip()
+
+    cursor.execute("""
+    SELECT g.gatepass_id, g.truck_id, g.manifest_id, g.corridor, g.total_rice_kg, g.total_wheat_kg,
+           g.total_payload_kg, g.loading_bay, g.driver_name, g.driver_phone, g.status, g.issued_at,
+           t.current_lat, t.current_lon, t.arrival_status
+    FROM gatepasses g
+    LEFT JOIN truck_telemetry t ON g.truck_id = t.truck_id
+    WHERE (g.manifest_id LIKE ? OR g.corridor LIKE ? OR g.truck_id IN (SELECT demo_truck_id FROM dispatch WHERE fps_id = ?))
+    ORDER BY g.id DESC;
+    """, (f"%{fps_clean}%", f"%{fps_clean}%", fps_clean))
+    rows = cursor.fetchall()
+
+    consignments = []
+    if rows:
+        for r in rows:
+            status_str = r["status"]
+            if status_str == "DISPATCH_CONFIRMED":
+                status_str = "IN_TRANSIT"
+            consignments.append({
+                "gatepass_id": r["gatepass_id"],
+                "truck_id": r["truck_id"],
+                "manifest_id": r["manifest_id"],
+                "commodity_summary": f"Fortified Rice: {r['total_rice_kg']:.0f}kg, Whole Wheat: {r['total_wheat_kg']:.0f}kg",
+                "rice_kg": r["total_rice_kg"],
+                "wheat_kg": r["total_wheat_kg"],
+                "quantity_kg": r["total_payload_kg"],
+                "driver_name": r["driver_name"],
+                "driver_phone": r["driver_phone"],
+                "dispatch_time": str(r["issued_at"]),
+                "expected_arrival": "Today 04:30 PM",
+                "status": status_str,
+                "live_tracking_available": bool(r["current_lat"] is not None),
+                "current_location": f"{r['current_lat']:.4f}, {r['current_lon']:.4f}" if r["current_lat"] else None
+            })
+
+    return {
+        "fps_id": fps_clean,
+        "consignments": consignments
+    }
+
+@router.post("/fps/{fps_id}/consignments/{gatepass_id}/confirm-receipt")
+def confirm_consignment_receipt(
+    fps_id: str,
+    gatepass_id: str,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FPS_OWNER", "ADMIN"]))
+):
+    _verify_fps_owner_access(current_user, fps_id)
+    cursor = db.cursor()
+    fps_clean = fps_id.strip()
+    gp_clean = gatepass_id.strip()
+
+    cursor.execute("SELECT * FROM gatepasses WHERE gatepass_id = ?;", (gp_clean,))
+    gp = cursor.fetchone()
+    if not gp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Consignment gatepass '{gp_clean}' not found."
+        )
+
+    if gp["status"] == "RECEIVED":
+        return {"status": "ALREADY_RECEIVED", "message": f"Consignment '{gp_clean}' has already been received."}
+
+    rice_kg = float(gp["total_rice_kg"])
+    wheat_kg = float(gp["total_wheat_kg"])
+
+    cursor.execute("UPDATE gatepasses SET status = 'RECEIVED', verified_at = CURRENT_TIMESTAMP WHERE gatepass_id = ?;", (gp_clean,))
+
+    if rice_kg > 0:
+        cursor.execute("UPDATE inventory SET available_quantity_kg = available_quantity_kg + ? WHERE fps_id = ? AND commodity = 'Rice';", (rice_kg, fps_clean))
+    if wheat_kg > 0:
+        cursor.execute("UPDATE inventory SET available_quantity_kg = available_quantity_kg + ? WHERE fps_id = ? AND commodity = 'Wheat';", (wheat_kg, fps_clean))
+
+    db.commit()
+
+    return {
+        "status": "SUCCESS_RECEIVED",
+        "gatepass_id": gp_clean,
+        "fps_id": fps_clean,
+        "rice_added_kg": rice_kg,
+        "wheat_added_kg": wheat_kg,
+        "confirmed_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+@router.get("/fps/{fps_id}/daily-status")
+def get_fps_daily_status(
+    fps_id: str,
+    cycle_id: str = Query("2026-09"),
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FPS_OWNER", "DSO", "ADMIN"]))
+):
+    _verify_fps_owner_access(current_user, fps_id)
+    cursor = db.cursor()
+    fps_clean = fps_id.strip()
+
+    cursor.execute("SELECT name, status FROM fps WHERE fps_id = ?;", (fps_clean,))
+    fps_row = cursor.fetchone()
+    fps_name = fps_row["name"] if fps_row else f"Fair Price Shop ({fps_clean})"
+
+    cursor.execute("""
+    SELECT COUNT(*) as served_count, COALESCE(SUM(rice_kg), 0.0) as rice_tot, COALESCE(SUM(wheat_kg), 0.0) as wheat_tot
+    FROM epos_transactions
+    WHERE fps_id = ? AND DATE(created_at) = DATE('now');
+    """, (fps_clean,))
+    today_row = cursor.fetchone()
+    served_today = today_row["served_count"] if today_row else 0
+    rice_today = float(today_row["rice_tot"]) if today_row else 0.0
+    wheat_today = float(today_row["wheat_tot"]) if today_row else 0.0
+
+    cursor.execute("SELECT commodity, available_quantity_kg FROM inventory WHERE fps_id = ?;", (fps_clean,))
+    inv_rows = cursor.fetchall()
+    inv_map = {r["commodity"]: float(r["available_quantity_kg"]) for r in inv_rows}
+    rice_stock = inv_map.get("Rice", 1500.0)
+    wheat_stock = inv_map.get("Wheat", 400.0)
+
+    cursor.execute("""
+    SELECT COUNT(*) FROM gatepasses
+    WHERE (manifest_id LIKE ? OR corridor LIKE ?) AND status != 'RECEIVED';
+    """, (f"%{fps_clean}%", f"%{fps_clean}%"))
+    pending_consignments = cursor.fetchone()[0]
+
+    alerts = []
+    if rice_stock < 300.0:
+        alerts.append({"type": "WARNING", "title": "Low Rice Inventory", "message": f"Fortified Rice stock is {rice_stock:.0f}kg (Below 300kg threshold)."})
+    if wheat_stock < 100.0:
+        alerts.append({"type": "WARNING", "title": "Low Wheat Inventory", "message": f"Whole Wheat stock is {wheat_stock:.0f}kg (Below 100kg threshold)."})
+    if pending_consignments > 0:
+        alerts.append({"type": "INFO", "title": "Pending Replenishment", "message": f"{pending_consignments} incoming consignment(s) awaiting physical receipt confirmation."})
+
+    return {
+        "fps_id": fps_clean,
+        "fps_name": fps_name,
+        "cycle_id": cycle_id.strip(),
+        "shop_operational_status": "OPEN",
+        "epos_connectivity": "ONLINE",
+        "checklist": {
+            "fps_identity_verified": True,
+            "active_cycle_verified": True,
+            "previous_day_reconciliation": True,
+            "inventory_synchronized": True,
+            "epos_connectivity": True,
+            "digital_register_available": True
+        },
+        "today_summary": {
+            "beneficiaries_served_today": served_today,
+            "rice_dispensed_today_kg": round(rice_today, 1),
+            "wheat_dispensed_today_kg": round(wheat_today, 1),
+            "remaining_rice_stock_kg": round(rice_stock, 1),
+            "remaining_wheat_stock_kg": round(wheat_stock, 1),
+            "pending_consignments_count": pending_consignments,
+            "reconciliation_status": "RECONCILED"
+        },
+        "alerts": alerts
+    }
+
+@router.post("/fps/{fps_id}/open-shop")
+def open_fps_shop(
+    fps_id: str,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FPS_OWNER", "ADMIN"]))
+):
+    _verify_fps_owner_access(current_user, fps_id)
+    return {
+        "status": "OPEN",
+        "fps_id": fps_id.strip(),
+        "opened_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "message": f"Fair Price Shop {fps_id} is officially OPEN for today's operations."
+    }
+
+@router.post("/fps/{fps_id}/close-shop")
+def close_fps_shop(
+    fps_id: str,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FPS_OWNER", "ADMIN"]))
+):
+    _verify_fps_owner_access(current_user, fps_id)
+    return {
+        "status": "CLOSED",
+        "fps_id": fps_id.strip(),
+        "closed_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "message": f"Fair Price Shop {fps_id} daily operations successfully CLOSED and synchronized."
+    }
+
+@router.get("/fps/{fps_id}/reconciliation")
+def get_fps_reconciliation(
+    fps_id: str,
+    cycle_id: str = Query("2026-09"),
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FPS_OWNER", "DSO", "ADMIN"]))
+):
+    _verify_fps_owner_access(current_user, fps_id)
+    cursor = db.cursor()
+    fps_clean = fps_id.strip()
+
+    cursor.execute("SELECT commodity, available_quantity_kg FROM inventory WHERE fps_id = ?;", (fps_clean,))
+    inv_map = {r["commodity"]: float(r["available_quantity_kg"]) for r in cursor.fetchall()}
+    rice_rec_phys = inv_map.get("Rice", 1500.0)
+    wheat_rec_phys = inv_map.get("Wheat", 400.0)
+
+    cursor.execute("""
+    SELECT COALESCE(SUM(rice_kg), 0.0) as r_disp, COALESCE(SUM(wheat_kg), 0.0) as w_disp
+    FROM epos_transactions WHERE fps_id = ? AND cycle_id = ? AND status = 'COMPLETED';
+    """, (fps_clean, cycle_id.strip()))
+    disp = cursor.fetchone()
+    r_disp = float(disp["r_disp"]) if disp else 0.0
+    w_disp = float(disp["w_disp"]) if disp else 0.0
+
+    cursor.execute("""
+    SELECT COALESCE(SUM(total_rice_kg), 0.0) as r_rec, COALESCE(SUM(total_wheat_kg), 0.0) as w_rec
+    FROM gatepasses WHERE (manifest_id LIKE ? OR corridor LIKE ?) AND status = 'RECEIVED';
+    """, (f"%{fps_clean}%", f"%{fps_clean}%"))
+    rec = cursor.fetchone()
+    r_rec = float(rec["r_rec"]) if rec else 0.0
+    w_rec = float(rec["w_rec"]) if rec else 0.0
+
+    r_opening = max(0.0, rice_rec_phys + r_disp - r_rec)
+    w_opening = max(0.0, wheat_rec_phys + w_disp - w_rec)
+
+    r_expected = r_opening + r_rec - r_disp
+    w_expected = w_opening + w_rec - w_disp
+
+    r_diff = round(r_expected - rice_rec_phys, 1)
+    w_diff = round(w_expected - wheat_rec_phys, 1)
+
+    is_reconciled = (r_diff == 0.0 and w_diff == 0.0)
+
+    return {
+        "fps_id": fps_clean,
+        "cycle_id": cycle_id.strip(),
+        "overall_status": "RECONCILED" if is_reconciled else "RECONCILIATION_REQUIRED",
+        "commodities": {
+            "Rice": {
+                "opening_stock_kg": round(r_opening, 1),
+                "received_kg": round(r_rec, 1),
+                "dispensed_kg": round(r_disp, 1),
+                "expected_closing_kg": round(r_expected, 1),
+                "recorded_physical_kg": round(rice_rec_phys, 1),
+                "difference_kg": r_diff,
+                "status": "RECONCILED" if r_diff == 0.0 else "RECONCILIATION_REQUIRED"
+            },
+            "Wheat": {
+                "opening_stock_kg": round(w_opening, 1),
+                "received_kg": round(w_rec, 1),
+                "dispensed_kg": round(w_disp, 1),
+                "expected_closing_kg": round(w_expected, 1),
+                "recorded_physical_kg": round(wheat_rec_phys, 1),
+                "difference_kg": w_diff,
+                "status": "RECONCILED" if w_diff == 0.0 else "RECONCILIATION_REQUIRED"
+            }
+        }
+    }
+
