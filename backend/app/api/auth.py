@@ -274,6 +274,10 @@ def citizen_send_otp(
         "card_id": card_clean,
         "message": f"OTP Code: {real_otp}",
         "demo_otp_code": real_otp,
+        "mock_otp": real_otp,
+        "otp": real_otp,
+        "masked_phone": f"+91 ******{display_phone}",
+        "mode": "LIVE" if getattr(settings, 'TWILIO_PHONE_NUMBER', None) else "MOCK",
         "expires_in_seconds": 300
     }
 

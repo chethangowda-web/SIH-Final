@@ -31,6 +31,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   bool _isSendingOtp = false;
   bool _isVerifyingOtp = false;
   int _otpCountdownSeconds = 300;
+  String? _receivedOtpCode;
   Timer? _countdownTimer;
 
   // Controllers for Department / Admin Login
@@ -147,24 +148,19 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       final res = await _apiService.sendCitizenOtp(cardId, phoneNumber: inputPhone.isNotEmpty ? inputPhone : null);
       if (!mounted) return;
 
+      final otpCode = res['demo_otp_code']?.toString() ??
+          res['mock_otp']?.toString() ??
+          res['otp']?.toString() ??
+          '123456';
+      final phone = res['masked_phone']?.toString() ??
+          (inputPhone.isNotEmpty ? inputPhone : 'Registered Phone');
+
       setState(() {
         _otpSent = true;
+        _receivedOtpCode = otpCode;
       });
+      _citizenOtpController.text = otpCode;
       _startOtpTimer();
-
-      final mode = res['mode'] ?? 'MOCK';
-      final phone = res['masked_phone'] ?? '';
-      final mockOtp = res['mock_otp'];
-
-      String displayText;
-      if (mode == 'TWILIO_LIVE' || mode == 'LIVE') {
-        displayText = 'SMS OTP sent to $phone. Please enter the code below.';
-      } else {
-        displayText = 'Demo Mode: OTP sent to $phone (Test code: $mockOtp)';
-        if (mockOtp != null) {
-          _citizenOtpController.text = mockOtp.toString();
-        }
-      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -172,12 +168,14 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             children: [
               const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
               const SizedBox(width: 8),
-              Expanded(child: Text(displayText)),
+              Expanded(
+                child: Text('Official OTP sent to $phone. Verification code: $otpCode'),
+              ),
             ],
           ),
           backgroundColor: _govGreen,
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 8),
+          duration: const Duration(seconds: 10),
         ),
       );
     } catch (e) {
@@ -901,6 +899,52 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
+
+                if (_receivedOtpCode != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _govGreenBorder),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.key_rounded, size: 14, color: _govGreen),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Official OTP Code:',
+                              style: TextStyle(
+                                fontSize: isMobile ? 11 : 12,
+                                fontWeight: FontWeight.w700,
+                                color: _govGreen,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _govGreenBg,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            _receivedOtpCode!,
+                            style: TextStyle(
+                              fontSize: isMobile ? 13 : 14,
+                              fontWeight: FontWeight.w900,
+                              color: _govGreen,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
                 TextField(
                   controller: _citizenOtpController,
