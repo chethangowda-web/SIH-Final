@@ -1048,13 +1048,15 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
         LayoutBuilder(builder: (context, constraints) {
           final isWide = constraints.maxWidth > 700;
           return GridView.builder(
-            crossAxisCount: isWide ? 4 : 2,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: isWide ? 4 : 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: isWide ? 1.6 : 1.35,
+            ),
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _corridorStats.length,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: isWide ? 1.6 : 1.35,
             itemBuilder: (context, idx) {
               final c = _corridorStats[idx];
               final isSelected = _selectedCorridor == c['id'];

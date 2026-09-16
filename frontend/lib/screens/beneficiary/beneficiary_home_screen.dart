@@ -670,7 +670,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
 
   /// Simple voice-first 4-tile beneficiary home body.
   Widget _buildSimpleBody() {
-    final name = _beneficiary?.beneficiaryName ?? '';
+    final name = _beneficiary?.nameForDemo ?? '';
     final riceKg = _entitlement?.statutoryEntitlementRiceKg;
     final wheatKg = _entitlement?.statutoryEntitlementWheatKg;
 
@@ -886,8 +886,8 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
               Text(tr('beneficiary.shop.unavailable'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, color: AppConstants.textSecondary))
             else ...[
               _buildShopRow(Icons.storefront_outlined, 'FPS ID', fps),
-              if (_beneficiary!.beneficiaryName.isNotEmpty)
-                _buildShopRow(Icons.person_outline, 'Registered for', _beneficiary!.beneficiaryName),
+              if (_beneficiary!.nameForDemo.isNotEmpty)
+                _buildShopRow(Icons.person_outline, 'Registered for', _beneficiary!.nameForDemo),
             ],
             const SizedBox(height: 24),
             ElevatedButton(
@@ -1311,7 +1311,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
             VoicePictorialAssistModal.show(
               context,
               onApplyVoiceIntent: (mode, rice, wheat) {
-                _navigateToIntentSelectionWithMode(mode);
+                _navigateToIntentSelection();
               },
             );
           },
@@ -2690,6 +2690,12 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                 ),
               );
             }),
+          ],
+        ],
+      ),
+    );
+  }
+
   // 0c. VOICE & PICTORIAL ACCESSIBILITY ASSISTANT BANNER (FOR LOW-LITERACY BENEFICIARIES)
   Widget _buildVoicePictorialAssistBanner() {
     return Container(
@@ -2717,7 +2723,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
             child: const Icon(Icons.mic_rounded, color: Color(0xFF38BDF8), size: 24),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

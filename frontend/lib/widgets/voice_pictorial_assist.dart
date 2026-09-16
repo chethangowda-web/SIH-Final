@@ -77,7 +77,7 @@ class VoicePictorialAssistButton extends StatelessWidget {
       ),
       color: const Color(0xFF0F382C), // Deep Emerald Dark Navy
       child: InkWell(
-        onPressed: onTap,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(12.0),
@@ -107,7 +107,7 @@ class VoicePictorialAssistButton extends StatelessWidget {
                           ),
                           child: const Text(
                             'NEW / नया / ಹೊಸ',
-                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.black, color: Colors.black),
+                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.black),
                           ),
                         ),
                         const SizedBox(width: 6),

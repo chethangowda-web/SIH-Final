@@ -356,7 +356,7 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
   Widget _buildFpsBanner(double dist) {
     final shopName = _selectedFps?.name.isNotEmpty == true
         ? _selectedFps!.name
-        : (_selectedFps?.shopName.isNotEmpty == true ? _selectedFps!.shopName : 'Designated Fair Price Shop');
+        : 'Designated Fair Price Shop';
     final fpsId = _selectedFps?.fpsId ?? widget.beneficiary.registeredFpsId;
 
     return Container(
@@ -482,7 +482,7 @@ class _IntentSelectionScreenState extends State<IntentSelectionScreen> {
                             color: isSelected ? AppConstants.accentBlue : AppConstants.primaryNavy,
                           ),
                           title: Text(
-                            fps.name.isNotEmpty ? fps.name : fps.shopName,
+                            fps.name.isNotEmpty ? fps.name : fps.fpsId,
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,

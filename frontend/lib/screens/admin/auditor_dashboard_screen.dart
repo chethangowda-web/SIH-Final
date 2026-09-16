@@ -746,7 +746,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
       builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          maxWidth: 600,
+          constraints: const BoxConstraints(maxWidth: 600),
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -769,7 +769,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                       children: [
                         Text(
                           'OFFICIAL VIGILANCE AUDIT CERTIFICATE',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.black, letterSpacing: 0.3),
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 0.3),
                         ),
                         Text(
                           'Comptroller & Auditor General (CAG) Audit Standard',
@@ -814,19 +814,19 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                       children: [
                         Column(
                           children: [
-                            Text('99.8%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.black, color: Colors.green)),
+                            Text('99.8%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.green)),
                             Text('Compliance Index', style: TextStyle(fontSize: 10, color: Colors.black54)),
                           ],
                         ),
                         Column(
                           children: [
-                            Text('4.12%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.black, color: Colors.blue)),
+                            Text('4.12%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.blue)),
                             Text('Forecast MAPE', style: TextStyle(fontSize: 10, color: Colors.black54)),
                           ],
                         ),
                         Column(
                           children: [
-                            Text('0', style: TextStyle(fontSize: 18, fontWeight: FontWeight.black, color: Colors.green)),
+                            Text('0', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.green)),
                             Text('Tamper Flags', style: TextStyle(fontSize: 10, color: Colors.black54)),
                           ],
                         ),
@@ -898,7 +898,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                           ),
                           child: Text(
                             'AUDIT STEP $currentStep / 5',
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.black, color: Colors.white),
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1012,7 +1012,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                       children: [
                         Text(
                           'Step 5: Executive CAG Audit Clearance & Official Sign-Off',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.black, color: AppConstants.textPrimary),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppConstants.textPrimary),
                         ),
                         Text(
                           'Final verification summary for Cycle 2026-09 before generating CAG Vigilance Certificate.',
@@ -1026,7 +1026,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
               const Divider(height: 28),
               const Text(
                 'COMPREHENSIVE AUDIT VERIFICATION CHECKLIST:',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.black, letterSpacing: 0.5, color: Color(0xFF6B21A8)),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.5, color: Color(0xFF6B21A8)),
               ),
               const SizedBox(height: 12),
               _buildChecklistItem('Step 1: Manifest Integrity', 'Cryptographic SHA-256 seal verified. Zero post-planning tampering detected.', true),
@@ -1051,7 +1051,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                         children: [
                           Text(
                             'AUDIT STATUS: FULLY CERTIFIED & COMPLIANT',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.black, color: Color(0xFF14532D)),
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF14532D)),
                           ),
                           Text(
                             'All statutory NFSA guidelines and digital custody protocols satisfied.',

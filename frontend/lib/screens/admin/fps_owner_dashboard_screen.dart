@@ -1606,7 +1606,7 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
                     SizedBox(width: 8),
                     Text(
                       'PHYSICAL EXECUTION AUTHORITY • GODOWN & LOADING BAY Clearance',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.black, color: Color(0xFFC2410C), letterSpacing: 0.3),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFFC2410C), letterSpacing: 0.3),
                     ),
                   ],
                 ),
