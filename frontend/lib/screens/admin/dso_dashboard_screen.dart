@@ -1027,6 +1027,9 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 0. Live Pre-Dispatch Operational Incidents (DSO Workstation Spotlight)
+        _buildPreDispatchOperationalIncidentsCard(),
+
         // 1. Compact Situation Summary (8 Metrics)
         const Text('DISTRICT SITUATION SUMMARY', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _slate500, letterSpacing: 0.5)),
         const SizedBox(height: 8),
@@ -1123,6 +1126,557 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
             setState(() => _viewingStageIndex = 1);
           },
         ),
+      ],
+    );
+  }
+
+  // =========================================================================
+  // PRE-DISPATCH OPERATIONAL INCIDENTS BANNER (PRIMARY DSO WORKSTATION FEATURE)
+  // =========================================================================
+  Widget _buildPreDispatchOperationalIncidentsCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFDF0),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD97706).withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PRE-DISPATCH OPERATIONAL INCIDENTS — PREPARE BEFORE TRUCK DEPARTS',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF92400E),
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      '"Don\'t reroute the truck after it leaves. Prepare the demand before it leaves."',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFFB45309),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: const Text(
+                  '3 LIVE PRE-DISPATCH ALERTS',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFDC2626),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // 3 Incident Cards in responsive row
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 950;
+              final cardWidth = isWide ? (constraints.maxWidth - 28) / 3 : constraints.maxWidth;
+
+              return Wrap(
+                spacing: 14,
+                runSpacing: 14,
+                children: [
+                  // CARD 1: Festival Demand Surge Detected
+                  _buildIncidentCard(
+                    width: cardWidth,
+                    icon: Icons.celebration_rounded,
+                    iconColor: const Color(0xFFDC2626),
+                    title: 'Festival Demand Surge Detected',
+                    tagText: 'GANESH CHATURTHI SURGE',
+                    tagBg: const Color(0xFFFEF2F2),
+                    tagBorder: const Color(0xFFFECACA),
+                    tagColor: const Color(0xFFDC2626),
+                    affectedFps: 'FPS-KA-BLR-001 (Malleshwaram Seva Kendra)',
+                    deficitText: '+2,450 kg Rice (Deficit Risk: 88%)',
+                    deficitHighlight: true,
+                    adjustmentText: '+2.45 MT Statutory Buffer Release Required',
+                    actionText: 'Upgrade corridor carrier to 10 MT Heavy Hauler (KA-04-E-1021) and release +2.45 MT emergency buffer allocation from Central Hebbal Godown before truck departure.',
+                    onInspect: () => _showIncidentDetailDialog(
+                      incidentId: 'INC-2026-09-01',
+                      title: 'Festival Demand Surge Detected',
+                      tagText: 'GANESH CHATURTHI SURGE',
+                      tagColor: const Color(0xFFDC2626),
+                      tagBg: const Color(0xFFFEF2F2),
+                      affectedFps: 'FPS-KA-BLR-001 (Malleshwaram Seva Kendra)',
+                      leadCommodity: 'Rice (Fine Grade)',
+                      baselineQuota: '5,000 kg',
+                      intentSurge: '+2,450 kg (+49.0% Surge)',
+                      netDemand: '7,450 kg',
+                      storageCapacity: '15,000 kg (Sufficient Headroom)',
+                      carrierAssigned: 'Eicher Pro 10 MT (KA-04-E-1021)',
+                      rootCause: 'Major Hindu festival (Ganesh Chaturthi) creates a verified spike in household lifting intent. 342 active beneficiary intent submissions flagged demand surge in Ward 65.',
+                      recommendation: 'Release +2.45 MT emergency buffer allocation from Central Hebbal Godown and designate 10 MT Heavy Hauler for morning delivery window.',
+                      actionBtnText: 'Approve +2.45 MT Buffer Release',
+                      targetStage: 2,
+                    ),
+                  ),
+
+                  // CARD 2: FPS Storage / Headroom Constraint
+                  _buildIncidentCard(
+                    width: cardWidth,
+                    icon: Icons.warehouse_rounded,
+                    iconColor: const Color(0xFF7C3AED),
+                    title: 'FPS Storage / Headroom Constraint',
+                    tagText: 'STORAGE HEADROOM LIMIT',
+                    tagBg: const Color(0xFFF5F3FF),
+                    tagBorder: const Color(0xFFDDD6FE),
+                    tagColor: const Color(0xFF7C3AED),
+                    affectedFps: 'FPS-KA-BLR-008 (Thanisandra Main Road Depot)',
+                    deficitText: 'Safe Storage: 12,000 kg • Planned Dispatch: 14,800 kg',
+                    deficitHighlight: true,
+                    adjustmentText: 'Excess Dispatch: +2,800 kg (123% Bay Overflow)',
+                    actionText: 'Split delivery schedule into 2 staggered deliveries: Trip 1 (8.0 MT Morning) + Trip 2 (6.8 MT Evening) once initial day lifting clears bay headroom.',
+                    onInspect: () => _showIncidentDetailDialog(
+                      incidentId: 'INC-2026-09-02',
+                      title: 'FPS Storage / Headroom Constraint',
+                      tagText: 'STORAGE HEADROOM LIMIT',
+                      tagColor: const Color(0xFF7C3AED),
+                      tagBg: const Color(0xFFF5F3FF),
+                      affectedFps: 'FPS-KA-BLR-008 (Thanisandra Main Road Depot)',
+                      leadCommodity: 'Rice & Wheat Combined',
+                      baselineQuota: '12,000 kg (Storage Ceiling)',
+                      intentSurge: '+2,800 kg Allocation',
+                      netDemand: '14,800 kg Total Dispatch',
+                      storageCapacity: '12,000 kg (Exceeded by 23%)',
+                      carrierAssigned: 'Tata Ultra 10 MT (KA-04-E-1022)',
+                      rootCause: 'Physical godown footprint at Thanisandra cannot receive 14.8 MT in a single batch without stacking onto pedestrian walkways and violating fire safety norms.',
+                      recommendation: 'Stagger into two synchronized delivery batches: 8.0 MT at 08:30 AM and 6.8 MT at 02:30 PM post-initial distribution.',
+                      actionBtnText: 'Apply 2-Batch Staggered Schedule',
+                      targetStage: 3,
+                    ),
+                  ),
+
+                  // CARD 3: Low Inventory / Critical Stockout Risk
+                  _buildIncidentCard(
+                    width: cardWidth,
+                    icon: Icons.emergency_rounded,
+                    iconColor: const Color(0xFFEA580C),
+                    title: 'Low Inventory / Critical Stockout Risk',
+                    tagText: 'STOCKOUT RISK (< 18 HRS)',
+                    tagBg: const Color(0xFFFFF7ED),
+                    tagBorder: const Color(0xFFFFEDD5),
+                    tagColor: const Color(0xFFEA580C),
+                    affectedFps: 'FPS-KA-BLR-015 (K.R. Puram Market Center)',
+                    deficitText: 'Current Stock: 350 kg • Expected Influx Demand: 3,200 kg',
+                    deficitHighlight: true,
+                    adjustmentText: 'Critical Depletion: < 18 Hours to Total Zero-Stock',
+                    actionText: 'Reprioritize K.R. Puram as Sequence Stop #1 in the East Corridor route and expedite digital gatepass clearance with immediate 2.85 MT replenishment.',
+                    onInspect: () => _showIncidentDetailDialog(
+                      incidentId: 'INC-2026-09-03',
+                      title: 'Low Inventory / Critical Stockout Risk',
+                      tagText: 'STOCKOUT RISK (< 18 HRS)',
+                      tagColor: const Color(0xFFEA580C),
+                      tagBg: const Color(0xFFFFF7ED),
+                      affectedFps: 'FPS-KA-BLR-015 (K.R. Puram Market Center)',
+                      leadCommodity: 'Rice (Common PDS)',
+                      baselineQuota: '3,200 kg',
+                      intentSurge: '350 kg Remaining Stock',
+                      netDemand: '2,850 kg Net Replenishment',
+                      storageCapacity: '8,000 kg (Safe Storage)',
+                      carrierAssigned: 'BharatBenz 10 MT (KA-51-M-3419)',
+                      rootCause: 'High portability inflow from adjacent migrant labour ward depleted buffer 3 days ahead of cycle close. Stockout projected within 18 operational hours.',
+                      recommendation: 'Reorder routing stop sequence to make K.R. Puram Stop #1 and issue priority gatepass clearance at depot loading bay.',
+                      actionBtnText: 'Reprioritize Route Sequence to Stop #1',
+                      targetStage: 3,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncidentCard({
+    required double width,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String tagText,
+    required Color tagBg,
+    required Color tagBorder,
+    required Color tagColor,
+    required String affectedFps,
+    required String deficitText,
+    required bool deficitHighlight,
+    required String adjustmentText,
+    required String actionText,
+    required VoidCallback onInspect,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top Row: Title + Tag
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: iconColor, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _govNavy),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: tagBg,
+                  border: Border.all(color: tagBorder),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  tagText,
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: tagColor),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Detail 1: Affected FPS
+          _buildIncidentField(
+            icon: Icons.storefront_outlined,
+            iconColor: _slate500,
+            label: 'Affected FPS: ',
+            value: affectedFps,
+            valueColor: _govNavy,
+            isBold: true,
+          ),
+          const SizedBox(height: 6),
+
+          // Detail 2: Projected Deficit / Constraint
+          _buildIncidentField(
+            icon: Icons.trending_up_rounded,
+            iconColor: const Color(0xFFDC2626),
+            label: 'Projected Deficit / Constraint: ',
+            value: deficitText,
+            valueColor: const Color(0xFFDC2626),
+            isBold: true,
+          ),
+          const SizedBox(height: 6),
+
+          // Detail 3: Required Supply Adjustment
+          _buildIncidentField(
+            icon: Icons.local_shipping_outlined,
+            iconColor: _slate500,
+            label: 'Required Supply Adjustment: ',
+            value: adjustmentText,
+            valueColor: _slate700,
+            isBold: false,
+          ),
+          const SizedBox(height: 6),
+
+          // Detail 4: Recommended Action
+          _buildIncidentField(
+            icon: Icons.lightbulb_outline_rounded,
+            iconColor: const Color(0xFF15803D),
+            label: 'Recommended Action: ',
+            value: actionText,
+            valueColor: const Color(0xFF15803D),
+            isBold: true,
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: _slate100),
+          const SizedBox(height: 8),
+
+          // Bottom Bar
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFDC2626),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  const Text(
+                    'Live Alert',
+                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                  ),
+                ],
+              ),
+              InkWell(
+                onTap: onInspect,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Inspect Incident Details →',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncidentField({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String value,
+    required Color valueColor,
+    required bool isBold,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: iconColor),
+        const SizedBox(width: 6),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 11, color: _slate700, height: 1.35),
+              children: [
+                TextSpan(text: label, style: const TextStyle(color: _slate500)),
+                TextSpan(
+                  text: value,
+                  style: TextStyle(
+                    color: valueColor,
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showIncidentDetailDialog({
+    required String incidentId,
+    required String title,
+    required String tagText,
+    required Color tagColor,
+    required Color tagBg,
+    required String affectedFps,
+    required String leadCommodity,
+    required String baselineQuota,
+    required String intentSurge,
+    required String netDemand,
+    required String storageCapacity,
+    required String carrierAssigned,
+    required String rootCause,
+    required String recommendation,
+    required String actionBtnText,
+    required int targetStage,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: const BoxDecoration(
+            color: _govNavy,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.shield_outlined, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+                    const SizedBox(height: 2),
+                    Text('INCIDENT REF: $incidentId  •  PLANNING CYCLE: $_currentCycle', style: const TextStyle(fontSize: 10, color: Colors.white70)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: tagBg, borderRadius: BorderRadius.circular(4)),
+                child: Text(tagText, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: tagColor)),
+              ),
+            ],
+          ),
+        ),
+        content: SizedBox(
+          width: 580,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Telemetry Matrix
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: _buildDialogMetric('Affected Shop', affectedFps)),
+                          Expanded(child: _buildDialogMetric('Commodity', leadCommodity)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(child: _buildDialogMetric('Baseline Allocation', baselineQuota)),
+                          Expanded(child: _buildDialogMetric('Intent / Surge Signal', intentSurge)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(child: _buildDialogMetric('Net Recommended Demand', netDemand)),
+                          Expanded(child: _buildDialogMetric('Storage Headroom', storageCapacity)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(child: _buildDialogMetric('Designated Carrier', carrierAssigned)),
+                          Expanded(child: _buildDialogMetric('Operational Status', 'PRE-DISPATCH ACTIONABLE')),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // 2. Root Cause Analysis
+                const Text('AI & STATUTORY ROOT CAUSE ANALYSIS', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: _govNavy)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFFECACA))),
+                  child: Text(rootCause, style: const TextStyle(fontSize: 11.5, color: Color(0xFF991B1B), height: 1.4)),
+                ),
+                const SizedBox(height: 14),
+
+                // 3. Recommended Supply Chain Action
+                const Text('RECOMMENDED OPERATIONAL INTERVENTION', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: _govNavy)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFFF0FDF4), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFBBF7D0))),
+                  child: Text(recommendation, style: const TextStyle(fontSize: 11.5, color: Color(0xFF166534), height: 1.4, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Dismiss', style: TextStyle(color: _slate500, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _govNavy,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _viewingStageIndex = targetStage);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Intervention selected: $actionBtnText. Switched to Stage 0${targetStage + 1}.'),
+                  backgroundColor: _govGreen,
+                ),
+              );
+            },
+            child: Text(actionBtnText, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDialogMetric(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: _slate500, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: _govNavy), maxLines: 1, overflow: TextOverflow.ellipsis),
       ],
     );
   }
