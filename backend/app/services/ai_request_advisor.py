@@ -87,11 +87,39 @@ class CitizenRequestAdvisor:
             raise ValueError(f"Beneficiary data unavailable: Beneficiary record '{beneficiary_id}' not found in master database registry.")
 
         # Extract authoritative master dataset records
-        card_type = (row["scheme_type"] or "PHH").strip()
-        members = int(row["members_count"]) if row["members_count"] is not None else 1
-        rice_quota = float(row["monthly_rice_kg"] or 0.0)
-        wheat_quota = float(row["monthly_wheat_kg"] or 0.0)
-        card_label = "Antyodaya Anna Yojana (AAY)" if card_type == "AAY" else "Priority Household (PHH)"
+        card_type = (row["scheme_type"] or "PHH").strip().upper()
+        raw_members_count = int(row["members_count"]) if row["members_count"] is not None else 1
+        ben_card_id = row["pseudonymous_beneficiary_id"] if row else beneficiary_id
+
+        # Query registered household members to determine eligible member count
+        from app.core.database import get_or_create_household_members
+        try:
+            household = get_or_create_household_members(db, ben_card_id)
+        except Exception:
+            household = []
+
+        if household:
+            eligible_count = sum(1 for m in household if int(m.get("is_eligible", 1)) == 1)
+            total_members = len(household)
+        else:
+            eligible_count = raw_members_count
+            total_members = raw_members_count
+
+        # Statutory per-member entitlement calculation:
+        # PHH / BPL: 4 kg Rice + 1 kg Wheat per eligible member
+        # AAY (Antyodaya Anna Yojana): Fixed statutory 35 kg per household (25 kg Rice + 10 kg Wheat)
+        if card_type in ("PHH", "BPL", "PRIORITY"):
+            rice_quota = round(float(eligible_count * 4.0), 2)
+            wheat_quota = round(float(eligible_count * 1.0), 2)
+            card_label = "Priority Household (PHH)"
+        elif card_type == "AAY":
+            rice_quota = float(row["monthly_rice_kg"] or 25.0)
+            wheat_quota = float(row["monthly_wheat_kg"] or 10.0)
+            card_label = "Antyodaya Anna Yojana (AAY)"
+        else:
+            rice_quota = float(row["monthly_rice_kg"] or (eligible_count * 4.0))
+            wheat_quota = float(row["monthly_wheat_kg"] or (eligible_count * 1.0))
+            card_label = f"{card_type} Card"
 
         # Query existing actual distribution / consumed balance for this cycle from confirmed citizen requests
         try:
@@ -114,24 +142,33 @@ class CitizenRequestAdvisor:
 
         remaining_rice = max(0.0, rice_quota - consumed_rice)
         remaining_wheat = max(0.0, wheat_quota - consumed_wheat)
-        remaining_commodity = remaining_rice if commodity == "Rice" else remaining_wheat
+        if commodity == "Rice":
+            remaining_commodity = remaining_rice
+            statutory_commodity = rice_quota
+        elif commodity == "Wheat":
+            remaining_commodity = remaining_wheat
+            statutory_commodity = wheat_quota
+        else:  # "Both" or combined
+            remaining_commodity = remaining_rice + remaining_wheat
+            statutory_commodity = rice_quota + wheat_quota
 
         return {
-            "beneficiary_id": row["pseudonymous_beneficiary_id"] if row else beneficiary_id,
+            "beneficiary_id": ben_card_id,
             "name": row["name_for_demo"] if row else "Beneficiary (Citizen)",
             "registered_fps_id": row["registered_fps_id"] if row else "FPS-KA-BLR-001",
             "registered_fps_name": row["registered_fps_name"] if row else "Malleshwaram Seva Kendra",
             "card_type": card_type,
-            "family_members_count": members,
+            "family_members_count": total_members,
+            "eligible_members_count": eligible_count,
             "statutory_entitlement_rice_kg": rice_quota,
             "statutory_entitlement_wheat_kg": wheat_quota,
-            "statutory_entitlement_commodity_kg": rice_quota if commodity == "Rice" else wheat_quota,
+            "statutory_entitlement_commodity_kg": statutory_commodity,
             "consumed_rice_kg": consumed_rice,
             "consumed_wheat_kg": consumed_wheat,
             "remaining_eligible_rice_kg": remaining_rice,
             "remaining_eligible_wheat_kg": remaining_wheat,
             "remaining_eligible_commodity_kg": remaining_commodity,
-            "card_label": f"{card_label} ({members} Members)"
+            "card_label": f"{card_label} ({eligible_count} Eligible Members)"
         }
 
     def calculate_transport_fee(

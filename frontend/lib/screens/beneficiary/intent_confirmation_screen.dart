@@ -4,6 +4,7 @@ import '../../core/localization.dart';
 import '../../models/beneficiary_model.dart';
 import '../../services/api_service.dart';
 import '../../widgets/status_badge.dart';
+import '../../services/voice_assistant_service.dart';
 import 'intent_history_screen.dart';
 
 class IntentConfirmationScreen extends StatefulWidget {
@@ -53,6 +54,28 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
     _completedRecords = widget.submittedRecords;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.entitlementSummary?.rationReceivedForCycle == true) {
+        VoiceAssistantService.instance.guideCycleAlreadyReceived();
+      } else if (_completedRecords == null || _completedRecords!.isEmpty) {
+        VoiceAssistantService.instance.guideConfirmation();
+      } else {
+        VoiceAssistantService.instance.guideReceiptGenerated();
+      }
+    });
+
+    VoiceAssistantService.instance.onCommandRecognized = (cmd) {
+      if (widget.entitlementSummary?.rationReceivedForCycle == true) {
+        VoiceAssistantService.instance.guideCycleAlreadyReceived();
+        return;
+      }
+      final text = cmd.toLowerCase();
+      if (text.contains('confirm') || text.contains('lock') || text.contains('save') || text.contains('पुष्टि') || text.contains('ದೃಢೀಕರಿಸಿ') || text.contains('ಸರಿ') || text.contains('yes')) {
+        if (!_isSubmitting && (_completedRecords == null || _completedRecords!.isEmpty)) {
+          _handleSubmitCollectionPlan();
+        }
+      }
+    };
   }
 
 
@@ -63,10 +86,17 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
     });
 
     if (widget.entitlementSummary?.rationReceivedForCycle == true) {
+      final isHindi = VoiceAssistantService.instance.isHindi;
+      final isKannada = VoiceAssistantService.instance.isKannada;
       setState(() {
         _isSubmitting = false;
-        _errorMessage = 'Ration already received for this cycle. Please wait for the next distribution cycle to submit a new request.';
+        _errorMessage = isHindi
+            ? 'इस चक्र का आपका राशन पहले ही प्राप्त हो चुका है। आप इस चक्र में दोबारा राशन नहीं चुन सकते।'
+            : isKannada
+                ? 'ಈ ಚಕ್ರದ ನಿಮ್ಮ ಪಡಿತರವನ್ನು ಈಗಾಗಲೇ ಸ್ವೀಕರಿಸಲಾಗಿದೆ. ಈ ಚಕ್ರದಲ್ಲಿ ನೀವು ಮತ್ತೆ ಪಡಿತರವನ್ನು ಆಯ್ಕೆ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ.'
+                : 'Your ration for this cycle has already been received. You cannot select ration again in this cycle.';
       });
+      VoiceAssistantService.instance.guideCycleAlreadyReceived();
       return;
     }
 
@@ -92,15 +122,34 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
           _isSubmitting = false;
           _completedRecords = results;
         });
+        VoiceAssistantService.instance.guideReceiptGenerated();
       }
     } catch (e) {
       if (mounted) {
+        final errText = e.toString().replaceAll('Exception: ', '');
         setState(() {
           _isSubmitting = false;
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
+          _errorMessage = errText;
         });
+        if (errText.contains('exceeds statutory monthly entitlement ceiling') || errText.contains('exceeds statutory') || errText.contains('statutory')) {
+          VoiceAssistantService.instance.guideStatutoryQuantityError();
+        } else if (errText.contains('already received') || errText.contains('Ration already received')) {
+          VoiceAssistantService.instance.guideCycleAlreadyReceived();
+        } else {
+          VoiceAssistantService.instance.speakLocalized(
+            enText: 'There was an error processing your request. Please check and try again.',
+            hiText: 'आपके अनुरोध को संसाधित करने में एक त्रुटि हुई। कृपया जांचें और पुनः प्रयास करें।',
+            knText: 'ನಿಮ್ಮ ವಿನಂತಿಯನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುವಲ್ಲಿ ದೋಷ ಉಂಟಾಗಿದೆ. ದಯವಿಟ್ಟು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+          );
+        }
       }
     }
+  }
+
+  @override
+  void dispose() {
+    VoiceAssistantService.instance.onCommandRecognized = null;
+    super.dispose();
   }
 
   @override
@@ -111,12 +160,19 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
       animation: LanguageController.instance,
       builder: (context, _) {
         return Scaffold(
-          backgroundColor: AppConstants.backgroundLight,
+          backgroundColor: Colors.white,
           appBar: AppBar(
             automaticallyImplyLeading: !isConfirmed,
-            backgroundColor: AppConstants.primaryNavy,
-            foregroundColor: Colors.white,
-            elevation: 0,
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF0F2942),
+            elevation: 0.5,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1.0),
+              child: Container(
+                color: const Color(0xFFE2E8F0),
+                height: 1.0,
+              ),
+            ),
             titleSpacing: 16,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -124,11 +180,11 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
               children: [
                 Text(
                   isConfirmed ? tr('confirm.success_heading') : tr('confirm.review_title'),
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.2),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF0F2942), letterSpacing: 0.2),
                 ),
                 Text(
                   '${tr('app.nfsa_notice')} • ${tr('app.cycle_label')}',
-                  style: const TextStyle(fontSize: 10.5, color: Colors.white70),
+                  style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
                 ),
               ],
             ),
@@ -146,7 +202,14 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: AppConstants.space20, vertical: AppConstants.space20),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 680),
-                  child: isConfirmed ? _buildSuccessConfirmedView() : _buildReviewStepView(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const VoiceAssistantBanner(),
+                      const SizedBox(height: 12),
+                      isConfirmed ? _buildSuccessConfirmedView() : _buildReviewStepView(),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -538,7 +601,7 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
 
         // Primary CTA: Submit Collection Plan
         ElevatedButton.icon(
-          onPressed: _isSubmitting ? null : _handleSubmitCollectionPlan,
+          onPressed: (_isSubmitting || widget.entitlementSummary?.rationReceivedForCycle == true) ? null : _handleSubmitCollectionPlan,
           icon: _isSubmitting
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Icon(Icons.send_rounded, size: 18),
@@ -697,12 +760,16 @@ class _IntentConfirmationScreenState extends State<IntentConfirmationScreen> {
 
         // Heading
         Text(
-          tr('confirm.success_heading'),
+          VoiceAssistantService.instance.isHindi
+              ? 'आपकी पसंद दर्ज हो गई ✓'
+              : VoiceAssistantService.instance.isKannada
+                  ? 'ನಿಮ್ಮ ಆಯ್ಕೆ ದಾಖಲಾಗಿದೆ ✓'
+                  : tr('confirm.success_heading'),
           textAlign: TextAlign.center,
           style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: AppConstants.primaryNavy,
+            fontSize: 21,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF15803D),
           ),
         ),
         const SizedBox(height: 4),

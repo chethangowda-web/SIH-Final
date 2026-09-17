@@ -1,15 +1,20 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' hide Path;
 import '../../core/constants.dart';
 import '../../core/localization.dart';
 import '../../models/beneficiary_model.dart';
 import '../../services/api_service.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/delivery_timeline.dart';
-import '../../widgets/voice_pictorial_assist.dart';
+import '../../services/voice_assistant_service.dart';
+import '../../widgets/simple_beneficiary_feedback_dialog.dart';
 import 'intent_selection_screen.dart';
 import 'intent_history_screen.dart';
 import 'demo_login_screen.dart';
+import 'grain_atm/grain_atm_welcome_screen.dart';
+import '../../services/beneficiary_voice_router.dart';
 
 class CombinedCitizenDeliveryOrder {
   final String baseRequestId;
@@ -99,6 +104,8 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  List<FpsShop> _fpsList = [];
+
   // Household-based Entitlement State
   int _eligibleMembersCount = 1;
   double _distributedQuantityKg = 0.0;
@@ -114,11 +121,192 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
+
+    // Enable Voice Assistant automatically for authenticated beneficiary
+    VoiceAssistantService.instance.enableBeneficiaryVoiceMode();
+
     _loadBeneficiaryData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        VoiceAssistantService.instance.guideBeneficiaryPostLoginWelcome();
+      }
+    });
+
+    _setupVoiceCommandRouter();
+  }
+
+  void _setupVoiceCommandRouter() {
+    VoiceAssistantService.instance.onCommandRecognized = (cmd) {
+      if (!mounted) return;
+      final resolution = BeneficiaryVoiceCommandRouter.resolve(cmd);
+      final lang = LanguageController.instance.currentLanguage;
+
+      final hasCompletedDelivery = _deliveryRecords.any((r) => r.deliveryStatus == 'DELIVERY_CONFIRMED' || r.citizenConfirmedAt != null);
+      final isReceived = _entitlement?.rationReceivedForCycle == true || hasCompletedDelivery;
+
+      switch (resolution.intent) {
+        case BeneficiaryVoiceIntent.languageHindi:
+          LanguageController.instance.setLanguage(AppLanguage.hindi);
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: resolution.confirmationHi,
+            knText: resolution.confirmationKn,
+            enText: resolution.confirmationEn,
+          );
+          break;
+
+        case BeneficiaryVoiceIntent.languageKannada:
+          LanguageController.instance.setLanguage(AppLanguage.kannada);
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: resolution.confirmationHi,
+            knText: resolution.confirmationKn,
+            enText: resolution.confirmationEn,
+          );
+          break;
+
+        case BeneficiaryVoiceIntent.languageEnglish:
+          LanguageController.instance.setLanguage(AppLanguage.english);
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: resolution.confirmationHi,
+            knText: resolution.confirmationKn,
+            enText: resolution.confirmationEn,
+          );
+          break;
+
+        case BeneficiaryVoiceIntent.grainAtm:
+          if (isReceived) {
+            VoiceAssistantService.instance.guideAtmAlreadyReceived();
+            return;
+          }
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: resolution.confirmationHi,
+            knText: resolution.confirmationKn,
+            enText: resolution.confirmationEn,
+          );
+          _navigateToGrainAtm();
+          break;
+
+        case BeneficiaryVoiceIntent.demandSelection:
+          if (isReceived) {
+            VoiceAssistantService.instance.guideCycleAlreadyReceived();
+            return;
+          }
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: resolution.confirmationHi,
+            knText: resolution.confirmationKn,
+            enText: resolution.confirmationEn,
+          );
+          _navigateToIntentSelection();
+          break;
+
+        case BeneficiaryVoiceIntent.rationShop:
+          final homeFps = _beneficiary?.registeredFpsName ?? 'Malleshwaram Seva Kendra';
+          final activeFps = _deliveryRecords.isNotEmpty
+              ? (_deliveryRecords.first.intendedFpsName ?? _deliveryRecords.first.registeredFpsName ?? homeFps)
+              : (_activeIntents.isNotEmpty ? _activeIntents.first.intendedFpsName : homeFps);
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: resolution.confirmationHi,
+            knText: resolution.confirmationKn,
+            enText: resolution.confirmationEn,
+          );
+          _showFpsRouteTrackingModal(activeFps ?? homeFps);
+          break;
+
+        case BeneficiaryVoiceIntent.tracking:
+          String deliveryStepText;
+          if (_deliveryRecords.isEmpty) {
+            deliveryStepText = lang == AppLanguage.hindi
+                ? 'मांग दर्ज करने की प्रतीक्षा है'
+                : lang == AppLanguage.kannada
+                    ? 'ಆಯ್ಕೆ ಸಲ್ಲಿಸಲು ಕಾಯಲಾಗುತ್ತಿದೆ'
+                    : 'Awaiting your choice selection';
+          } else if (isReceived) {
+            deliveryStepText = lang == AppLanguage.hindi
+                ? 'राशन सफलतापूर्वक प्राप्त हुआ ✓'
+                : lang == AppLanguage.kannada
+                    ? 'ಪಡಿತರ ಯಶಸ್ವಿಯಾಗಿ ತಲುಪಿದೆ ✓'
+                    : 'Ration Received Successfully ✓';
+          } else if (_deliveryRecords.any((r) => r.deliveryStatus == 'DELIVERED')) {
+            deliveryStepText = lang == AppLanguage.hindi
+                ? 'दुकान पर उपलब्ध • लेने के लिए तैयार'
+                : lang == AppLanguage.kannada
+                    ? 'ಅಂಗಡಿಯಲ್ಲಿ ಲಭ್ಯ • ತೆಗೆದುಕೊಳ್ಳಲು ಸಿದ್ಧ'
+                    : 'Ready for pickup at shop';
+          } else if (_deliveryRecords.any((r) => r.deliveryStatus == 'OUT_FOR_DELIVERY')) {
+            deliveryStepText = lang == AppLanguage.hindi
+                ? 'राशन दुकान के लिए रवाना हो चुका है'
+                : lang == AppLanguage.kannada
+                    ? 'ಪಡಿತರ ರವಾನೆಯಾಗಿದೆ'
+                    : 'Dispatched / In transit to shop';
+          } else {
+            deliveryStepText = lang == AppLanguage.hindi
+                ? 'गोदाम में राशन पैक हो रहा है'
+                : lang == AppLanguage.kannada
+                    ? 'ಗೋದಾಮಿನಲ್ಲಿ ಪ್ಯಾಕ್ ಆಗುತ್ತಿದೆ'
+                    : 'Grain allocation being prepared';
+          }
+          VoiceAssistantService.instance.guideTracking(deliveryStepText);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(deliveryStepText),
+              backgroundColor: AppConstants.primaryNavy,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          break;
+
+        case BeneficiaryVoiceIntent.helpFeedback:
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: resolution.confirmationHi,
+            knText: resolution.confirmationKn,
+            enText: resolution.confirmationEn,
+          );
+          SimpleBeneficiaryFeedbackDialog.show(
+            context,
+            beneficiaryId: widget.beneficiaryId,
+            activeRequestId: _deliveryRecords.isNotEmpty ? _deliveryRecords.first.requestId : null,
+            registeredFpsId: _beneficiary?.registeredFpsId,
+            apiService: _apiService,
+            onFeedbackSubmitted: _loadBeneficiaryData,
+          );
+          break;
+
+        case BeneficiaryVoiceIntent.historyReceipts:
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: resolution.confirmationHi,
+            knText: resolution.confirmationKn,
+            enText: resolution.confirmationEn,
+          );
+          _navigateToIntentHistory();
+          break;
+
+        case BeneficiaryVoiceIntent.profileCard:
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: resolution.confirmationHi,
+            knText: resolution.confirmationKn,
+            enText: resolution.confirmationEn,
+          );
+          _showBeneficiaryProfileModal();
+          break;
+
+        case BeneficiaryVoiceIntent.repeatHelp:
+          VoiceAssistantService.instance.guideBeneficiaryPostLoginWelcome();
+          break;
+
+        case BeneficiaryVoiceIntent.unknown:
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: resolution.confirmationHi,
+            knText: resolution.confirmationKn,
+            enText: resolution.confirmationEn,
+          );
+          break;
+      }
+    };
   }
 
   @override
   void dispose() {
+    VoiceAssistantService.instance.onCommandRecognized = null;
+    VoiceAssistantService.instance.stopListening();
     _etaCountdownTimer?.cancel();
     super.dispose();
   }
@@ -143,6 +331,10 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         widget.beneficiaryId,
         cycleId: '2026-09',
       );
+      List<FpsShop> fpsList = [];
+      try {
+        fpsList = await _apiService.fetchFpsList();
+      } catch (_) {}
       Map<String, dynamic>? cycleState;
       try {
         cycleState = await _apiService.fetchChoiceWindowStatus(cycleId: '2026-09');
@@ -156,6 +348,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
           _entitlement = ent;
           _activeIntents = intents;
           _deliveryRecords = deliveries;
+          _fpsList = fpsList;
           _planningCycleState = cycleState;
           _userSubmittedChoice = false;
           _eligibleMembersCount = ent.familyMembersCount > 0 ? ent.familyMembersCount : 1;
@@ -180,67 +373,8 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   void _navigateToIntentSelection({String initialMode = 'FPS_COLLECTION'}) async {
     if (_beneficiary == null) return;
 
-    // Enforce PDS Business Rule: Once ration is received and confirmed for current cycle, no new request allowed
-    if (_entitlement?.rationReceivedForCycle == true) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: AppConstants.successGreen, size: 24),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  tr('delivery.ration_received_badge'),
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy),
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                tr('delivery.ration_received_desc'),
-                style: const TextStyle(fontSize: 13, color: AppConstants.textPrimary, height: 1.4),
-              ),
-              if (_entitlement?.receiptConfirmedAt != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFF86EFAC)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF16A34A)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Confirmed on: ${_entitlement!.receiptConfirmedAt!}',
-                          style: const TextStyle(fontSize: 11.5, color: Color(0xFF166534), fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(tr('nav.close'), style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
+    // When ration is already received, navigate to IntentSelectionScreen so the user
+    // sees the prominent disabled selection view and hears the audio explanation.
 
     // Beneficiary eligibility for choice selection is governed strictly per-beneficiary
     // based on whether they have already received/confirmed ration for the active cycle.
@@ -275,6 +409,18 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         ),
       ),
     );
+  }
+
+  void _navigateToGrainAtm() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => GrainAtmWelcomeScreen(
+          beneficiary: _beneficiary,
+          beneficiaryId: widget.beneficiaryId,
+        ),
+      ),
+    );
+    _loadBeneficiaryData();
   }
 
   List<CombinedCitizenDeliveryOrder> _getCombinedDeliveryOrders() {
@@ -595,14 +741,263 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
     );
   }
 
+  // -------------------------------------------------------------
+  // SIMPLE BENEFICIARY ENTITLEMENT CARD (PREDOMINANTLY WHITE THEME)
+  // -------------------------------------------------------------
+  Widget _buildSimpleEntitlementCard() {
+    final isHindi = VoiceAssistantService.instance.isHindi;
+    final isKannada = VoiceAssistantService.instance.isKannada;
+    final isElderly = VoiceAssistantService.instance.isElderlyMode;
+
+    final riceTotal = _entitlement != null ? _entitlement!.statutoryEntitlementRiceKg : (_eligibleMembersCount * 4.0);
+    final wheatTotal = _entitlement != null ? _entitlement!.statutoryEntitlementWheatKg : (_eligibleMembersCount * 1.0);
+    final totalEntitlementKg = _entitlement != null && _entitlement!.totalEligibleBalanceKg > 0
+        ? _entitlement!.totalEligibleBalanceKg
+        : (riceTotal + wheatTotal);
+
+    return Container(
+      key: const ValueKey('card_simple_entitlement'),
+      padding: EdgeInsets.all(isElderly ? 18 : 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(isElderly ? 18 : 14),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Text('🌾', style: TextStyle(fontSize: 22)),
+                  const SizedBox(width: 8),
+                  Text(
+                    isHindi
+                        ? 'आपका मासिक राशन'
+                        : isKannada
+                            ? 'ನಿಮ್ಮ ಮಾಸಿಕ ಪಡಿತರ'
+                            : 'Your Monthly Ration',
+                    style: TextStyle(
+                      fontSize: isElderly ? 17 : 14.5,
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFF0F2942),
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  isHindi ? '₹0 मुफ्त कोटा' : isKannada ? '₹0 ಉಚಿತ' : '100% Free (NFSA)',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF15803D),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              // Rice Tile
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('🍚', style: TextStyle(fontSize: 20)),
+                          const SizedBox(width: 6),
+                          Text(
+                            isHindi ? 'चावल' : isKannada ? 'ಅಕ್ಕಿ' : 'Rice',
+                            style: TextStyle(
+                              fontSize: isElderly ? 14 : 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF334155),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${riceTotal.toStringAsFixed(0)} kg',
+                        style: TextStyle(
+                          fontSize: isElderly ? 26 : 22,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF15803D),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Wheat Tile
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('🌾', style: TextStyle(fontSize: 20)),
+                          const SizedBox(width: 6),
+                          Text(
+                            isHindi ? 'गेहूं' : isKannada ? 'ಗೋಧಿ' : 'Wheat',
+                            style: TextStyle(
+                              fontSize: isElderly ? 14 : 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF334155),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${wheatTotal.toStringAsFixed(0)} kg',
+                        style: TextStyle(
+                          fontSize: isElderly ? 26 : 22,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFFB45309),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            isHindi
+                ? 'कुल कोटा: ${totalEntitlementKg.toStringAsFixed(0)} किलो • ${_eligibleMembersCount} सदस्य पंजीकृत'
+                : isKannada
+                    ? 'ಒಟ್ಟು ಕೋಟಾ: ${totalEntitlementKg.toStringAsFixed(0)} ಕೆಜಿ • ${_eligibleMembersCount} ಸದಸ್ಯರು'
+                    : 'Total Entitlement: ${totalEntitlementKg.toStringAsFixed(0)} kg • ${_eligibleMembersCount} family members',
+            style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBeneficiaryProfileModal() {
+    if (_beneficiary == null) return;
+    final b = _beneficiary!;
+    final cardLabel = _entitlement?.cardLabel ?? 'Priority Household (PHH)';
+    final isHindi = VoiceAssistantService.instance.isHindi;
+    final isKannada = VoiceAssistantService.instance.isKannada;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const CircleAvatar(
+              radius: 18,
+              backgroundColor: Color(0xFF15803D),
+              child: Icon(Icons.person_rounded, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    b.nameForDemo,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0F2942)),
+                  ),
+                  Text(
+                    b.pseudonymousBeneficiaryId,
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildBeneficiaryProfileCard(),
+            const SizedBox(height: 12),
+            _buildProfileModalRow(isHindi ? 'योजना का प्रकार' : isKannada ? 'ಯೋಜನೆ' : 'Scheme', cardLabel),
+            _buildProfileModalRow(isHindi ? 'पंजीकृत दुकान' : isKannada ? 'ನೋಂದಾಯಿತ ಅಂಗಡಿ' : 'Registered Shop', b.registeredFpsName ?? b.registeredFpsId),
+            _buildProfileModalRow(isHindi ? 'परिवार के सदस्य' : isKannada ? 'ಕುಟುಂಬದ ಸದಸ್ಯರು' : 'Family Members', '$_eligibleMembersCount सदस्य'),
+            _buildProfileModalRow(isHindi ? 'आधार स्थिति' : isKannada ? 'ಆಧಾರ್ ಸ್ಥಿತಿ' : 'Aadhaar Status', _isBiometricVerified ? '✓ बायोमेट्रिक लिंक (Active)' : '✓ बायोमेट्रिक लिंक (Active)'),
+            _buildProfileModalRow(isHindi ? 'मासिक कोटा' : isKannada ? 'ಮಾಸಿಕ ಕೋಟಾ' : 'Monthly Quota', '${(_eligibleMembersCount * 5.0).toStringAsFixed(0)} kg (100% Free)'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(isHindi ? 'बंद करें' : isKannada ? 'ಮುಚ್ಚಿ' : 'Close', style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileModalRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0F2942)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: LanguageController.instance,
       builder: (context, _) {
         return Scaffold(
-          backgroundColor: const Color(0xFFF0F4F8),
+          backgroundColor: Colors.white,
           appBar: _buildGovernmentAppBar(),
+          // floatingActionButton removed in favor of unified VoiceAssistantBanner
+          floatingActionButton: null,
           body: _isLoading
               ? Center(
                   child: Column(
@@ -610,7 +1005,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                     children: [
                       const CircularProgressIndicator(strokeWidth: 2.5, color: AppConstants.primaryNavy),
                       const SizedBox(height: 16),
-                      Text(tr('beneficiary.home.loading'), style: const TextStyle(color: AppConstants.textSecondary, fontSize: 14)),
+                      Text(tr('profile.loading'), style: const TextStyle(color: AppConstants.textSecondary, fontSize: 13)),
                     ],
                   ),
                 )
@@ -621,30 +1016,14 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.signal_wifi_off_rounded, size: 56, color: Colors.grey.shade400),
+                            Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
+                            const SizedBox(height: 12),
+                            Text(_errorMessage!, textAlign: TextAlign.center),
                             const SizedBox(height: 16),
-                            Text(
-                              tr('beneficiary.home.network_error'),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 16, color: AppConstants.textPrimary, height: 1.4),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary),
-                            ),
-                            const SizedBox(height: 20),
                             ElevatedButton.icon(
                               onPressed: _loadBeneficiaryData,
-                              icon: const Icon(Icons.refresh_rounded),
-                              label: Text(tr('beneficiary.home.retry'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppConstants.primaryNavy,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
+                              icon: const Icon(Icons.refresh),
+                              label: Text(tr('profile.error_retry')),
                             ),
                           ],
                         ),
@@ -654,11 +1033,63 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                       onRefresh: _loadBeneficiaryData,
                       child: SingleChildScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: AppConstants.space20, vertical: AppConstants.space20),
                         child: Center(
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 600),
-                            child: _buildSimpleBody(),
+                            constraints: const BoxConstraints(maxWidth: 820),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // Persistent Voice Assistant Spoken Instruction Banner (with Repeat button)
+                                const VoiceAssistantBanner(),
+
+                                // 1. Clean Simple Entitlement Summary (चावल 15kg, गेहूं 5kg)
+                                _buildSimpleEntitlementCard(),
+                                const SizedBox(height: AppConstants.space16),
+
+                                // 2. Authoritative Planning Cycle & Choice Window Visualizer (21-24 तारीख)
+                                _buildPlanningCycleBanner(),
+                                const SizedBox(height: AppConstants.space16),
+
+                                // 3. THE 4 HERO BENEFICIARY ACTION CARDS (ACCESSIBLE & VISUAL UX)
+                                _buildFourHeroCardsSection(),
+                                const SizedBox(height: AppConstants.space20),
+
+                                // 4. Current Request / Delivery Status (5-Stage Timeline)
+                                if (_deliveryRecords.isNotEmpty) ...[
+                                  _buildCurrentDeliveryStatusSection(),
+                                  const SizedBox(height: AppConstants.space20),
+                                ],
+
+                                // 5. Eligible Household Members Selector (5 kg per person)
+                                _buildHouseholdMembersSelectorCard(),
+                                const SizedBox(height: AppConstants.space16),
+
+                                // 6. Plan Your Upcoming Collection (Two Large Service Cards)
+                                _buildPlanCollectionSection(),
+                                const SizedBox(height: AppConstants.space20),
+
+                                // 7. Recent Distribution History (Compact list rows)
+                                _buildRecentDistributionHistorySection(),
+                                const SizedBox(height: AppConstants.space20),
+
+                                // Statutory Footer Reassurance
+                                Center(
+                                  child: Text(
+                                    '${tr('app.gov_badge')}\n${tr('commodity.entitled_free')}',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.8,
+                                      color: Colors.grey.shade500,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: AppConstants.space16),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -668,430 +1099,483 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
     );
   }
 
-  /// Simple voice-first 4-tile beneficiary home body.
-  Widget _buildSimpleBody() {
-    final name = _beneficiary?.nameForDemo ?? '';
-    final riceKg = _entitlement?.statutoryEntitlementRiceKg;
-    final wheatKg = _entitlement?.statutoryEntitlementWheatKg;
+  // -------------------------------------------------------------
+  // THE 4 HERO BENEFICIARY ACTION CARDS (ACCESSIBLE & VISUAL UX)
+  // -------------------------------------------------------------
+  Widget _buildFourHeroCardsSection() {
+    final isHindi = VoiceAssistantService.instance.isHindi;
+    final isKannada = VoiceAssistantService.instance.isKannada;
+    final isElderly = VoiceAssistantService.instance.isElderlyMode;
+
+    final homeFpsName = _beneficiary?.registeredFpsName ?? 'Malleshwaram Seva Kendra';
+    final activeFpsName = _deliveryRecords.isNotEmpty
+        ? (_deliveryRecords.first.intendedFpsName ?? _deliveryRecords.first.registeredFpsName ?? homeFpsName)
+        : (_activeIntents.isNotEmpty ? _activeIntents.first.intendedFpsName : homeFpsName);
+
+    final totalEligible = _entitlement?.totalEligibleBalanceKg ?? (_eligibleMembersCount * 5.0);
+    final riceTotal = _entitlement != null && _entitlement!.statutoryEntitlementRiceKg > 0
+        ? _entitlement!.statutoryEntitlementRiceKg
+        : (_eligibleMembersCount * 4.0);
+    final wheatTotal = _entitlement != null && _entitlement!.statutoryEntitlementWheatKg > 0
+        ? _entitlement!.statutoryEntitlementWheatKg
+        : (_eligibleMembersCount * 1.0);
+
+    final hasCompletedDelivery = _deliveryRecords.any((r) => r.deliveryStatus == 'DELIVERY_CONFIRMED' || r.citizenConfirmedAt != null);
+    final hasPlanLocked = _entitlement?.rationReceivedForCycle == true || _userSubmittedChoice || _activeIntents.isNotEmpty || hasCompletedDelivery;
+    final isReceived = _entitlement?.rationReceivedForCycle == true || hasCompletedDelivery;
+
+    // Delivery status mapping for simple presentation
+    String deliveryStepText;
+    int activeStepIndex = 1;
+    if (_deliveryRecords.isEmpty && !hasPlanLocked) {
+      deliveryStepText = isHindi ? 'पसंद दर्ज करने की प्रतीक्षा' : isKannada ? 'ಆಯ್ಕೆ ಸಲ್ಲಿಸಲು ಕಾಯಲಾಗುತ್ತಿದೆ' : 'Awaiting your choice selection';
+      activeStepIndex = 0;
+    } else if (isReceived) {
+      deliveryStepText = isHindi ? 'राशन सफलतापूर्वक प्राप्त हुआ ✓' : isKannada ? 'ಪಡಿತರ ಯಶಸ್ವಿಯಾಗಿ ತಲುಪಿದೆ ✓' : 'Ration Received Successfully ✓';
+      activeStepIndex = 5;
+    } else if (_deliveryRecords.any((r) => r.deliveryStatus == 'DELIVERED')) {
+      deliveryStepText = isHindi ? 'दुकान पर उपलब्ध • लेने के लिए तैयार' : isKannada ? 'ಅಂಗಡಿಯಲ್ಲಿ ಲಭ್ಯ • ತೆಗೆದುಕೊಳ್ಳಲು ಸಿದ್ಧ' : 'Ready for pickup at shop';
+      activeStepIndex = 4;
+    } else if (_deliveryRecords.any((r) => r.deliveryStatus == 'OUT_FOR_DELIVERY')) {
+      deliveryStepText = isHindi ? 'राशन दुकान के लिए रवाना हो चुका है' : isKannada ? 'ಪಡಿತರ ರವಾನೆಯಾಗಿದೆ' : 'Dispatched / In transit to shop';
+      activeStepIndex = 3;
+    } else {
+      deliveryStepText = isHindi ? 'गोदाम में राशन पैक हो रहा है' : isKannada ? 'ಗೋದಾಮಿನಲ್ಲಿ ಪ್ಯಾಕ್ ಆಗುತ್ತಿದೆ' : 'Grain allocation being prepared';
+      activeStepIndex = 2;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── AI Voice Greeting Banner ──────────────────────────────────────
-        _buildAiGreetingBanner(name),
-        const SizedBox(height: 16),
-
-        // ── Monthly Ration Entitlement Card ──────────────────────────────
-        _buildSimpleEntitlementCard(riceKg, wheatKg),
-        const SizedBox(height: 20),
-
-        // ── 4 Action Tiles ────────────────────────────────────────────────
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 14,
-          childAspectRatio: 1.05,
-          children: [
-            _buildActionTile(emoji: '🌾', label: tr('beneficiary.home.action_need'), color: const Color(0xFF1A3D6B), id: 'tile_what_do_i_need', onTap: () => _navigateToIntentSelection()),
-            _buildActionTile(emoji: '🏪', label: tr('beneficiary.home.action_shop'), color: const Color(0xFF065F46), id: 'tile_my_shop', onTap: () => _showShopSheet()),
-            _buildActionTile(emoji: '🚚', label: tr('beneficiary.home.action_track'), color: const Color(0xFF7C3AED), id: 'tile_track', onTap: () => _showTrackSheet()),
-            _buildActionTile(emoji: '🆘', label: tr('beneficiary.home.action_help'), color: const Color(0xFFB91C1C), id: 'tile_help', onTap: () => _showHelpSheet()),
-          ],
+        // CARD 1: MY ENTITLEMENT (आपके परिवार का राशन हक)
+        _buildHeroActionCard(
+          key: const ValueKey('card_hero_my_ration'),
+          emoji: '🌾',
+          icon: Icons.grain_rounded,
+          iconColor: const Color(0xFF15803D),
+          iconBg: const Color(0xFFDCFCE7),
+          title: tr('entitlement.family_title'),
+          subtitle: isHindi
+              ? '${totalEligible.toStringAsFixed(0)} किलो मासिक राशन (${riceTotal.toStringAsFixed(0)} किलो चावल + ${wheatTotal.toStringAsFixed(0)} किलो गेहूं)'
+              : isKannada
+                  ? '${totalEligible.toStringAsFixed(0)} ಕೆಜಿ ಮಾಸಿಕ ಪಡಿತರ (${riceTotal.toStringAsFixed(0)} ಕೆಜಿ ಅಕ್ಕಿ + ${wheatTotal.toStringAsFixed(0)} ಕೆಜಿ ಗೋಧಿ)'
+                  : '${totalEligible.toStringAsFixed(0)} kg Total (${riceTotal.toStringAsFixed(0)} kg Rice + ${wheatTotal.toStringAsFixed(0)} kg Wheat)',
+          tagText: isHindi ? '₹0 मुफ्त राशन' : isKannada ? '₹0 ಉಚಿತ' : '₹0 Free',
+          tagColor: const Color(0xFF15803D),
+          tagBg: const Color(0xFFDCFCE7),
+          btnLabel: isReceived
+              ? (isHindi ? '✓ राशन मिल चुका है' : isKannada ? '✓ ಪಡಿತರ ಸ್ವೀಕರಿಸಲಾಗಿದೆ' : '✓ Ration Received')
+              : hasPlanLocked
+                  ? (isHindi ? '🔒 पसंद दर्ज हो चुकी है' : isKannada ? '🔒 ಆಯ್ಕೆ ದಾಖಲಾಗಿದೆ' : '🔒 Request Locked')
+                  : tr('simple.btn_select_choice'),
+          btnBg: isReceived
+              ? const Color(0xFF15803D)
+              : hasPlanLocked
+                  ? const Color(0xFF475569)
+                  : const Color(0xFF15803D),
+          onBtnTap: () => _navigateToIntentSelection(),
+          onSpeak: () {
+            if (isReceived) {
+              VoiceAssistantService.instance.guideCycleAlreadyReceived();
+            } else {
+              VoiceAssistantService.instance.guideDemandEntitlement(
+                totalKg: totalEligible,
+                riceKg: riceTotal,
+                wheatKg: wheatTotal,
+                membersCount: _eligibleMembersCount,
+              );
+            }
+          },
+          isElderly: isElderly,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
 
-        // ── Statutory footer ──────────────────────────────────────────────
-        Center(
-          child: Text(
-            '${tr('app.gov_badge')} • ${tr('commodity.entitled_free')}',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade500),
-          ),
+        // CARD: VENDING MACHINE (RATION VENDING MACHINE / राशन वेंडिंग मशीन / ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್)
+        _buildHeroActionCard(
+          key: const ValueKey('card_hero_grain_atm'),
+          emoji: '📦',
+          icon: Icons.precision_manufacturing_rounded,
+          iconColor: const Color(0xFF0D9488),
+          iconBg: const Color(0xFFCCFBF1),
+          title: isHindi
+              ? 'राशन वेंडिंग मशीन'
+              : isKannada
+                  ? 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್'
+                  : 'Ration Vending Machine',
+          subtitle: isHindi
+              ? 'राशन वेंडिंग मशीन • स्वचालित 24/7 राशन संग्रह'
+              : isKannada
+                  ? 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ • ಸ್ವಯಂಚಾಲಿತ 24/7 ಪಡಿತರ'
+                  : 'Ration Vending Machine • Automated 24/7 Ration Pickup',
+          tagText: isReceived
+              ? (isHindi ? 'प्राप्त हुआ' : isKannada ? 'ಸ್ವೀಕರಿಸಲಾಗಿದೆ' : 'Received')
+              : (isHindi ? '🟢 24/7 चालू • VM-001' : isKannada ? '🟢 24/7 ಸಕ್ರಿಯ • VM-001' : '🟢 Ready • VM-001'),
+          tagColor: const Color(0xFF0D9488),
+          tagBg: const Color(0xFFF0FDFA),
+          subDetail: isHindi
+              ? '📍 डेमो पीडीएस केंद्र • संपर्क रहित स्वचालित वितरण'
+              : isKannada
+                  ? '📍 ಡೆಮೊ ಪಿಡಿಎಸ್ ಕೇಂದ್ರ • ಸಂಪರ್ಕರಹಿತ ಸ್ವಯಂಚಾಲಿತ ವಿತರಣೆ'
+                  : '📍 Demo PDS Centre • Contactless Automated Dispensing',
+          btnLabel: isReceived
+              ? (isHindi ? '✓ राशन मिल चुका है' : isKannada ? '✓ ಪಡಿತರ ಸ್ವೀಕರಿಸಲಾಗಿದೆ' : '✓ Ration Received')
+              : (isHindi ? 'वेंडिंग मशीन से लें 📦' : isKannada ? 'ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ ಬಳಸಿ 📦' : 'Use Vending Machine 📦'),
+          btnBg: isReceived ? const Color(0xFF15803D) : const Color(0xFF0D9488),
+          onBtnTap: () => _navigateToGrainAtm(),
+          onSpeak: () {
+            if (isReceived) {
+              VoiceAssistantService.instance.guideAtmAlreadyReceived();
+            } else {
+              VoiceAssistantService.instance.speakLocalized(
+                hiText: 'राशन वेंडिंग मशीन: स्वचालित मशीन से अपना राशन लेने के लिए वेंडिंग मशीन बटन दबाएं।',
+                knText: 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್: ಯಂತ್ರದಿಂದ ನಿಮ್ಮ ಪಡಿತರ ಪಡೆಯಲು ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ ಬಟನ್ ಒತ್ತಿ.',
+                enText: 'Ration Vending Machine: Tap Use Vending Machine to collect your grains from the automated machine.',
+              );
+            }
+          },
+          isElderly: isElderly,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
+
+        // CARD 2: MY RATION SHOP (मेरी राशन दुकान)
+        _buildHeroActionCard(
+          key: const ValueKey('card_hero_my_shop'),
+          emoji: '🏪',
+          icon: Icons.storefront_rounded,
+          iconColor: AppConstants.primaryNavy,
+          iconBg: const Color(0xFFEFF6FF),
+          title: isHindi
+              ? 'मेरी राशन दुकान'
+              : isKannada
+                  ? 'ನನ್ನ ಪಡಿತರ ಅಂಗಡಿ'
+                  : 'My Ration Shop',
+          subtitle: activeFpsName ?? homeFpsName,
+          tagText: isHindi ? '🟢 आज खुली है (8:30 - 1:30)' : isKannada ? '🟢 ತೆರೆದಿದೆ' : '🟢 Open Today',
+          tagColor: const Color(0xFF15803D),
+          tagBg: const Color(0xFFF0FDF4),
+          subDetail: isHindi
+              ? '📍 0.6 km • 🚶 लगभग 10 मिनट पैदल रास्ता'
+              : isKannada
+                  ? '📍 0.6 ಕಿಮೀ • 🚶 ಸುಮಾರು 10 ನಿಮಿಷ'
+                  : '📍 0.6 km • 🚶 ~10 mins walking distance',
+          btnLabel: isHindi
+              ? 'दुकान का रास्ता और नक्शा देखें 🗺️'
+              : isKannada
+                  ? 'ಅಂಗಡಿ ದಾರಿ ಮತ್ತು ನಕ್ಷೆ ನೋಡಿ 🗺️'
+                  : 'View Shop Location & Map 🗺️',
+          btnBg: AppConstants.primaryNavy,
+          onBtnTap: () => _showFpsRouteTrackingModal(activeFpsName ?? homeFpsName),
+          onSpeak: () {
+            VoiceAssistantService.instance.speakLocalized(
+              hiText: 'आपकी राशन दुकान है ${activeFpsName ?? homeFpsName}। दूरी लगभग 600 मीटर है और दुकान आज सुबह 8:30 से दोपहर 1:30 तक खुली है।',
+              knText: 'ನಿಮ್ಮ ಪಡಿತರ ಅಂಗಡಿ ${activeFpsName ?? homeFpsName}. ದೂರ ಸುಮಾರು 600 ಮೀಟರ್.',
+              enText: 'Your ration shop is ${activeFpsName ?? homeFpsName}. Distance is approximately 0.6 kilometers and the shop is open today.',
+            );
+          },
+          isElderly: isElderly,
+        ),
+        const SizedBox(height: 14),
+
+        // CARD 3: RATION STATUS (राशन कहां पहुंचा?)
+        _buildHeroActionCard(
+          key: const ValueKey('card_hero_ration_status'),
+          emoji: '🚚',
+          icon: Icons.local_shipping_rounded,
+          iconColor: const Color(0xFF2563EB),
+          iconBg: const Color(0xFFEFF6FF),
+          title: isHindi
+              ? 'राशन कहां पहुंचा? (ट्रैकिंग)'
+              : isKannada
+                  ? 'ಪಡಿತರ ಎಲ್ಲಿಗೆ ತಲುಪಿದೆ? (ಟ್ರ್ಯಾಕಿಂಗ್)'
+                  : 'Track My Ration',
+          subtitle: deliveryStepText,
+          customChild: _buildSimpleJourneyStepper(activeStepIndex, isHindi, isKannada),
+          btnLabel: isReceived
+              ? (isHindi ? '✓ राशन प्राप्ति दर्ज है' : isKannada ? '✓ ಸ್ವೀಕೃತಿ ದಾಖಲಾಗಿದೆ' : '✓ Receipt Confirmed')
+              : (activeStepIndex >= 4
+                  ? (isHindi ? 'राशन मिल गया? बताएं 👉' : isKannada ? 'ಪಡಿತರ ಸಿಕ್ಕಿತೇ? ತಿಳಿಸಿ 👉' : 'Confirm Receipt 👉')
+                  : (isHindi ? 'पूरी स्थिति देखें 👉' : isKannada ? 'ಸಂಪೂರ್ಣ ಸ್ಥಿತಿ ನೋಡಿ 👉' : 'Track My Ration 👉')),
+          btnBg: activeStepIndex >= 4 ? const Color(0xFF15803D) : const Color(0xFF2563EB),
+          onBtnTap: () {
+            VoiceAssistantService.instance.guideTracking(deliveryStepText);
+            if (activeStepIndex >= 4 && !isReceived) {
+              SimpleBeneficiaryFeedbackDialog.show(
+                context,
+                beneficiaryId: widget.beneficiaryId,
+                activeRequestId: _deliveryRecords.isNotEmpty ? _deliveryRecords.first.requestId : null,
+                registeredFpsId: _beneficiary?.registeredFpsId,
+                apiService: _apiService,
+                onFeedbackSubmitted: _loadBeneficiaryData,
+              );
+            } else if (_deliveryRecords.isNotEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(deliveryStepText),
+                  backgroundColor: AppConstants.primaryNavy,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+          onSpeak: () {
+            VoiceAssistantService.instance.guideTracking(deliveryStepText);
+          },
+          isElderly: isElderly,
+        ),
+        const SizedBox(height: 14),
+
+        // CARD 4: HELP & REPORT PROBLEM (मदद और समस्या)
+        _buildHeroActionCard(
+          key: const ValueKey('card_hero_help_dispute'),
+          emoji: '🆘',
+          icon: Icons.support_agent_rounded,
+          iconColor: const Color(0xFFDC2626),
+          iconBg: const Color(0xFFFEF2F2),
+          title: isHindi
+              ? 'मदद और समस्या'
+              : isKannada
+                  ? 'ಸಹಾಯ ಮತ್ತು ದೂರು'
+                  : 'Help & Report Problem',
+          subtitle: isHindi
+              ? 'कम राशन मिला? दुकान बंद थी? कोई शिकायत है? तुरंत बताएं'
+              : isKannada
+                  ? 'ಕಡಿಮೆ ಪಡಿತರ ಸಿಕ್ಕಿತೇ? ಅಂಗಡಿ ಮುಚ್ಚಿತ್ತೇ? ದೂರು ದಾಖಲಿಸಿ'
+                  : 'Short weight? Shop closed? Quality issue? Report directly to DSO officers',
+          tagText: isHindi ? 'अधिकारी जांच करेंगे' : isKannada ? 'ಅಧಿಕಾರಿ ಪರಿಶೀಲನೆ' : 'DSO Triage',
+          tagColor: const Color(0xFFB91C1C),
+          tagBg: const Color(0xFFFEE2E2),
+          btnLabel: isHindi
+              ? 'शिकायत या मदद दर्ज करें 💬'
+              : isKannada
+                  ? 'ದೂರು ಸಲ್ಲಿಸಿ 💬'
+                  : 'Report Issue / Complaint 💬',
+          btnBg: const Color(0xFFDC2626),
+          onBtnTap: () {
+            VoiceAssistantService.instance.guideHelp();
+            SimpleBeneficiaryFeedbackDialog.show(
+              context,
+              beneficiaryId: widget.beneficiaryId,
+              activeRequestId: _deliveryRecords.isNotEmpty ? _deliveryRecords.first.requestId : null,
+              registeredFpsId: _beneficiary?.registeredFpsId,
+              apiService: _apiService,
+              onFeedbackSubmitted: _loadBeneficiaryData,
+            );
+          },
+          onSpeak: () {
+            VoiceAssistantService.instance.speakLocalized(
+              hiText: 'मदद और समस्या: यदि आपको कम राशन मिला है या दुकान बंद थी, तो शिकायत दर्ज करें बटन दबाकर अपनी बात बताएं।',
+              knText: 'ಸಹಾಯ ಮತ್ತು ದೂರು: ಕಡಿಮೆ ಪಡಿತರ ಅಥವಾ ಅಂಗಡಿ ಮುಚ್ಚಿದ್ದರೆ, ದೂರು ಸಲ್ಲಿಸಿ ಬಟನ್ ಒತ್ತಿ.',
+              enText: 'Help and problem: If you received less ration or the shop was closed, tap report complaint.',
+            );
+          },
+          isElderly: isElderly,
+        ),
       ],
     );
   }
 
-  Widget _buildAiGreetingBanner(String name) {
+  Widget _buildHeroActionCard({
+    Key? key,
+    required String emoji,
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    required String subtitle,
+    String? subDetail,
+    String? tagText,
+    Color? tagColor,
+    Color? tagBg,
+    Widget? customChild,
+    required String btnLabel,
+    required Color btnBg,
+    required VoidCallback onBtnTap,
+    required VoidCallback onSpeak,
+    required bool isElderly,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1A3D6B), Color(0xFF2563EB)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: const Color(0xFF1A3D6B).withValues(alpha: 0.28), blurRadius: 12, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
-            ),
-            child: const Center(child: Text('🤖', style: TextStyle(fontSize: 26))),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (name.isNotEmpty)
-                  Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(
-                  tr('beneficiary.home.ai_greeting_short'),
-                  style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.88), height: 1.35),
-                ),
-              ],
-            ),
-          ),
-          // Language selector in banner
-          const LanguageSelectorWidget(isCompact: true),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSimpleEntitlementCard(double? riceKg, double? wheatKg) {
-    final hasData = riceKg != null && wheatKg != null && (riceKg + wheatKg) > 0;
-    return Container(
-      padding: const EdgeInsets.all(18),
+      key: key,
+      padding: EdgeInsets.all(isElderly ? 20 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(tr('beneficiary.home.monthly_title'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy, letterSpacing: 0.2)),
-          const SizedBox(height: 12),
-          if (!hasData)
-            Row(
-              children: [
-                const Icon(Icons.info_outline, size: 18, color: AppConstants.textSecondary),
-                const SizedBox(width: 8),
-                Expanded(child: Text(tr('beneficiary.home.entitlement_unavailable'), style: const TextStyle(fontSize: 13, color: AppConstants.textSecondary))),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Expanded(child: _buildCommodityPill('🍚', tr('beneficiary.home.rice_label'), '${riceKg!.toStringAsFixed(1)} kg', const Color(0xFF1A3D6B))),
-                const SizedBox(width: 10),
-                Expanded(child: _buildCommodityPill('🌾', tr('beneficiary.home.wheat_label'), '${wheatKg!.toStringAsFixed(1)} kg', const Color(0xFF065F46))),
-              ],
-            ),
-          if (_entitlement?.rationReceivedForCycle == true) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0FDF4),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF86EFAC)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded, size: 18, color: Color(0xFF16A34A)),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(tr('beneficiary.select.already_received_title'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF15803D)))),
-                ],
-              ),
-            ),
-          ],
+        borderRadius: BorderRadius.circular(isElderly ? 18 : 14),
+        border: Border.all(
+          color: iconColor.withValues(alpha: isElderly ? 0.45 : 0.25),
+          width: isElderly ? 2.0 : 1.4,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: iconColor.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCommodityPill(String emoji, String label, String qty, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 24)),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
-          Text(qty, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionTile({required String emoji, required String label, required Color color, required String id, required VoidCallback onTap}) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: Key(id),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [color, color.withValues(alpha: 0.78)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(emoji, style: const TextStyle(fontSize: 36)),
-                const SizedBox(height: 8),
-                Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white, height: 1.2)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showShopSheet() {
-    final fps = _beneficiary?.registeredFpsId;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('🏪', textAlign: TextAlign.center, style: TextStyle(fontSize: 40)),
-            const SizedBox(height: 8),
-            Text(tr('beneficiary.shop.title'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
-            const SizedBox(height: 16),
-            if (fps == null || _beneficiary == null)
-              Text(tr('beneficiary.shop.unavailable'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, color: AppConstants.textSecondary))
-            else ...[
-              _buildShopRow(Icons.storefront_outlined, 'FPS ID', fps),
-              if (_beneficiary!.nameForDemo.isNotEmpty)
-                _buildShopRow(Icons.person_outline, 'Registered for', _beneficiary!.nameForDemo),
-            ],
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              style: ElevatedButton.styleFrom(backgroundColor: AppConstants.primaryNavy, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: Text(tr('nav.close'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildShopRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: AppConstants.textSecondary),
-          const SizedBox(width: 12),
-          Text('$label: ', style: const TextStyle(fontSize: 13, color: AppConstants.textSecondary)),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy))),
-        ],
-      ),
-    );
-  }
-
-  void _showTrackSheet() {
-    final orders = _getCombinedDeliveryOrders();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.55,
-        maxChildSize: 0.92,
-        builder: (_, sc) => SingleChildScrollView(
-          controller: sc,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('🚚', textAlign: TextAlign.center, style: TextStyle(fontSize: 40)),
-              const SizedBox(height: 8),
-              Text(tr('beneficiary.track.title'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
-              const SizedBox(height: 16),
-              if (orders.isEmpty)
-                Text(
-                  _deliveryRecords.isEmpty ? tr('beneficiary.track.no_requests') : tr('beneficiary.track.unavailable'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14, color: AppConstants.textSecondary),
-                )
-              else
-                ...orders.take(3).map((order) => _buildSimpleTrackCard(order)),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                style: ElevatedButton.styleFrom(backgroundColor: AppConstants.primaryNavy, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                child: Text(tr('nav.close'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSimpleTrackCard(CombinedCitizenDeliveryOrder order) {
-    final stages = [
-      tr('beneficiary.track.stage1'),
-      tr('beneficiary.track.stage2'),
-      tr('beneficiary.track.stage3'),
-      tr('beneficiary.track.stage4'),
-      tr('beneficiary.track.stage5'),
-    ];
-    final statusUpper = order.deliveryStatus.toUpperCase();
-    int currentStage = 0;
-    if (statusUpper.contains('ALLOCATED') || statusUpper.contains('APPROVED')) {
-      currentStage = 1;
-    } else if (statusUpper.contains('OUT_FOR') || statusUpper.contains('DISPATCHED') || statusUpper.contains('DELAYED') || statusUpper.contains('STOCK')) {
-      currentStage = 2;
-    } else if (statusUpper.contains('DELIVERED') && !statusUpper.contains('CONFIRMED')) {
-      currentStage = 3;
-    } else if (statusUpper.contains('CONFIRMED')) {
-      currentStage = 4;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE2E8F0))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Order: ${order.baseRequestId}', style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary)),
-          const SizedBox(height: 12),
+          // Header: Icon + Title
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: List.generate(stages.length, (i) {
-              final isDone = i <= currentStage;
-              final isCurrent = i == currentStage;
-              return Expanded(
+            children: [
+              Container(
+                width: isElderly ? 52 : 44,
+                height: isElderly ? 52 : 44,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(emoji, style: TextStyle(fontSize: isElderly ? 28 : 24)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
                         Expanded(
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  color: isDone ? AppConstants.successGreen : const Color(0xFFE2E8F0),
-                                  shape: BoxShape.circle,
-                                  border: isCurrent ? Border.all(color: AppConstants.successGreen, width: 2) : null,
-                                ),
-                                child: Center(
-                                  child: isDone
-                                      ? const Icon(Icons.check, size: 14, color: Colors.white)
-                                      : Text('${i + 1}', style: const TextStyle(fontSize: 10, color: AppConstants.textSecondary, fontWeight: FontWeight.w700)),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                stages[i],
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 9, fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500, color: isDone ? AppConstants.successGreen : AppConstants.textSecondary),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: isElderly ? 18 : 15.5,
+                              fontWeight: FontWeight.w900,
+                              color: AppConstants.primaryNavy,
+                            ),
                           ),
                         ),
-                        if (i < stages.length - 1)
-                          Container(width: 8, height: 2, margin: const EdgeInsets.only(bottom: 20), color: i < currentStage ? AppConstants.successGreen : const Color(0xFFE2E8F0)),
+                        if (tagText != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: tagBg ?? const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              tagText,
+                              style: TextStyle(
+                                fontSize: isElderly ? 11 : 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: tagColor ?? AppConstants.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: isElderly ? 14 : 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF334155),
+                        height: 1.3,
+                      ),
+                    ),
+                    if (subDetail != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subDetail,
+                        style: TextStyle(
+                          fontSize: isElderly ? 13 : 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-              );
-            }),
+              ),
+            ],
+          ),
+
+          if (customChild != null) ...[
+            const SizedBox(height: 12),
+            customChild,
+          ],
+
+          const SizedBox(height: 14),
+
+          // Large Touch CTA Button
+          ElevatedButton(
+            onPressed: onBtnTap,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: btnBg,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(vertical: isElderly ? 18 : 13),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 1,
+            ),
+            child: Text(
+              btnLabel,
+              style: TextStyle(
+                fontSize: isElderly ? 17 : 14.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.3,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _showHelpSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('🆘', textAlign: TextAlign.center, style: TextStyle(fontSize: 40)),
-            const SizedBox(height: 8),
-            Text(tr('beneficiary.help.title'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
-            const SizedBox(height: 16),
-            ...[
-              (tr('beneficiary.help.no_ration'), Icons.no_food_outlined),
-              (tr('beneficiary.help.wrong_qty'), Icons.balance_outlined),
-              (tr('beneficiary.help.shop_problem'), Icons.storefront_outlined),
-              (tr('beneficiary.help.payment'), Icons.receipt_long_outlined),
-              (tr('beneficiary.help.other'), Icons.help_outline_rounded),
-            ].map((item) => _buildHelpOptionTile(ctx, item.$1, item.$2)),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              style: OutlinedButton.styleFrom(foregroundColor: AppConstants.primaryNavy, side: const BorderSide(color: AppConstants.cardBorder), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: Text(tr('nav.cancel'), style: const TextStyle(fontSize: 15)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _buildSimpleJourneyStepper(int activeIndex, bool isHindi, bool isKannada) {
+    final stages = [
+      {'label': isHindi ? 'पसंद मिली' : isKannada ? 'ಆಯ್ಕೆ ಸಿಕ್ಕಿದೆ' : 'Saved', 'icon': Icons.check_circle_outline},
+      {'label': isHindi ? 'तैयारी' : isKannada ? 'ಸಿದ್ಧತೆ' : 'Packed', 'icon': Icons.inventory_2_outlined},
+      {'label': isHindi ? 'रवाना' : isKannada ? 'ರವಾನೆ' : 'Dispatched', 'icon': Icons.local_shipping_outlined},
+      {'label': isHindi ? 'दुकान पर' : isKannada ? 'ಅಂಗಡಿಗೆ' : 'At Shop', 'icon': Icons.storefront_outlined},
+      {'label': isHindi ? 'तैयार' : isKannada ? 'ಸಿದ್ಧ' : 'Ready', 'icon': Icons.task_alt_rounded},
+    ];
 
-  Widget _buildHelpOptionTile(BuildContext sheetCtx, String label, IconData icon) {
-    return InkWell(
-      onTap: () {
-        Navigator.of(sheetCtx).pop();
-        _navigateToIntentHistory();
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
-        child: Row(
-          children: [
-            Icon(icon, size: 22, color: AppConstants.primaryNavy),
-            const SizedBox(width: 14),
-            Expanded(child: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppConstants.textPrimary))),
-            const Icon(Icons.chevron_right_rounded, size: 20, color: AppConstants.textSecondary),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: stages.asMap().entries.map((entry) {
+          final idx = entry.key + 1;
+          final step = entry.value;
+          final isPastOrActive = idx <= activeIndex;
+          final isCurrent = idx == activeIndex;
+
+          final color = isCurrent
+              ? const Color(0xFF2563EB)
+              : (isPastOrActive ? const Color(0xFF15803D) : const Color(0xFF94A3B8));
+
+          return Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  step['icon'] as IconData,
+                  size: isCurrent ? 22 : 18,
+                  color: color,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  step['label'] as String,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: isCurrent ? FontWeight.w900 : FontWeight.w600,
+                    color: color,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -1105,11 +1589,11 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
     return Container(
       padding: const EdgeInsets.all(AppConstants.space16),
       decoration: BoxDecoration(
-        color: isOpen ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
         border: Border.all(
           color: isOpen ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5),
-          width: 1.2,
+          width: 1.4,
         ),
         boxShadow: [
           BoxShadow(
@@ -1122,29 +1606,46 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Row
+          // Header Row with Voice Audio Assistance
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(
-                    isOpen ? Icons.event_available_rounded : Icons.lock_clock_rounded,
-                    size: 18,
-                    color: isOpen ? const Color(0xFF15803D) : const Color(0xFFB91C1C),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    tr('cycle.timeline_title'),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: isOpen ? const Color(0xFF15803D) : const Color(0xFF991B1B),
-                      letterSpacing: 0.3,
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      isOpen ? Icons.event_available_rounded : Icons.lock_clock_rounded,
+                      size: 20,
+                      color: isOpen ? const Color(0xFF15803D) : const Color(0xFFB91C1C),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isOpen
+                            ? (VoiceAssistantService.instance.isHindi
+                                ? 'आपकी अगली राशन की पसंद बताने का समय (21–24 तारीख)'
+                                : VoiceAssistantService.instance.isKannada
+                                    ? 'ನಿಮ್ಮ ಮುಂದಿನ ಪಡಿತರ ಆಯ್ಕೆ ಸಮಯ (21–24 ನೇ ದಿನಾಂಕ)'
+                                    : 'Time to choose next ration (Day 21–24)')
+                            : (VoiceAssistantService.instance.isHindi
+                                ? 'आपकी पसंद अब दर्ज हो चुकी है 🔒'
+                                : VoiceAssistantService.instance.isKannada
+                                    ? 'ನಿಮ್ಮ ಆಯ್ಕೆ ಈಗ ದಾಖಲಾಗಿದೆ 🔒'
+                                    : 'Your preference is now recorded & locked 🔒'),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          color: isOpen ? const Color(0xFF15803D) : const Color(0xFF991B1B),
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 6),
+              // small speaker removed
+
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
@@ -1152,7 +1653,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  isOpen ? tr('cycle.window_open') : tr('cycle.locked_badge'),
+                  isOpen ? (VoiceAssistantService.instance.isHindi ? 'विंडो खुली है' : 'Open 21–24') : '🔒 Locked',
                   style: const TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w900,
@@ -1267,21 +1768,32 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
 
   // TOP BAR
   PreferredSizeWidget _buildGovernmentAppBar() {
+    final isHindi = VoiceAssistantService.instance.isHindi;
+    final isKannada = VoiceAssistantService.instance.isKannada;
+    final bName = _beneficiary?.nameForDemo ?? 'Beneficiary';
+
     return AppBar(
-      backgroundColor: AppConstants.primaryNavy,
-      foregroundColor: Colors.white,
-      elevation: 0,
+      backgroundColor: Colors.white,
+      foregroundColor: const Color(0xFF0F2942),
+      elevation: 0.5,
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1.0),
+        child: Container(
+          color: const Color(0xFFE2E8F0),
+          height: 1.0,
+        ),
+      ),
       titleSpacing: 16,
       title: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFBBF7D0)),
             ),
-            child: const Icon(Icons.shield_outlined, size: 16, color: Colors.white),
+            child: const Icon(Icons.shield_rounded, size: 20, color: Color(0xFF15803D)),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1289,14 +1801,24 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '${tr('app.name')} • ${tr('app.dashboard')}',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.2),
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Text(
+                      isHindi ? '👋 नमस्ते, ' : isKannada ? '👋 ನಮಸ್ಕಾರ, ' : '👋 Hello, ',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                    ),
+                    Flexible(
+                      child: Text(
+                        bName,
+                        style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: Color(0xFF0F2942)),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
                 Text(
                   tr('app.nfsa_notice'),
-                  style: const TextStyle(fontSize: 10, color: Colors.white70),
+                  style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -1305,38 +1827,81 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         ],
       ),
       actions: [
-        VoicePictorialAssistButton(
-          isCompact: true,
-          onTap: () {
-            VoicePictorialAssistModal.show(
-              context,
-              onApplyVoiceIntent: (mode, rice, wheat) {
-                _navigateToIntentSelection();
-              },
-            );
+        // Voice Audio Assistant Toggle
+        IconButton(
+          tooltip: VoiceAssistantService.instance.isVoiceMuted
+              ? 'आवाज़ चालू करें / Unmute Voice'
+              : 'आवाज़ बंद करें / Mute Voice',
+          icon: Icon(
+            VoiceAssistantService.instance.isVoiceMuted
+                ? Icons.volume_off_rounded
+                : Icons.volume_up_rounded,
+            size: 22,
+            color: VoiceAssistantService.instance.isVoiceMuted
+                ? const Color(0xFF94A3B8)
+                : const Color(0xFF15803D),
+          ),
+          onPressed: () {
+            setState(() {
+              VoiceAssistantService.instance.toggleMute();
+            });
           },
         ),
-        const SizedBox(width: 4),
+        // Elderly / Simple Mode Toggle
+        IconButton(
+          tooltip: VoiceAssistantService.instance.isElderlyMode
+              ? 'सामान्य मोड / Standard Mode'
+              : 'बुजुर्ग / आसान मोड / Elderly Mode',
+          icon: Icon(
+            VoiceAssistantService.instance.isElderlyMode
+                ? Icons.elderly_rounded
+                : Icons.accessibility_new_rounded,
+            size: 22,
+            color: VoiceAssistantService.instance.isElderlyMode
+                ? const Color(0xFFD97706)
+                : const Color(0xFF64748B),
+          ),
+          onPressed: () {
+            setState(() {
+              final newMode = !VoiceAssistantService.instance.isElderlyMode;
+              VoiceAssistantService.instance.setElderlyMode(newMode);
+              if (newMode) {
+                VoiceAssistantService.instance.speakLocalized(
+                  hiText: 'आसान मोड चालू हो गया है। बटन और अक्षर बड़े कर दिए गए हैं।',
+                  knText: 'ಸರಳ ಮೋಡ್ ಸಕ್ರಿಯಗೊಂಡಿದೆ. ಬಟನ್‌ಗಳು ಮತ್ತು ಅಕ್ಷರಗಳು ದೊಡ್ಡದಾಗಿವೆ.',
+                  enText: 'Simple Mode enabled. Large buttons and text are active.',
+                );
+              }
+            });
+          },
+        ),
         // Language Selector inside App Bar
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 10),
           child: LanguageSelectorWidget(isCompact: true),
         ),
         const SizedBox(width: 4),
+        // Profile Icon Button
+        IconButton(
+          tooltip: 'राशन कार्ड प्रोफ़ाइल / Profile',
+          icon: const Icon(Icons.account_circle_rounded, size: 22, color: Color(0xFF0F2942)),
+          onPressed: _showBeneficiaryProfileModal,
+        ),
         IconButton(
           tooltip: tr('nav.refresh'),
-          icon: const Icon(Icons.refresh, size: 20),
+          icon: const Icon(Icons.refresh, size: 20, color: Color(0xFF64748B)),
           onPressed: _loadBeneficiaryData,
         ),
         IconButton(
           tooltip: tr('history.title'),
-          icon: const Icon(Icons.history_rounded, size: 20),
+          icon: const Icon(Icons.history_rounded, size: 20, color: Color(0xFF64748B)),
           onPressed: _navigateToIntentHistory,
         ),
         IconButton(
           tooltip: tr('nav.logout'),
-          icon: const Icon(Icons.logout_rounded, size: 20),
+          icon: const Icon(Icons.logout_rounded, size: 20, color: Color(0xFF64748B)),
           onPressed: () {
+            VoiceAssistantService.instance.stopVoiceAssistantMode();
             _apiService.logout();
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const DemoLoginScreen()),
@@ -1525,208 +2090,7 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
     );
   }
 
-  // 2. HERO: YOUR RATION ENTITLEMENT CARD (Monthly Quota Only)
-  Widget _buildHeroRationEntitlementCard() {
-    final riceTotal = _entitlement != null ? _entitlement!.statutoryEntitlementRiceKg : (_eligibleMembersCount * 4.0);
-    final wheatTotal = _entitlement != null ? _entitlement!.statutoryEntitlementWheatKg : (_eligibleMembersCount * 1.0);
-    final totalEntitlementKg = _entitlement != null && _entitlement!.totalEligibleBalanceKg > 0
-        ? _entitlement!.totalEligibleBalanceKg
-        : (riceTotal + wheatTotal);
-    final membersCount = _entitlement != null && _entitlement!.familyMembersCount > 0
-        ? _entitlement!.familyMembersCount
-        : _eligibleMembersCount;
 
-    return Container(
-      padding: const EdgeInsets.all(AppConstants.space20),
-      decoration: BoxDecoration(
-        color: AppConstants.cardSurface,
-        borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
-        border: Border.all(color: AppConstants.accentBlue.withValues(alpha: 0.35), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: AppConstants.accentBlue.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Section Title & Free Subsidized Badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.assignment_turned_in_outlined, color: AppConstants.accentBlue, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    tr('entitlement.title'),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: AppConstants.primaryNavy,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDCFCE7),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFFBBF7D0)),
-                ),
-                child: Text(
-                  tr('commodity.entitled_free'),
-                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppConstants.space16),
-
-          // Main Hero Highlight: Statutory Monthly Quota (Clean & Direct)
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 440;
-              final leftCol = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'STATUTORY MONTHLY RATION QUOTA',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70, letterSpacing: 0.5),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        totalEntitlementKg.toStringAsFixed(1),
-                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        tr('commodity.kg').toUpperCase(),
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white70),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${tr('commodity.rice')}: ${riceTotal.toStringAsFixed(1)} ${tr('commodity.kg')}  •  ${tr('commodity.wheat')}: ${wheatTotal.toStringAsFixed(1)} ${tr('commodity.kg')}',
-                    style: const TextStyle(fontSize: 12, color: Colors.white),
-                  ),
-                ],
-              );
-
-              final rightPill = Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white24),
-                ),
-                child: Column(
-                  crossAxisAlignment: isNarrow ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-                  children: [
-                    const Text('Government Subsidy', style: TextStyle(fontSize: 10.5, color: Colors.white70)),
-                    const SizedBox(height: 2),
-                    const Text(
-                      '100% FREE',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF86EFAC)),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$membersCount Eligible Members',
-                      style: const TextStyle(fontSize: 10.5, color: Colors.white70),
-                    ),
-                  ],
-                ),
-              );
-
-              return Container(
-                padding: const EdgeInsets.all(AppConstants.space16),
-                decoration: BoxDecoration(
-                  color: AppConstants.primaryNavy,
-                  borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-                ),
-                child: isNarrow
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          leftCol,
-                          const SizedBox(height: 12),
-                          rightPill,
-                        ],
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(child: leftCol),
-                          const SizedBox(width: 12),
-                          rightPill,
-                        ],
-                      ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-
-          // Monthly Entitlement Summary Box
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  Text(
-                    'Monthly Quota: ${totalEntitlementKg.toStringAsFixed(1)} kg',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy),
-                  ),
-                  Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 12, color: Colors.grey.shade300),
-                  Text(
-                    'Rice: ${riceTotal.toStringAsFixed(1)} kg',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
-                  ),
-                  Container(margin: const EdgeInsets.symmetric(horizontal: 10), width: 1, height: 12, color: Colors.grey.shade300),
-                  Text(
-                    'Wheat: ${wheatTotal.toStringAsFixed(1)} kg',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Policy rule statement
-          Row(
-            children: [
-              const Icon(Icons.info_outline_rounded, size: 14, color: AppConstants.textSecondary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  tr('entitlement.statutory_rule'),
-                  style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   // 3. PLAN YOUR UPCOMING COLLECTION (Two Large Service Cards)
   Widget _buildPlanCollectionSection() {
@@ -1834,8 +2198,9 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
       );
     }
 
+    final hasActiveIntents = _activeIntents.isNotEmpty;
     final hasCompletedDelivery = _deliveryRecords.any((r) => r.deliveryStatus == 'DELIVERY_CONFIRMED' || r.citizenConfirmedAt != null);
-    final hasPlanLocked = _entitlement?.rationReceivedForCycle == true || _userSubmittedChoice || hasCompletedDelivery;
+    final hasPlanLocked = _entitlement?.rationReceivedForCycle == true || _userSubmittedChoice || hasActiveIntents || hasCompletedDelivery;
     final activeFpsName = _deliveryRecords.isNotEmpty
         ? (_deliveryRecords.first.intendedFpsName ?? _deliveryRecords.first.registeredFpsName ?? homeFpsName)
         : (_activeIntents.isNotEmpty ? _activeIntents.first.intendedFpsName : homeFpsName);
@@ -1878,24 +2243,271 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
               : tr('service.fps_choice_desc'),
           contextDetail: tr('service.fps_choice_detail', params: {'fpsName': activeFpsName ?? homeFpsName}),
           priceTag: tr('service.fps_choice_price'),
-          buttonLabel: hasPlanLocked ? '✓ Plan Locked ($activeFpsName)' : tr('service.fps_choice_btn'),
-          buttonIcon: hasPlanLocked ? Icons.lock_rounded : Icons.store_rounded,
+          buttonLabel: hasPlanLocked ? '📍 Track Location & Plan ($activeFpsName)' : tr('service.fps_choice_btn'),
+          buttonIcon: hasPlanLocked ? Icons.map_rounded : Icons.store_rounded,
           isPrimary: !hasPlanLocked,
           onTap: () {
             if (hasPlanLocked) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Your collection plan for $activeFpsName (Cycle 2026-09) is registered and locked in pre-dispatch logistics.'),
-                  backgroundColor: const Color(0xFF15803D),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              _showFpsRouteTrackingModal(activeFpsName ?? homeFpsName);
             } else {
               _navigateToIntentSelection(initialMode: 'FPS_COLLECTION');
             }
           },
         ),
       ],
+    );
+  }
+
+  void _showFpsRouteTrackingModal(String fpsName) {
+    VoiceAssistantService.instance.guideLocation();
+
+    final fps = _fpsList.where((f) => 
+      f.name.toLowerCase() == fpsName.toLowerCase() || 
+      f.fpsId.toLowerCase() == fpsName.toLowerCase() ||
+      fpsName.contains(f.fpsId)
+    ).firstOrNull ?? (_fpsList.isNotEmpty ? _fpsList.first : null);
+
+    final homeLat = fps != null && fps.latitude != 0 ? fps.latitude - 0.0035 : 13.0031;
+    final homeLon = fps != null && fps.longitude != 0 ? fps.longitude - 0.0028 : 77.5643;
+    final householdLoc = LatLng(homeLat, homeLon);
+    final fpsLoc = fps != null ? LatLng(fps.latitude, fps.longitude) : const LatLng(13.0066, 77.5671);
+    final mid = LatLng(
+      (householdLoc.latitude + fpsLoc.latitude) / 2 + 0.0008,
+      (householdLoc.longitude + fpsLoc.longitude) / 2 - 0.0006,
+    );
+    final routePoints = [householdLoc, mid, fpsLoc];
+
+    final isHindi = VoiceAssistantService.instance.isHindi;
+    final isKannada = VoiceAssistantService.instance.isKannada;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: const Color(0xFFF0FDF4), borderRadius: BorderRadius.circular(8)),
+                          child: const Icon(Icons.storefront_rounded, color: Color(0xFF15803D), size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(fpsName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy), overflow: TextOverflow.ellipsis),
+                              Text(isHindi ? 'आपकी राशन दुकान का स्थान' : isKannada ? 'ನಿಮ್ಮ ಪಡಿತರ ಅಂಗಡಿಯ ಸ್ಥಳ' : 'Your Ration Shop Location', style: const TextStyle(fontSize: 11, color: Color(0xFF15803D), fontWeight: FontWeight.w700)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Interactive OpenStreetMap Canvas
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  height: 230,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFCBD5E1), width: 1.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Stack(
+                    children: [
+                      FlutterMap(
+                        options: MapOptions(
+                          initialCenter: LatLng((householdLoc.latitude + fpsLoc.latitude) / 2, (householdLoc.longitude + fpsLoc.longitude) / 2),
+                          initialZoom: 13.5,
+                          minZoom: 8.0,
+                          maxZoom: 18.0,
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'org.karnataka.pds_demandsync',
+                          ),
+                          PolylineLayer(
+                            polylines: [
+                              Polyline(
+                                points: routePoints,
+                                strokeWidth: 4.5,
+                                color: const Color(0xFF2563EB),
+                                borderStrokeWidth: 2.0,
+                                borderColor: Colors.white,
+                              ),
+                            ],
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: householdLoc,
+                                width: 95,
+                                height: 50,
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF15803D),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                                      ),
+                                      child: const Icon(Icons.home_rounded, color: Colors.white, size: 14),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black87,
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                      child: Text(isHindi ? 'मेरा घर' : isKannada ? 'ನನ್ನ ಮನೆ' : 'My Household', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Marker(
+                                point: fpsLoc,
+                                width: 110,
+                                height: 50,
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: AppConstants.primaryNavy,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                                      ),
+                                      child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 14),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppConstants.primaryNavy,
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                      child: Text(fps?.fpsId ?? 'FPS-CENTER', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.78),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.gps_fixed_rounded, color: Color(0xFF60A5FA), size: 12),
+                              SizedBox(width: 4),
+                              Text(
+                                isHindi ? 'जीपीएस मार्ग सक्रिय • पैदल दूरी: ~10 मिनट' : isKannada ? 'ಲೈವ್ ಜಿಪಿಎಸ್ ಮಾರ್ಗ ಸಕ್ರಿಯ • ನಡಿಗೆ: ~10 ನಿಮಿಷ' : 'Live GPS Route Active • Walking: ~10 mins',
+                                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Details & Quota Breakdown
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(isHindi ? 'संग्रह स्थिति' : isKannada ? 'ಸಂಗ್ರಹ ಸ್ಥಿತಿ' : 'Collection Status', style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDCFCE7),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(isHindi ? '🔒 योजना सुरक्षित / तैयार' : isKannada ? '🔒 ಯೋಜನೆ ಲಾಕ್ ಆಗಿದೆ / ಸಿದ್ಧ' : '🔒 PLAN LOCKED / READY FOR DISPATCH', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF15803D))),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(isHindi ? 'निर्धारित केंद्र' : isKannada ? 'ಗೊತ್ತುಪಡಿಸಿದ ಕೇಂದ್ರ' : 'Designated Center', style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
+                        Text(fpsName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppConstants.primaryNavy)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(isHindi ? 'कुल हकदार राशन' : isKannada ? 'ಒಟ್ಟು ಅರ್ಹ ಪಡಿತರ' : 'Total Entitled Grain', style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
+                        Text('${_remainingBalanceKg > 0 ? _remainingBalanceKg.toStringAsFixed(1) : "20.0"} kg (' + (isHindi ? '100% मुफ्त' : isKannada ? '100% ಉಚಿತ' : '100% Free') + ')', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF15803D))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppConstants.primaryNavy,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 42),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: Text(isHindi ? 'मानचित्र विंडो बंद करें' : isKannada ? 'ನಕ್ಷೆ ಮುಚ್ಚಿ' : 'Close Map Window', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -2692,417 +3304,6 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
             }),
           ],
         ],
-      ),
-    );
-  }
-
-  // 0c. VOICE & PICTORIAL ACCESSIBILITY ASSISTANT BANNER (FOR LOW-LITERACY BENEFICIARIES)
-  Widget _buildVoicePictorialAssistBanner() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E3A5F), Color(0xFF0F2942)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: const Color(0xFF0F2942).withValues(alpha: 0.15), blurRadius: 8, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFF38BDF8)),
-            ),
-            child: const Icon(Icons.mic_rounded, color: Color(0xFF38BDF8), size: 24),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('🎙️ Voice & Pictorial Assist', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.bold)),
-                    SizedBox(width: 8),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Color(0xFF16A34A), borderRadius: BorderRadius.all(Radius.circular(4))),
-                      child: Text('ACCESSIBILITY MODE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 2),
-                Text('Tap to speak intent or use visual picture cards in English, Hindi, or Kannada.', style: TextStyle(color: Colors.white70, fontSize: 11)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: _showVoicePictorialAssistModal,
-            icon: const Icon(Icons.record_voice_over_rounded, size: 16),
-            label: const Text('Voice Assist', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showVoicePictorialAssistModal() {
-    String selectedLang = 'KN'; // EN, HI, KN
-    double voiceRiceKg = (_eligibleMembersCount * 4.0).clamp(0.0, 40.0);
-    double voiceWheatKg = (_eligibleMembersCount * 1.0).clamp(0.0, 20.0);
-    String selectedFpsId = _beneficiary?.registeredFpsId ?? 'FPS-KA-BLR-001';
-    bool isListening = false;
-    bool isSubmitting = false;
-    String feedbackText = '🔊 "ನಿಮ್ಮ 5 ಸದಸ್ಯರ ಕುಟುಂಬಕ್ಕೆ 16 ಕೆಜಿ ಅಕ್ಕಿ ಮತ್ತು 4 ಕೆಜಿ ಗೋಧಿ ಧಾನ್ಯ ಅರ್ಹತೆಯಿದೆ. ಧ್ವನಿ ಮೂಲಕ ನೋಂದಾಯಿಸಲು ಮೈಕ್ ಒತ್ತಿ."';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(color: Color(0xFF15803D), shape: BoxShape.circle),
-                  child: const Icon(Icons.record_voice_over_rounded, color: Colors.white, size: 22),
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Voice & Pictorial Assist', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      Text('ಧ್ವನಿ ಮತ್ತು ಚಿತ್ರಾತ್ಮಕ ನೆರವು • आवाज सहायता (Low Literacy Mode)', style: TextStyle(fontSize: 10.5, color: AppConstants.textSecondary)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. Regional Language Selector Chips
-                  Row(
-                    children: [
-                      const Text('Language / ಭಾಷೆ:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 8),
-                      ChoiceChip(
-                        label: const Text('🇬🇧 EN', style: TextStyle(fontSize: 11)),
-                        selected: selectedLang == 'EN',
-                        selectedColor: AppConstants.primaryNavy,
-                        labelStyle: TextStyle(color: selectedLang == 'EN' ? Colors.white : Colors.black87),
-                        onSelected: (_) {
-                          setModalState(() {
-                            selectedLang = 'EN';
-                            feedbackText = '🔊 "Your family entitlement is ${voiceRiceKg.toInt()} kg Rice & ${voiceWheatKg.toInt()} kg Wheat. Tap microphone to speak your intent."';
-                          });
-                        },
-                      ),
-                      const SizedBox(width: 6),
-                      ChoiceChip(
-                        label: const Text('🇮🇳 हिंदी', style: TextStyle(fontSize: 11)),
-                        selected: selectedLang == 'HI',
-                        selectedColor: AppConstants.primaryNavy,
-                        labelStyle: TextStyle(color: selectedLang == 'HI' ? Colors.white : Colors.black87),
-                        onSelected: (_) {
-                          setModalState(() {
-                            selectedLang = 'HI';
-                            feedbackText = '🔊 "आपके परिवार के लिए ${voiceRiceKg.toInt()} किग्रा चावल और ${voiceWheatKg.toInt()} किग्रा गेहूं का कोटा है। बोलने के लिए माइक दबाएं।"';
-                          });
-                        },
-                      ),
-                      const SizedBox(width: 6),
-                      ChoiceChip(
-                        label: const Text('🇮🇳 ಕನ್ನಡ', style: TextStyle(fontSize: 11)),
-                        selected: selectedLang == 'KN',
-                        selectedColor: AppConstants.primaryNavy,
-                        labelStyle: TextStyle(color: selectedLang == 'KN' ? Colors.white : Colors.black87),
-                        onSelected: (_) {
-                          setModalState(() {
-                            selectedLang = 'KN';
-                            feedbackText = '🔊 "ನಿಮ್ಮ ಕುಟುಂಬಕ್ಕೆ ${voiceRiceKg.toInt()} ಕೆಜಿ ಅಕ್ಕಿ ಮತ್ತು ${voiceWheatKg.toInt()} ಕೆಜಿ ಗೋಧಿ ಧಾನ್ಯ ಅರ್ಹತೆಯಿದೆ. ಧ್ವನಿ ಮೂಲಕ ನೋಂದಾಯಿಸಲು ಮೈಕ್ ಒತ್ತಿ."';
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // 2. Audio Speech Output Banner
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0FDF4),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF86EFAC)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.volume_up_rounded, color: Color(0xFF16A34A), size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            feedbackText,
-                            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF166534)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // 3. Pictorial Commodity Selection Cards (Zero-Text Touch Targets)
-                  const Text('1. Tap Pictures to Select Commodities:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-
-                  Row(
-                    children: [
-                      // Fortified Rice Card
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF0FDF4),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFF16A34A), width: 1.5),
-                          ),
-                          child: Column(
-                            children: [
-                              const Icon(Icons.rice_bowl_rounded, size: 36, color: Color(0xFF16A34A)),
-                              const SizedBox(height: 4),
-                              Text(selectedLang == 'KN' ? 'ಅಕ್ಕಿ (Rice)' : (selectedLang == 'HI' ? 'चावल (Rice)' : 'Fortified Rice'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline, size: 20),
-                                    onPressed: () {
-                                      setModalState(() {
-                                        if (voiceRiceKg > 0) voiceRiceKg -= 1.0;
-                                      });
-                                    },
-                                  ),
-                                  Text('${voiceRiceKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF16A34A))),
-                                  IconButton(
-                                    icon: const Icon(Icons.add_circle_outline, size: 20),
-                                    onPressed: () {
-                                      setModalState(() {
-                                        voiceRiceKg += 1.0;
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-
-                      // Whole Wheat Card
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFFBEB),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFD97706), width: 1.5),
-                          ),
-                          child: Column(
-                            children: [
-                              const Icon(Icons.grain_rounded, size: 36, color: Color(0xFFD97706)),
-                              const SizedBox(height: 4),
-                              Text(selectedLang == 'KN' ? 'ಗೋಧಿ (Wheat)' : (selectedLang == 'HI' ? 'गेहूं (Wheat)' : 'Whole Wheat'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline, size: 20),
-                                    onPressed: () {
-                                      setModalState(() {
-                                        if (voiceWheatKg > 0) voiceWheatKg -= 1.0;
-                                      });
-                                    },
-                                  ),
-                                  Text('${voiceWheatKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFFD97706))),
-                                  IconButton(
-                                    icon: const Icon(Icons.add_circle_outline, size: 20),
-                                    onPressed: () {
-                                      setModalState(() {
-                                        voiceWheatKg += 1.0;
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // 4. Microphone Voice Command Simulator
-                  const Text('2. Speak Intent Command:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Center(
-                    child: Column(
-                      children: [
-                        GestureDetector(
-                          onTap: () {
-                            setModalState(() {
-                              isListening = true;
-                              feedbackText = selectedLang == 'KN'
-                                  ? '🎙️ "ಕೇಳಿಸಿಕೊಳ್ಳುತ್ತಿದ್ದೇವೆ... ಅಕ್ಕಿ ${voiceRiceKg.toInt()}ಕೆಜಿ, ಗೋಧಿ ${voiceWheatKg.toInt()}ಕೆಜಿ ಆಯ್ಕೆಯಾಗಿದೆ."'
-                                  : '🎙️ "Listening... Selected ${voiceRiceKg.toInt()}kg Rice & ${voiceWheatKg.toInt()}kg Wheat."';
-                            });
-                            Future.delayed(const Duration(milliseconds: 1200), () {
-                              setModalState(() {
-                                isListening = false;
-                                feedbackText = selectedLang == 'KN'
-                                    ? '✅ "ಧ್ವನಿ ಸ್ವೀಕರಿಸಲಾಗಿದೆ! ಸಲ್ಲಿಸಲು ಕೆಳಗಿನ ಬಟನ್ ಒತ್ತಿ."'
-                                    : '✅ "Voice Command Captured! Press Confirm to submit."';
-                              });
-                            });
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            padding: const EdgeInsets.all(18),
-                            decoration: BoxDecoration(
-                              color: isListening ? const Color(0xFFDC2626) : const Color(0xFF15803D),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (isListening ? const Color(0xFFDC2626) : const Color(0xFF15803D)).withValues(alpha: 0.4),
-                                  blurRadius: isListening ? 20 : 10,
-                                  spreadRadius: isListening ? 6 : 2,
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              isListening ? Icons.graphic_eq_rounded : Icons.mic_rounded,
-                              color: Colors.white,
-                              size: 32,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          isListening
-                              ? (selectedLang == 'KN' ? 'ಧ್ವನಿ ಗ್ರಹಿಸಲಾಗುತ್ತಿದೆ...' : 'Listening to your voice...')
-                              : (selectedLang == 'KN' ? 'ಮಾತನಾಡಲು ಮೈಕ್ ಒತ್ತಿ' : 'Tap Mic to Speak Intent'),
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isListening ? const Color(0xFFDC2626) : AppConstants.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Quick Voice Presets
-                  const Text('Quick Spoken Presets:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppConstants.textSecondary)),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      ActionChip(
-                        avatar: const Icon(Icons.mic, size: 14),
-                        label: Text(selectedLang == 'KN' ? 'ನನ್ನ ಅಂಗಡಿಯಲ್ಲಿ ಪೂರ್ಣ ಪಡಿತರ' : 'Full Quota at Home Shop', style: const TextStyle(fontSize: 10.5)),
-                        onPressed: () {
-                          setModalState(() {
-                            voiceRiceKg = (_eligibleMembersCount * 4.0).clamp(0.0, 40.0);
-                            voiceWheatKg = (_eligibleMembersCount * 1.0).clamp(0.0, 20.0);
-                            feedbackText = selectedLang == 'KN'
-                                ? '🔊 "ಪೂರ್ಣ ಕೋಟಾ ಆಯ್ಕೆಯಾಗಿದೆ: ${voiceRiceKg.toInt()} ಕೆಜಿ ಅಕ್ಕಿ, ${voiceWheatKg.toInt()} ಕೆಜಿ ಗೋಧಿ."'
-                                : '🔊 "Full Quota Selected: ${voiceRiceKg.toInt()} kg Rice, ${voiceWheatKg.toInt()} kg Wheat."';
-                          });
-                        },
-                      ),
-                      ActionChip(
-                        avatar: const Icon(Icons.local_shipping, size: 14),
-                        label: Text(selectedLang == 'KN' ? 'ಮನೆ ಬಾಗಿಲಿಗೆ ವಿತರಣೆ' : 'Doorstep Delivery', style: const TextStyle(fontSize: 10.5)),
-                        onPressed: () {
-                          setModalState(() {
-                            feedbackText = selectedLang == 'KN'
-                                ? '🔊 "ಮನೆ ಬಾಗಿಲಿಗೆ ವಿತರಣೆ ಆಯ್ಕೆಯಾಗಿದೆ."'
-                                : '🔊 "Doorstep Home Delivery Selected."';
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Cancel / ರದ್ದು'),
-              ),
-              ElevatedButton.icon(
-                onPressed: isSubmitting
-                    ? null
-                    : () async {
-                        setModalState(() => isSubmitting = true);
-                        try {
-                          await _apiService.submitIntent(
-                            beneficiaryId: widget.beneficiaryId,
-                            intendedFpsId: selectedFpsId,
-                            commodityOption: 'Both',
-                            riceQuantityKg: voiceRiceKg,
-                            wheatQuantityKg: voiceWheatKg,
-                            cycleId: '2026-09',
-                          );
-                          if (!mounted) return;
-                          Navigator.of(ctx).pop();
-                          _loadBeneficiaryData();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                selectedLang == 'KN'
-                                    ? '✅ ಧ್ವನಿ ಮೂಲಕ ಬೇಡಿಕೆ ಯಶಸ್ವಿಯಾಗಿ ಸಲ್ಲಿಸಲಾಗಿದೆ! (Intent Registered via Voice)'
-                                    : '✅ Intent Registered via Voice Assistant! Ticket QR Generated.',
-                              ),
-                              backgroundColor: const Color(0xFF15803D),
-                            ),
-                          );
-                        } catch (e) {
-                          setModalState(() => isSubmitting = false);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Submission Error: $e'), backgroundColor: AppConstants.dangerRed),
-                          );
-                        }
-                      },
-                icon: isSubmitting
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.check_circle_rounded, size: 16),
-                label: Text(selectedLang == 'KN' ? 'ಸಲ್ಲಿಸಿ (Confirm)' : 'Confirm Voice Intent'),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF15803D), foregroundColor: Colors.white),
-              ),
-            ],
-          );
-        },
       ),
     );
   }

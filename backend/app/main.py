@@ -27,6 +27,7 @@ from app.api.reports import router as reports_router
 from app.api.feedback import router as feedback_router
 from app.api.webhook import router as webhook_router
 from app.api.officer import router as officer_router
+from app.api.grain_atm import router as grain_atm_router
 
 # Initialize structured logging on application module load
 setup_logging(log_level=settings.LOG_LEVEL)

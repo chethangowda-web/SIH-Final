@@ -440,6 +440,7 @@ class BeneficiaryEntitlementSummaryOut(BaseModel):
     name: str
     card_type: str
     family_members_count: int
+    eligible_members_count: Optional[int] = None
     card_label: str
     cycle_id: str
     registered_fps_id: str

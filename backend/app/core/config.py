@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     
     # Administrative Demo Reset Switch in Production (False by default in production)
     ALLOW_DEMO_RESET: bool = True
+    SMART_GRAIN_ATM_ENABLED: bool = True
     
     # SQLite Database Path
     DB_PATH: Path = BASE_DIR / "pds_demandsync.db"
@@ -70,7 +71,8 @@ class Settings(BaseSettings):
     INTENT_WEIGHT: float = 0.65       # Parameter w: Weight given to verified beneficiary intent
     SAFETY_BUFFER_PCT: float = 0.05   # 5% safety buffer for operational dispatch
 
-    # SMS Gateway Configuration (India Fast2SMS / MSG91)
+    # SMS Gateway Configuration (India Fast2SMS / MSG91 / Twilio)
+    OTP_MODE: str = "demo"  # "demo" or "real"
     SMS_PROVIDER_API_KEY: Optional[str] = None
     SMS_SENDER_ID: str = "DEMAND"
     SMS_ENABLED: bool = False
@@ -91,12 +93,12 @@ class Settings(BaseSettings):
         return v
 
     def validate_production_config(self) -> None:
-        """Enforce strict production security checks at startup without crashing."""
-        if not self.SECRET_KEY or self.SECRET_KEY == DEFAULT_DEV_SECRET_KEY or len(self.SECRET_KEY) < 32:
-            import secrets
-            self.SECRET_KEY = secrets.token_hex(32)
-        if "*" in self.CORS_ORIGINS:
-            self.CORS_ORIGINS = [o for o in self.CORS_ORIGINS if o != "*"]
+        """Enforce strict production security checks at startup."""
+        if self.is_production:
+            if not self.SECRET_KEY or self.SECRET_KEY == DEFAULT_DEV_SECRET_KEY or len(self.SECRET_KEY) < 32:
+                raise RuntimeError("Insecure or default SECRET_KEY detected in production environment!")
+            if "*" in self.CORS_ORIGINS:
+                raise RuntimeError("Wildcard '*' in CORS_ORIGINS is prohibited in production environment!")
         # Ensure DB directory exists
         if self.DB_PATH.parent:
             self.DB_PATH.parent.mkdir(parents=True, exist_ok=True)

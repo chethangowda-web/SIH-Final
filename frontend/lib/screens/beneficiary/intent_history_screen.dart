@@ -63,11 +63,18 @@ class _IntentHistoryScreenState extends State<IntentHistoryScreen> {
       animation: LanguageController.instance,
       builder: (context, _) {
         return Scaffold(
-          backgroundColor: AppConstants.bgLight,
+          backgroundColor: Colors.white,
           appBar: AppBar(
-            backgroundColor: AppConstants.primaryNavy,
-            foregroundColor: Colors.white,
-            elevation: 0,
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF0F2942),
+            elevation: 0.5,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1.0),
+              child: Container(
+                color: const Color(0xFFE2E8F0),
+                height: 1.0,
+              ),
+            ),
             titleSpacing: 16,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,12 +86,12 @@ class _IntentHistoryScreenState extends State<IntentHistoryScreen> {
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.2,
-                    color: Colors.white,
+                    color: Color(0xFF0F2942),
                   ),
                 ),
                 Text(
                   '${tr('app.name')} • ${tr('app.cycle_label')}',
-                  style: const TextStyle(fontSize: 10.5, color: Colors.white70),
+                  style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
                 ),
               ],
             ),

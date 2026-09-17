@@ -1,13 +1,18 @@
 import sqlite3
 import random
 import time
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
-from app.core.database import get_db
+from app.core.database import get_db, get_or_create_household_members
 from app.core.logging_config import get_logger
+from app.services.sms_provider import clean_indian_phone, mask_phone
+from app.core.config import settings
 from app.core.auth import (
     hash_password,
     verify_password,
@@ -45,6 +50,24 @@ class LoginPayload(BaseModel):
     username: str = Field(..., max_length=64)
     password: str = Field(..., max_length=128)
 
+class HouseholdMemberPhoneOut(BaseModel):
+    member_id: str
+    name: str
+    relationship: str
+    masked_phone: Optional[str] = None
+    phone_last4: Optional[str] = None
+    demo_phone: Optional[str] = None
+    is_head: bool = False
+
+class HouseholdPhoneLookupOut(BaseModel):
+    status: str
+    card_id: str
+    beneficiary_name: str
+    scheme_type: str
+    members_count: int
+    mode: str
+    household_phones: List[HouseholdMemberPhoneOut]
+
 class OTPSendIn(BaseModel):
     card_id: str = Field(..., description="Beneficiary Ration Card ID e.g. RC-KA-000001")
     home_fps_id: Optional[str] = Field(None, description="Home Fair Price Shop ID e.g. FPS-KA-BAG-0001")
@@ -53,7 +76,8 @@ class OTPSendIn(BaseModel):
 
 class OTPVerifyIn(BaseModel):
     card_id: str = Field(..., description="Beneficiary Ration Card ID e.g. BEN-KA-0001 or RC-KA-000001")
-    otp_code: str = Field(..., min_length=4, max_length=6, description="Verification OTP e.g. 123456")
+    otp_code: Optional[str] = Field(None, min_length=4, max_length=6, description="Verification OTP e.g. 123456")
+    otp: Optional[str] = Field(None, min_length=4, max_length=6, description="Alias for otp_code")
 
 class RefreshTokenIn(BaseModel):
     refresh_token: str = Field(..., description="Active Refresh Token")
@@ -181,25 +205,142 @@ def login_oauth2_form(
     return login(LoginPayload(username=form_data.username, password=form_data.password), db=db)
 
 
+@router.get("/auth/citizen/household-phones/{card_id}", response_model=HouseholdPhoneLookupOut)
+def get_citizen_household_phones(
+    card_id: str,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Retrieves registered household members and privacy-masked mobile numbers
+    for a given Ration Card. Strictly authoritative from government master dataset.
+    """
+    card_clean = card_id.strip()
+    cursor = db.cursor()
+    cursor.execute("""
+    SELECT pseudonymous_beneficiary_id, name_for_demo, scheme_type, members_count
+    FROM beneficiaries
+    WHERE pseudonymous_beneficiary_id = ?;
+    """, (card_clean,))
+    ben = cursor.fetchone()
+
+    # Check normalized alternative if not found (e.g. BEN-KA-0001 <-> RC-KA-000001)
+    if not ben:
+        alt_id = None
+        if card_clean.startswith("BEN-KA-"):
+            try:
+                num_part = int(card_clean.replace("BEN-KA-", ""))
+                alt_id = f"RC-KA-{num_part:06d}"
+            except Exception:
+                pass
+        elif card_clean.startswith("RC-KA-"):
+            try:
+                num_part = int(card_clean.replace("RC-KA-", ""))
+                alt_id = f"BEN-KA-{num_part:04d}"
+            except Exception:
+                pass
+        if alt_id:
+            cursor.execute("""
+            SELECT pseudonymous_beneficiary_id, name_for_demo, scheme_type, members_count
+            FROM beneficiaries
+            WHERE pseudonymous_beneficiary_id = ?;
+            """, (alt_id,))
+            ben = cursor.fetchone()
+
+    if not ben:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset."
+        )
+
+    canonical_card = ben["pseudonymous_beneficiary_id"]
+    members = get_or_create_household_members(db, canonical_card)
+
+    is_real = (getattr(settings, "OTP_MODE", "demo").lower() == "real") or (
+        getattr(settings, "SMS_ENABLED", False) and bool(getattr(settings, "SMS_PROVIDER_API_KEY", None))
+    )
+    mode_str = "REAL" if is_real else "DEMO"
+
+    phone_list: List[HouseholdMemberPhoneOut] = []
+    for m in members:
+        raw_p = m.get("phone")
+        if raw_p and str(raw_p).strip():
+            c_p = clean_indian_phone(str(raw_p))
+            last4 = c_p[-4:] if len(c_p) >= 4 else c_p
+            masked = f"+91 ******{last4}"
+            phone_list.append(
+                HouseholdMemberPhoneOut(
+                    member_id=m.get("member_id", "M-01"),
+                    name=m.get("name", "Family Member"),
+                    relationship=m.get("relationship", "Member"),
+                    masked_phone=masked,
+                    phone_last4=last4,
+                    demo_phone=c_p if not is_real else None,
+                    is_head=m.get("relationship") == "Head of Household"
+                )
+            )
+
+    return HouseholdPhoneLookupOut(
+        status="success",
+        card_id=card_clean,
+        beneficiary_name=ben["name_for_demo"] or "Beneficiary",
+        scheme_type=ben["scheme_type"] or "PHH",
+        members_count=int(ben["members_count"]) if ben["members_count"] else len(members),
+        mode=mode_str,
+        household_phones=phone_list
+    )
+
+
 @router.post("/auth/citizen/send-otp")
 def citizen_send_otp(
     payload: OTPSendIn,
     db: sqlite3.Connection = Depends(get_db)
 ):
     """
-    Sends a 6-digit OTP via SMS to the mobile phone linked with the specified Ration Card / Citizen.
-    Strictly verifies existence & Home FPS ID against NFSA Master Dataset.
+    Sends a 6-digit OTP to a verified mobile phone registered to a member of the Ration Card household.
+    Enforces:
+    1. Ration card existence in official dataset.
+    2. Home FPS ID verification if supplied.
+    3. Mandatory household phone check: Entered phone MUST belong to a member of this ration card household.
+    4. 30-second cooldown per card/phone to prevent flooding.
+    5. Prior OTP invalidation.
+    6. Dual Demo/Real OTP modes.
     """
     from app.services.notification_engine import notification_engine
     from app.core.config import settings
 
     cursor = db.cursor()
     card_clean = payload.card_id.strip()
-    cursor.execute(
-        "SELECT pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, phone FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;",
-        (card_clean,)
-    )
+
+    # Step 1: Verify card in master database
+    cursor.execute("""
+    SELECT pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, phone, members_count, scheme_type
+    FROM beneficiaries
+    WHERE pseudonymous_beneficiary_id = ?;
+    """, (card_clean,))
     ben = cursor.fetchone()
+
+    alt_id = None
+    if not ben:
+        if card_clean.startswith("BEN-KA-"):
+            try:
+                num_part = int(card_clean.replace("BEN-KA-", ""))
+                alt_id = f"RC-KA-{num_part:06d}"
+            except Exception:
+                pass
+        elif card_clean.startswith("RC-KA-"):
+            try:
+                num_part = int(card_clean.replace("RC-KA-", ""))
+                alt_id = f"BEN-KA-{num_part:04d}"
+            except Exception:
+                pass
+        if alt_id:
+            cursor.execute("""
+            SELECT pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, phone, members_count, scheme_type
+            FROM beneficiaries
+            WHERE pseudonymous_beneficiary_id = ?;
+            """, (alt_id,))
+            ben = cursor.fetchone()
+
     if not ben:
         logger.warning("Anti-fraud trigger: Card ID '%s' not found in NFSA dataset.", card_clean)
         raise HTTPException(
@@ -207,7 +348,9 @@ def citizen_send_otp(
             detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset. Access denied."
         )
 
-    # Cross-verify Home FPS ID if provided
+    canonical_card = ben["pseudonymous_beneficiary_id"]
+
+    # Step 2: Cross-verify Home FPS ID if provided
     if payload.home_fps_id and payload.home_fps_id.strip():
         fps_clean = payload.home_fps_id.strip()
         db_fps = ben["registered_fps_id"] if ("registered_fps_id" in ben.keys() and ben["registered_fps_id"]) else None
@@ -218,68 +361,161 @@ def citizen_send_otp(
                 detail=f"Security Check Failed: Home FPS Center ID '{fps_clean}' does not match government PDS record for Ration Card '{card_clean}'."
             )
 
-    # Cross-verify phone number if provided and present in record
-    db_phone = ben["phone"] if ("phone" in ben.keys() and ben["phone"]) else None
-    if payload.phone_number and db_phone:
-        input_phone_clean = payload.phone_number.replace("+", "").replace("-", "").replace(" ", "").strip()
-        db_phone_clean = db_phone.replace("+", "").replace("-", "").replace(" ", "").strip()
-        if input_phone_clean and db_phone_clean and not db_phone_clean.endswith(input_phone_clean[-10:]):
-            logger.warning("Anti-fraud trigger: Provided phone '%s' does not match NFSA record '%s' for '%s'", payload.phone_number, db_phone, card_clean)
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="3-Factor Security Check Failed: Provided phone number does not match registered government PDS record for this Ration Card."
-            )
+    # Step 3: Load household members and all registered phones for this household
+    members = get_or_create_household_members(db, canonical_card)
+    household_phones: List[str] = []
+    if ben["phone"] and str(ben["phone"]).strip():
+        household_phones.append(clean_indian_phone(str(ben["phone"])))
+    for m in members:
+        m_phone = m.get("phone")
+        if m_phone and str(m_phone).strip():
+            clean_m = clean_indian_phone(str(m_phone))
+            if clean_m not in household_phones:
+                household_phones.append(clean_m)
 
-    # Generate real 6-digit OTP
-    real_otp = f"{random.randint(100000, 999999):06d}"
+    # Step 4: Strict Household Member Phone Verification
+    if not payload.phone_number or not payload.phone_number.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registered mobile number is required to receive OTP."
+        )
 
-    # Ensure table & column exist
+    input_phone_clean = clean_indian_phone(payload.phone_number)
+    phone_matched = False
+    matched_member_name = None
+    for hp in household_phones:
+        if hp.endswith(input_phone_clean[-10:]) or input_phone_clean.endswith(hp[-10:]):
+            phone_matched = True
+            break
+
+    if phone_matched:
+        for m in members:
+            if m.get("phone") and (clean_indian_phone(str(m.get("phone"))).endswith(input_phone_clean[-10:]) or input_phone_clean.endswith(clean_indian_phone(str(m.get("phone")))[-10:])):
+                matched_member_name = m.get("name")
+                break
+        if not matched_member_name:
+            matched_member_name = ben["name_for_demo"]
+
+    if not phone_matched:
+        logger.warning(
+            "Anti-fraud trigger: Provided phone '%s' (cleaned: %s) does not belong to household for card '%s'. Registered phones: %s",
+            payload.phone_number, input_phone_clean, card_clean, [mask_phone(p) for p in household_phones]
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Security Check Failed: Entered mobile number does not belong to any registered member of this Ration Card household."
+        )
+
+    # Step 5: Rate Limiting / Resend Cooldown (30 seconds)
+    cursor.execute("""
+        SELECT created_at FROM otp_verifications 
+        WHERE identifier = ? OR identifier = ?
+        ORDER BY id DESC LIMIT 1;
+    """, (card_clean, canonical_card))
+    last_req = cursor.fetchone()
+    if last_req and last_req[0]:
+        try:
+            created_str = str(last_req[0])
+            if "." in created_str:
+                created_dt = datetime.strptime(created_str.split(".")[0], "%Y-%m-%d %H:%M:%S")
+            else:
+                created_dt = datetime.strptime(created_str, "%Y-%m-%d %H:%M:%S")
+            elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - created_dt).total_seconds()
+            if 0 <= elapsed < 30:
+                wait_sec = int(30 - elapsed)
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=f"Please wait {wait_sec} seconds before requesting a new OTP."
+                )
+        except HTTPException:
+            raise
+        except Exception as dt_err:
+            logger.debug("Cooldown check date parse: %s", dt_err)
+
+    # Step 6: Invalidate any previous active unconsumed OTPs for this card
+    cursor.execute("""
+        UPDATE otp_verifications 
+        SET consumed = 1 
+        WHERE (identifier = ? OR identifier = ?) AND consumed = 0;
+    """, (card_clean, canonical_card))
+
+    # Step 7: Cryptographically secure 6-digit OTP generation
+    real_otp = f"{secrets.randbelow(900000) + 100000:06d}"
+    otp_salt = settings.SECRET_KEY
+    otp_hash = hashlib.sha256(f"{real_otp}:{otp_salt}".encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5)
+    expires_at_str = expires_at.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Step 8: Persist to otp_verifications with hash, expiration and attempt tracking
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS otp_verifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             identifier TEXT NOT NULL,
-            otp_code TEXT NOT NULL,
+            otp_code TEXT,
+            otp_hash TEXT,
             phone_number TEXT,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            expires_at TIMESTAMP,
+            consumed INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
-    try:
-        cursor.execute("ALTER TABLE otp_verifications ADD COLUMN phone_number TEXT;")
-    except Exception:
-        pass
+    for col_def in [
+        ("otp_hash", "TEXT"),
+        ("attempts", "INTEGER NOT NULL DEFAULT 0"),
+        ("expires_at", "TIMESTAMP"),
+        ("consumed", "INTEGER NOT NULL DEFAULT 0"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE otp_verifications ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
 
-    cursor.execute(
-        "INSERT INTO otp_verifications (identifier, otp_code, phone_number) VALUES (?, ?, ?);",
-        (card_clean, real_otp, payload.phone_number or "")
-    )
+    cursor.execute("""
+        INSERT INTO otp_verifications (identifier, otp_code, otp_hash, phone_number, attempts, expires_at, consumed)
+        VALUES (?, ?, ?, ?, 0, ?, 0);
+    """, (card_clean, real_otp, otp_hash, payload.phone_number.strip(), expires_at_str))
     db.commit()
 
-    # Determine real recipient phone number
-    target_phone = payload.phone_number.strip() if payload.phone_number else (db_phone or settings.TWILIO_PHONE_NUMBER or "+918050442666")
+    # Step 9: Determine live or demo mode & dispatch SMS
+    has_sms_provider = bool(
+        (getattr(settings, "SMS_ENABLED", False) and bool(getattr(settings, "SMS_PROVIDER_API_KEY", None))) or
+        (bool(getattr(settings, "TWILIO_ACCOUNT_SID", None)) and getattr(settings, "TWILIO_ACCOUNT_SID") != "dummy" and bool(getattr(settings, "TWILIO_AUTH_TOKEN", None)) and getattr(settings, "TWILIO_AUTH_TOKEN") != "dummy")
+    )
+    is_real_mode = (getattr(settings, "OTP_MODE", "demo").lower() == "real") and has_sms_provider
+
+    target_phone = payload.phone_number.strip()
     sms_body = f"PDS DemandSync Security OTP: {real_otp} is your verification code to access your citizen ration portal. Valid for 5 minutes. Do not share with anyone."
 
-    # Dispatch live SMS via Twilio Notification Service
     try:
-        notification_engine.service.send_sms(target_phone, "Citizen", sms_body)
+        notification_engine.service.send_sms(target_phone, ben["name_for_demo"] or "Citizen", sms_body)
     except Exception as e:
         logger.warning(f"SMS dispatch warning: {e}")
 
-    logger.info("OTP generated for citizen '%s' -> phone '%s'", card_clean, target_phone)
+    logger.info("OTP generated for citizen '%s' -> phone '%s' (mode=%s)", card_clean, mask_phone(target_phone), "REAL" if is_real_mode else "DEMO")
 
-    # Mask phone for display
-    display_phone = target_phone[-4:] if len(target_phone) >= 4 else "9841"
+    display_phone = input_phone_clean[-4:] if len(input_phone_clean) >= 4 else "1234"
 
-    return {
+    response_data = {
         "status": "success",
         "card_id": card_clean,
-        "message": f"OTP Code: {real_otp}",
-        "demo_otp_code": real_otp,
-        "mock_otp": real_otp,
-        "otp": real_otp,
+        "member_name": matched_member_name or "Beneficiary",
         "masked_phone": f"+91 ******{display_phone}",
-        "mode": "LIVE" if getattr(settings, 'TWILIO_PHONE_NUMBER', None) else "MOCK",
-        "expires_in_seconds": 300
+        "phone": f"+91 ******{display_phone}",
+        "mode": "REAL" if is_real_mode else "DEMO",
+        "expires_in_seconds": 300,
+        "message": "Verification OTP sent to your registered mobile number."
     }
+
+    # In DEMO mode only: provide mock_otp/demo_otp_code for SIH evaluators
+    if not is_real_mode:
+        response_data["demo_otp"] = real_otp
+        response_data["demo_otp_code"] = real_otp
+        response_data["mock_otp"] = real_otp
+        response_data["otp"] = real_otp
+        response_data["message"] = f"Demo Mode: OTP Code {real_otp}"
+
+    return response_data
 
 
 @router.post("/auth/citizen/verify-otp", response_model=UserLoginOut)
@@ -287,45 +523,147 @@ def citizen_verify_otp(
     payload: OTPVerifyIn,
     db: sqlite3.Connection = Depends(get_db)
 ):
-    """Verifies citizen OTP and issues Bearer access token."""
+    """
+    Verifies citizen OTP against official hashed verification records and issues Bearer access token.
+    Enforces:
+    1. Beneficiary card existence in NFSA dataset.
+    2. Active unconsumed OTP presence.
+    3. Expiration check (5 minutes).
+    4. Attempt throttling (maximum 3 attempts).
+    5. Salted hash comparison (with fallback demo code 123456 in DEMO mode).
+    6. OTP consumption mark on success.
+    """
     cursor = db.cursor()
     card_clean = payload.card_id.strip()
-    cursor.execute(
-        "SELECT pseudonymous_beneficiary_id, name_for_demo FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;",
-        (card_clean,)
-    )
+
+    # Step 1: Verify beneficiary existence
+    cursor.execute("""
+    SELECT pseudonymous_beneficiary_id, name_for_demo 
+    FROM beneficiaries 
+    WHERE pseudonymous_beneficiary_id = ?;
+    """, (card_clean,))
     ben = cursor.fetchone()
+
+    alt_id = None
+    if not ben:
+        if card_clean.startswith("BEN-KA-"):
+            try:
+                num_part = int(card_clean.replace("BEN-KA-", ""))
+                alt_id = f"RC-KA-{num_part:06d}"
+            except Exception:
+                pass
+        elif card_clean.startswith("RC-KA-"):
+            try:
+                num_part = int(card_clean.replace("RC-KA-", ""))
+                alt_id = f"BEN-KA-{num_part:04d}"
+            except Exception:
+                pass
+        if alt_id:
+            cursor.execute("""
+            SELECT pseudonymous_beneficiary_id, name_for_demo 
+            FROM beneficiaries 
+            WHERE pseudonymous_beneficiary_id = ?;
+            """, (alt_id,))
+            ben = cursor.fetchone()
+
     if not ben:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset."
         )
 
-    # Validate OTP (Accept 123456 or last generated OTP)
-    if payload.otp_code.strip() != "123456":
-        cursor.execute("""
-            SELECT otp_code FROM otp_verifications 
-            WHERE identifier = ? 
-            ORDER BY id DESC LIMIT 1;
-        """, (payload.card_id.strip(),))
-        otp_row = cursor.fetchone()
-        if not otp_row or otp_row["otp_code"] != payload.otp_code.strip():
+    canonical_card = ben["pseudonymous_beneficiary_id"]
+    has_sms_provider = bool(
+        (getattr(settings, "SMS_ENABLED", False) and bool(getattr(settings, "SMS_PROVIDER_API_KEY", None))) or
+        (bool(getattr(settings, "TWILIO_ACCOUNT_SID", None)) and getattr(settings, "TWILIO_ACCOUNT_SID") != "dummy" and bool(getattr(settings, "TWILIO_AUTH_TOKEN", None)) and getattr(settings, "TWILIO_AUTH_TOKEN") != "dummy")
+    )
+    is_real_mode = (getattr(settings, "OTP_MODE", "demo").lower() == "real") and has_sms_provider
+
+    # Step 2: Fetch latest active unconsumed OTP
+    cursor.execute("""
+        SELECT id, otp_code, otp_hash, attempts, expires_at, consumed, created_at
+        FROM otp_verifications 
+        WHERE (identifier = ? OR identifier = ?) AND consumed = 0
+        ORDER BY id DESC LIMIT 1;
+    """, (card_clean, canonical_card))
+    otp_row = cursor.fetchone()
+
+    input_otp = (payload.otp_code or payload.otp or "").strip()
+
+    # Demo bypass for SIH evaluators if in DEMO mode
+    is_demo_bypass = (not is_real_mode) and (input_otp == "123456")
+
+    if not is_demo_bypass:
+        if not otp_row:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired OTP code."
+                detail="No active OTP request found for this Ration Card. Please request a new OTP."
             )
 
-    # Ensure citizen user account exists in users table
-    cursor.execute("SELECT id, username, role FROM users WHERE beneficiary_id = ?;", (payload.card_id.strip(),))
+        # Check expiration
+        expires_at_str = otp_row["expires_at"] if "expires_at" in otp_row.keys() else None
+        if expires_at_str:
+            try:
+                exp_dt = datetime.strptime(str(expires_at_str).split(".")[0], "%Y-%m-%d %H:%M:%S")
+                if datetime.now(timezone.utc).replace(tzinfo=None) > exp_dt:
+                    cursor.execute("UPDATE otp_verifications SET consumed = 1 WHERE id = ?;", (otp_row["id"],))
+                    db.commit()
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="OTP has expired (validity 5 minutes). Please request a new OTP."
+                    )
+            except HTTPException:
+                raise
+            except Exception as exp_err:
+                logger.debug("Expiry date parse error: %s", exp_err)
+
+        # Check attempt limits (max 3)
+        current_attempts = int(otp_row["attempts"] or 0) if "attempts" in otp_row.keys() else 0
+        if current_attempts >= 3:
+            cursor.execute("UPDATE otp_verifications SET consumed = 1 WHERE id = ?;", (otp_row["id"],))
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Maximum verification attempts exceeded (3). This OTP has been invalidated. Please request a new OTP."
+            )
+
+        # Increment attempts counter
+        cursor.execute("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id = ?;", (otp_row["id"],))
+        db.commit()
+
+        # Salted hash comparison
+        otp_salt = settings.SECRET_KEY
+        computed_hash = hashlib.sha256(f"{input_otp}:{otp_salt}".encode()).hexdigest()
+
+        matched = False
+        db_hash = otp_row["otp_hash"] if "otp_hash" in otp_row.keys() else None
+        db_code = otp_row["otp_code"] if "otp_code" in otp_row.keys() else None
+        if db_hash and db_hash == computed_hash:
+            matched = True
+        elif not is_real_mode and (db_code == input_otp):
+            matched = True
+
+        if not matched:
+            remaining = 3 - (current_attempts + 1)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Invalid OTP code. {remaining} attempt(s) remaining." if remaining > 0 else "Invalid OTP code. Maximum attempts reached."
+            )
+
+        # Mark OTP consumed
+        cursor.execute("UPDATE otp_verifications SET consumed = 1 WHERE id = ?;", (otp_row["id"],))
+        db.commit()
+
+    # Step 3: Ensure citizen user account exists in users table
+    cursor.execute("SELECT id, username, role FROM users WHERE beneficiary_id = ? OR beneficiary_id = ?;", (card_clean, canonical_card))
     user_row = cursor.fetchone()
 
     if not user_row:
-        # Auto-create citizen user record
-        username = f"user_{payload.card_id.lower().replace('-', '_')}"
+        username = f"user_{canonical_card.lower().replace('-', '_')}"
         password_hash = hash_password("citizen_secure_pass")
         cursor.execute(
             "INSERT INTO users (username, password_hash, role, beneficiary_id) VALUES (?, ?, 'BENEFICIARY', ?);",
-            (username, password_hash, payload.card_id.strip())
+            (username, password_hash, canonical_card)
         )
         db.commit()
         username_val = username
@@ -335,17 +673,19 @@ def citizen_verify_otp(
     token_data = {
         "username": username_val,
         "role": "BENEFICIARY",
-        "beneficiary_id": payload.card_id.strip()
+        "beneficiary_id": canonical_card
     }
     token = create_token(token_data)
     refresh_token = create_token(token_data, expires_in=7 * 86400)
+
+    logger.info("Citizen '%s' authenticated successfully via OTP (mode=%s)", canonical_card, "REAL" if is_real_mode else "DEMO")
 
     return UserLoginOut(
         access_token=token,
         token_type="bearer",
         role="BENEFICIARY",
         username=username_val,
-        beneficiary_id=payload.card_id.strip(),
+        beneficiary_id=canonical_card,
         refresh_token=refresh_token
     )
 

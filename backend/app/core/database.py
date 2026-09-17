@@ -1384,6 +1384,327 @@ def _migration_013_escalation_system(cursor: sqlite3.Cursor) -> None:
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_complaint_clusters_category ON complaint_clusters (category);")
 
 
+
+
+def _migration_015_household_members_and_otp_hardening(cursor: sqlite3.Cursor) -> None:
+    """015: Household members dataset & OTP security hardening tables."""
+    # 1. household_members (Per-member record linked to ration card)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS household_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        beneficiary_card_id TEXT NOT NULL,
+        member_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        relationship TEXT NOT NULL,
+        age INTEGER NOT NULL DEFAULT 35,
+        gender TEXT NOT NULL DEFAULT 'F',
+        phone TEXT,
+        aadhaar_last4 TEXT,
+        is_eligible INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (beneficiary_card_id) REFERENCES beneficiaries (pseudonymous_beneficiary_id)
+    );
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_hm_card ON household_members (beneficiary_card_id);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_hm_phone ON household_members (phone);")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hm_card_member ON household_members (beneficiary_card_id, member_id);")
+
+    # 2. OTP verification table security columns
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS otp_verifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        identifier TEXT NOT NULL,
+        otp_code TEXT,
+        otp_hash TEXT,
+        phone_number TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        expires_at TIMESTAMP,
+        consumed INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    for col_def in [
+        ("otp_hash", "TEXT"),
+        ("attempts", "INTEGER NOT NULL DEFAULT 0"),
+        ("expires_at", "TIMESTAMP"),
+        ("consumed", "INTEGER NOT NULL DEFAULT 0"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE otp_verifications ADD COLUMN {col_def[0]} {col_def[1]};")
+        except Exception:
+            pass
+
+    # Ensure baseline FPS and demo beneficiaries exist for referential integrity
+    for test_fps_id in ['FPS-KA-BLR-001', 'FPS-KA-BLR-002', 'FPS-KA-BLR-003', 'FPS-KA-BLR-004', 'FPS-KA-BLR-005']:
+        cursor.execute("""
+        INSERT OR IGNORE INTO fps (fps_id, name, district, latitude, longitude, capacity_kg)
+        VALUES (?, ?, 'Bengaluru Urban', 12.9716, 77.5946, 10000.0);
+        """, (test_fps_id, f"Fair Price Shop ({test_fps_id})"))
+
+    demo_beneficiaries = [
+        ('RC-KA-000001', 'Deepa Reddy', 'FPS-KA-BLR-001', 'kn', 'ACTIVE', '+919845012345', 'PHH', 2, 10.0, 8.0, 2.0),
+        ('BEN-KA-0001', 'Swathi Bhat', 'FPS-KA-BLR-001', 'kn', 'ACTIVE', '+919845010000', 'PHH', 4, 20.0, 16.0, 4.0),
+        ('BEN-KA-0002', 'Suresh S.', 'FPS-KA-BLR-001', 'kn', 'ACTIVE', '+919845010001', 'PHH', 4, 20.0, 16.0, 4.0),
+        ('BEN-KA-0003', 'Aarav Gowda', 'FPS-KA-BLR-001', 'kn', 'ACTIVE', '+919845010002', 'PHH', 2, 10.0, 8.0, 2.0),
+        ('BEN-KA-0004', 'Aarav Joshi', 'FPS-KA-BLR-001', 'kn', 'ACTIVE', '+919845010003', 'PHH', 4, 20.0, 16.0, 4.0),
+        ('BEN-KA-0005', 'Sunita Devi', 'FPS-KA-BLR-001', 'kn', 'ACTIVE', '+919845010004', 'PHH', 4, 20.0, 16.0, 4.0),
+        ('BEN-KA-0010', 'Vijay Kulkarni', 'FPS-KA-BLR-001', 'kn', 'ACTIVE', '+919845010009', 'AAY', 2, 35.0, 25.0, 10.0),
+        ('RC-KA-000005', 'Manoj Sharma', 'FPS-KA-BLR-001', 'kn', 'ACTIVE', '+919845020005', 'PHH', 4, 20.0, 16.0, 4.0),
+        ('RC-KA-000009', 'Aditi Bhat', 'FPS-KA-BLR-001', 'kn', 'ACTIVE', '+919845030009', 'PHH', 6, 30.0, 24.0, 6.0),
+    ]
+    for b in demo_beneficiaries:
+        cursor.execute("""
+        INSERT OR IGNORE INTO beneficiaries (
+            pseudonymous_beneficiary_id, name_for_demo, registered_fps_id, language, status, phone, scheme_type, members_count, monthly_entitlement_kg, monthly_rice_kg, monthly_wheat_kg
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, b)
+
+    # Ensure RC-KA-000001 has phone set in beneficiaries table
+    cursor.execute("UPDATE beneficiaries SET phone = '+919845012345' WHERE pseudonymous_beneficiary_id = 'RC-KA-000001' AND (phone IS NULL OR phone = '');")
+
+    # 3. Seed baseline household members for key demo cards
+    demo_members = [
+        # RC-KA-000001 (Deepa Reddy, 2 members)
+        ("RC-KA-000001", "M-01", "Deepa Reddy", "Head of Household", 38, "F", "+919845012345", "4321", 1),
+        ("RC-KA-000001", "M-02", "Rajesh Reddy", "Spouse", 42, "M", "+919845067890", "8765", 1),
+
+        # BEN-KA-0001 (Swathi Bhat, 4 members)
+        ("BEN-KA-0001", "M-01", "Swathi Bhat", "Head of Household", 36, "F", "+919845010000", "1001", 1),
+        ("BEN-KA-0001", "M-02", "Vinod Bhat", "Spouse", 40, "M", "+919845010050", "1002", 1),
+        ("BEN-KA-0001", "M-03", "Ananya Bhat", "Daughter", 14, "F", None, "1003", 1),
+        ("BEN-KA-0001", "M-04", "Rohan Bhat", "Son", 10, "M", None, "1004", 1),
+
+        # BEN-KA-0002 (Suresh S., 4 members)
+        ("BEN-KA-0002", "M-01", "Suresh S.", "Head of Household", 45, "M", "+919845010001", "2001", 1),
+        ("BEN-KA-0002", "M-02", "Kavitha S.", "Spouse", 40, "F", "+919845010051", "2002", 1),
+        ("BEN-KA-0002", "M-03", "Pooja S.", "Daughter", 16, "F", None, "2003", 1),
+        ("BEN-KA-0002", "M-04", "Kiran S.", "Son", 12, "M", None, "2004", 1),
+
+        # BEN-KA-0005 (Sunita Devi, 4 members)
+        ("BEN-KA-0005", "M-01", "Sunita Devi", "Head of Household", 39, "F", "+919845010004", "5001", 1),
+        ("BEN-KA-0005", "M-02", "Manoj Devi", "Spouse", 43, "M", "+919845010054", "5002", 1),
+        ("BEN-KA-0005", "M-03", "Rahul Devi", "Son", 15, "M", None, "5003", 1),
+        ("BEN-KA-0005", "M-04", "Priya Devi", "Daughter", 11, "F", None, "5004", 1),
+
+        # RC-KA-000005 (Manoj Sharma, 4 members)
+        ("RC-KA-000005", "M-01", "Manoj Sharma", "Head of Household", 44, "M", "+919845020005", "5101", 1),
+        ("RC-KA-000005", "M-02", "Sunita Sharma", "Spouse", 40, "F", "+919845020055", "5102", 1),
+        ("RC-KA-000005", "M-03", "Aditya Sharma", "Son", 17, "M", None, "5103", 1),
+        ("RC-KA-000005", "M-04", "Neha Sharma", "Daughter", 13, "F", None, "5104", 1),
+
+        # RC-KA-000009 (Aditi Bhat, 6 members)
+        ("RC-KA-000009", "M-01", "Aditi Bhat", "Head of Household", 42, "F", "+919845030009", "9101", 1),
+        ("RC-KA-000009", "M-02", "Ganesh Bhat", "Spouse", 46, "M", "+919845030059", "9102", 1),
+        ("RC-KA-000009", "M-03", "Lakshmi Bhat", "Mother", 68, "F", None, "9103", 1),
+        ("RC-KA-000009", "M-04", "Ravi Bhat", "Son", 18, "M", "+919845030099", "9104", 1),
+        ("RC-KA-000009", "M-05", "Divya Bhat", "Daughter", 14, "F", None, "9105", 1),
+        ("RC-KA-000009", "M-06", "Meera Bhat", "Daughter", 10, "F", None, "9106", 1),
+    ]
+
+    for m in demo_members:
+        cursor.execute("SELECT 1 FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?", (m[0],))
+        if cursor.fetchone():
+            cursor.execute("""
+            INSERT OR REPLACE INTO household_members (
+                beneficiary_card_id, member_id, name, relationship, age, gender, phone, aadhaar_last4, is_eligible
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, m)
+
+
+def _migration_016_smart_grain_atm(cursor: sqlite3.Cursor) -> None:
+    """016: Smart Grain ATM and Automated Ration Pickup Network Tables."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS smart_grain_atms (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        atm_id TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        location TEXT NOT NULL,
+        district TEXT NOT NULL,
+        latitude REAL NOT NULL DEFAULT 12.9716,
+        longitude REAL NOT NULL DEFAULT 77.5946,
+        status TEXT NOT NULL DEFAULT 'ONLINE',
+        last_replenished_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS smart_grain_atm_inventory (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        atm_id TEXT NOT NULL,
+        commodity TEXT NOT NULL,
+        capacity_kg REAL NOT NULL DEFAULT 500.0,
+        available_stock_kg REAL NOT NULL DEFAULT 200.0,
+        min_threshold_kg REAL NOT NULL DEFAULT 50.0,
+        last_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (atm_id) REFERENCES smart_grain_atms (atm_id),
+        UNIQUE(atm_id, commodity)
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS smart_grain_atm_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dispense_id TEXT NOT NULL UNIQUE,
+        atm_id TEXT NOT NULL,
+        beneficiary_card_id TEXT NOT NULL,
+        commodity TEXT NOT NULL,
+        dispensed_quantity_kg REAL NOT NULL,
+        auth_method TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'COMPLETED',
+        dispensed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        tx_hash TEXT,
+        FOREIGN KEY (atm_id) REFERENCES smart_grain_atms (atm_id)
+    );
+    """)
+
+    seed_atms = [
+        ('ATM-KA-BLR-01', 'Ration Vending Machine - Malleshwaram 18th Cross', '18th Cross Bus Stand, Malleshwaram, Bengaluru', 'Bengaluru Urban', 12.9984, 77.5704),
+        ('ATM-KA-BLR-02', 'Ration Vending Machine - Rajajinagar Metro Hub', 'Rajajinagar Metro Station Complex, Bengaluru', 'Bengaluru Urban', 12.9892, 77.5538),
+        ('ATM-KA-BLR-03', 'Ration Vending Machine - Yeshwanthpur Rythu Santhe', 'Near APMC Yard, Yeshwanthpur, Bengaluru', 'Bengaluru Urban', 13.0238, 77.5503),
+        ('ATM-KA-BLR-04', 'Ration Vending Machine - Shivajinagar Bus Terminal', 'Shivajinagar Central Terminal, Bengaluru', 'Bengaluru Urban', 12.9856, 77.6057),
+    ]
+    for atm in seed_atms:
+        cursor.execute("""
+        INSERT OR IGNORE INTO smart_grain_atms (atm_id, name, location, district, latitude, longitude)
+        VALUES (?, ?, ?, ?, ?, ?);
+        """, atm)
+        cursor.execute("""
+        INSERT OR IGNORE INTO smart_grain_atm_inventory (atm_id, commodity, capacity_kg, available_stock_kg, min_threshold_kg)
+        VALUES (?, 'Rice', 500.0, 320.0, 60.0);
+        """, (atm[0],))
+        cursor.execute("""
+        INSERT OR IGNORE INTO smart_grain_atm_inventory (atm_id, commodity, capacity_kg, available_stock_kg, min_threshold_kg)
+        VALUES (?, 'Wheat', 300.0, 180.0, 40.0);
+        """, (atm[0],))
+
+
+def get_or_create_household_members(db: sqlite3.Connection, card_id: str) -> List[Dict[str, Any]]:
+    """
+    Retrieve registered household members for a ration card.
+    If members have not yet been seeded for an arbitrary card in the dataset,
+    deterministically derives them from the beneficiary record and persists them.
+    """
+    cursor = db.cursor()
+    clean_id = card_id.strip()
+
+    # Query existing members
+    cursor.execute("""
+    SELECT id, beneficiary_card_id, member_id, name, relationship, age, gender, phone, aadhaar_last4, is_eligible
+    FROM household_members
+    WHERE beneficiary_card_id = ?
+    ORDER BY id ASC;
+    """, (clean_id,))
+    rows = cursor.fetchall()
+    if rows:
+        return [dict(r) for r in rows]
+
+    # Also check normalized alternative (e.g. BEN-KA-0001 <-> RC-KA-000001)
+    alt_id = None
+    if clean_id.startswith("BEN-KA-"):
+        try:
+            num_part = int(clean_id.replace("BEN-KA-", ""))
+            alt_id = f"RC-KA-{num_part:06d}"
+        except Exception:
+            pass
+    elif clean_id.startswith("RC-KA-"):
+        try:
+            num_part = int(clean_id.replace("RC-KA-", ""))
+            alt_id = f"BEN-KA-{num_part:04d}"
+        except Exception:
+            pass
+
+    if alt_id:
+        cursor.execute("""
+        SELECT id, beneficiary_card_id, member_id, name, relationship, age, gender, phone, aadhaar_last4, is_eligible
+        FROM household_members
+        WHERE beneficiary_card_id = ?
+        ORDER BY id ASC;
+        """, (alt_id,))
+        alt_rows = cursor.fetchall()
+        if alt_rows:
+            return [dict(r) for r in alt_rows]
+
+    # Find the beneficiary record in master table
+    cursor.execute("""
+    SELECT pseudonymous_beneficiary_id, name_for_demo, phone, members_count, scheme_type
+    FROM beneficiaries
+    WHERE pseudonymous_beneficiary_id = ? OR pseudonymous_beneficiary_id = ?;
+    """, (clean_id, alt_id or clean_id))
+    ben = cursor.fetchone()
+    if not ben:
+        return []
+
+    target_card = ben["pseudonymous_beneficiary_id"]
+    head_name = ben["name_for_demo"] or "Beneficiary Head"
+    head_phone = ben["phone"] if "phone" in ben.keys() and ben["phone"] else None
+    if not head_phone:
+        card_digits = ''.join(c for c in target_card if c.isdigit()) or "12345"
+        val = int(card_digits[-5:]) if len(card_digits) >= 5 else 10001
+        head_phone = f"+9198450{val:05d}"
+        cursor.execute("UPDATE beneficiaries SET phone = ? WHERE pseudonymous_beneficiary_id = ?;", (head_phone, target_card))
+
+    members_count = int(ben["members_count"]) if ben["members_count"] and int(ben["members_count"]) > 0 else 2
+
+    relationships = ["Head of Household", "Spouse", "Son", "Daughter", "Parent", "Sibling", "Son", "Daughter"]
+    genders = ["F", "M", "M", "F", "F", "M", "M", "F"]
+    first_names = ["Ananya", "Rohan", "Kiran", "Divya", "Suresh", "Priya", "Rahul", "Deepa"]
+
+    created_members = []
+    card_hash = abs(hash(target_card)) % 10000
+
+    for i in range(members_count):
+        m_id = f"M-{i+1:02d}"
+        if i == 0:
+            m_name = head_name
+            m_rel = "Head of Household"
+            m_gender = "F" if any(x in head_name for x in ["Devi", "Bhat", "Reddy", "Swathi", "Deepa", "Sunita", "Lakshmi"]) else "M"
+            m_age = 38
+            m_phone = head_phone
+            m_aadhaar = f"{(card_hash + 1000) % 10000:04d}"
+        elif i == 1:
+            spouse_first = "Rajesh" if created_members[0]["gender"] == "F" else "Kavitha"
+            last_name = head_name.split()[-1] if len(head_name.split()) > 1 else "Kumar"
+            m_name = f"{spouse_first} {last_name}"
+            m_rel = "Spouse"
+            m_gender = "M" if created_members[0]["gender"] == "F" else "F"
+            m_age = 41
+            clean_digits = ''.join(c for c in head_phone if c.isdigit())
+            num_base = int(clean_digits[-4:]) if len(clean_digits) >= 4 else 1234
+            m_phone = f"+9198451{(num_base + 500) % 90000 + 10000:05d}"
+            m_aadhaar = f"{(card_hash + 2000) % 10000:04d}"
+        else:
+            idx = (i - 2) % len(first_names)
+            last_name = head_name.split()[-1] if len(head_name.split()) > 1 else ""
+            m_name = f"{first_names[idx]} {last_name}".strip()
+            m_rel = relationships[min(i, len(relationships)-1)]
+            m_gender = genders[min(i, len(genders)-1)]
+            m_age = max(8, 35 - (i * 5))
+            m_phone = None  # minor/unregistered
+            m_aadhaar = f"{(card_hash + (i + 1) * 1000) % 10000:04d}"
+
+        record = {
+            "beneficiary_card_id": target_card,
+            "member_id": m_id,
+            "name": m_name,
+            "relationship": m_rel,
+            "age": m_age,
+            "gender": m_gender,
+            "phone": m_phone,
+            "aadhaar_last4": m_aadhaar,
+            "is_eligible": 1
+        }
+        cursor.execute("""
+        INSERT INTO household_members (
+            beneficiary_card_id, member_id, name, relationship, age, gender, phone, aadhaar_last4, is_eligible
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, (target_card, m_id, m_name, m_rel, m_age, m_gender, m_phone, m_aadhaar, 1))
+        created_members.append(record)
+
+    db.commit()
+    return created_members
+
+
 # Migration Registry
 MIGRATIONS = [
     (1, "001_core_supply_chain_schema", _migration_001_core_supply_chain),
@@ -1400,6 +1721,8 @@ MIGRATIONS = [
     (12, "012_fps_operations", _migration_011_fps_operations),
     (13, "013_inspector_workflow", _migration_012_inspector_workflow),
     (14, "014_escalation_system", _migration_013_escalation_system),
+    (15, "015_household_members_and_otp_hardening", _migration_015_household_members_and_otp_hardening),
+    (16, "016_smart_grain_atm", _migration_016_smart_grain_atm),
 ]
 
 

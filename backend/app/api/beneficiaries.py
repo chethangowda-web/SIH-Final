@@ -113,6 +113,17 @@ def get_beneficiary(
     intent_rows = cursor.fetchall()
     active_intents = [dict(r) for r in intent_rows]
 
+    from app.services.ai_request_advisor import ai_request_advisor
+    try:
+        ent = ai_request_advisor.get_beneficiary_entitlement(db, row["pseudonymous_beneficiary_id"])
+        statutory_rice = ent["statutory_entitlement_rice_kg"]
+        statutory_wheat = ent["statutory_entitlement_wheat_kg"]
+        family_members = ent["family_members_count"]
+    except Exception:
+        statutory_rice = float(row["monthly_rice_kg"] or 0.0) if "monthly_rice_kg" in row.keys() else 0.0
+        statutory_wheat = float(row["monthly_wheat_kg"] or 0.0) if "monthly_wheat_kg" in row.keys() else 0.0
+        family_members = row["members_count"] if "members_count" in row.keys() else 1
+
     return BeneficiaryDetailOut(
         id=row["id"],
         pseudonymous_beneficiary_id=row["pseudonymous_beneficiary_id"],
@@ -123,9 +134,9 @@ def get_beneficiary(
         status=row["status"],
         phone=row["phone"] if "phone" in row.keys() else None,
         scheme_type=row["scheme_type"] if "scheme_type" in row.keys() else "PHH",
-        members_count=row["members_count"] if "members_count" in row.keys() else 1,
-        monthly_rice_kg=float(row["monthly_rice_kg"] or 0.0) if "monthly_rice_kg" in row.keys() else 0.0,
-        monthly_wheat_kg=float(row["monthly_wheat_kg"] or 0.0) if "monthly_wheat_kg" in row.keys() else 0.0,
+        members_count=family_members,
+        monthly_rice_kg=statutory_rice,
+        monthly_wheat_kg=statutory_wheat,
         active_intents=active_intents,
         demo_notice=DEMO_NOTICE
     )
