@@ -2845,6 +2845,27 @@ class ApiService {
     }
   }
 
+  /// Field Food Inspector: Retrieve authoritative inbound truck dispatch, route,
+  /// real-time GPS telemetry, and checkpoint progression for assigned Fair Price Shop.
+  Future<Map<String, dynamic>> fetchFpsAssignedDispatch(String fpsId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/fps/$fpsId/assigned-dispatch'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      dynamic err;
+      try {
+        err = json.decode(response.body);
+      } catch (_) {
+        err = {'detail': response.body.isNotEmpty ? response.body : 'Server returned status ${response.statusCode}'};
+      }
+      throw parseError(response, 'Failed to fetch assigned dispatch: ${err is Map ? (err['detail'] ?? response.statusCode) : response.statusCode}');
+    }
+  }
+
   /// Field Food Inspector: Submit and cryptographically seal 6-point inspection report
   Future<Map<String, dynamic>> submitFpsInspectionReport({
     required String fpsId,

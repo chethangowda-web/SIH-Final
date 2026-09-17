@@ -173,13 +173,11 @@ class TruckTrackingService:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_truck_tracking_cycle ON truck_route_tracking(cycle_id);")
         db.commit()
 
-        cursor.execute("SELECT COUNT(*) FROM truck_route_tracking WHERE cycle_id = ?;", (cycle_id,))
-        count = cursor.fetchone()[0]
-        if count > 0:
-            return
-
         now = datetime.now()
         for bp in DEMO_ROUTES_BLUEPRINT:
+            cursor.execute("SELECT COUNT(*) FROM truck_route_tracking WHERE truck_id = ? AND cycle_id = ?;", (bp["truck_id"], cycle_id))
+            if cursor.fetchone()[0] > 0:
+                continue
             tracking_id = f"TRK-LOC-{cycle_id}-{bp['truck_id'].replace('-', '')[:10]}"
             cps = [dict(c) for c in bp["checkpoints"]]
             
