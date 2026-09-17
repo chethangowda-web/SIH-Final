@@ -2877,8 +2877,13 @@ class ApiService {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
-      final err = json.decode(response.body);
-      throw parseError(response, 'Failed to submit inspection report: ${err['detail'] ?? response.statusCode}');
+      dynamic err;
+      try {
+        err = json.decode(response.body);
+      } catch (_) {
+        err = {'detail': response.body.isNotEmpty ? response.body : 'Server returned status ${response.statusCode}'};
+      }
+      throw parseError(response, 'Failed to submit inspection report: ${err is Map ? (err['detail'] ?? response.statusCode) : response.statusCode}');
     }
   }
 
@@ -3236,77 +3241,7 @@ class ApiService {
     }
   }
 
-  /// Field Food Inspector: Submit 6-point physical verification inspection
-  Future<Map<String, dynamic>> submitFpsInspectionReport({
-    required String fpsId,
-    String? orderId,
-    bool scaleCertified = true,
-    bool displayBoardUpdated = true,
-    bool stockMatchesRegister = true,
-    bool cctvFunctional = true,
-    bool eposOnline = true,
-    bool hygieneCompliant = true,
-    double complianceScore = 100.0,
-    String remarks = '',
-    bool geofenceVerified = false,
-    double? geofenceDistanceM,
-    String? truckId,
-    String? gatepassId,
-    String? manifestId,
-    bool targetConfirmed = true,
-    double? expectedRiceKg,
-    double? observedRiceKg,
-    double? expectedWheatKg,
-    double? observedWheatKg,
-    double? moisturePct,
-    double? scaleErrorG,
-    bool seizureIssued = false,
-    String? seizureReason,
-    List<Map<String, dynamic>>? evidenceItems,
-    Map<String, dynamic>? checklistDetails,
-    String cycleId = '2026-09',
-  }) async {
-    final response = await client.post(
-      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/submit'),
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-      body: json.encode({
-        'fps_id': fpsId,
-        'order_id': orderId,
-        'scale_certified': scaleCertified,
-        'display_board_updated': displayBoardUpdated,
-        'stock_matches_register': stockMatchesRegister,
-        'cctv_functional': cctvFunctional,
-        'epos_online': eposOnline,
-        'hygiene_compliant': hygieneCompliant,
-        'compliance_score': complianceScore,
-        'remarks': remarks,
-        'geofence_verified': geofenceVerified,
-        'geofence_distance_m': geofenceDistanceM,
-        'truck_id': truckId,
-        'gatepass_id': gatepassId,
-        'manifest_id': manifestId,
-        'target_confirmed': targetConfirmed,
-        'expected_rice_kg': expectedRiceKg,
-        'observed_rice_kg': observedRiceKg,
-        'expected_wheat_kg': expectedWheatKg,
-        'observed_wheat_kg': observedWheatKg,
-        'moisture_pct': moisturePct,
-        'scale_error_g': scaleErrorG,
-        'seizure_issued': seizureIssued,
-        'seizure_reason': seizureReason,
-        'evidence_items': evidenceItems,
-        'checklist_details': checklistDetails,
-        'cycle_id': cycleId,
-      }),
-    ).timeout(AppConstants.apiTimeout);
 
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return json.decode(response.body) as Map<String, dynamic>;
-    } else {
-      final err = json.decode(response.body);
-      throw parseError(response, 'Failed to submit inspection report: ${err['detail'] ?? response.statusCode}');
-    }
-  }
 
   /// Retrieve list of all Fair Price Shops with live inventory and intent aggregates
   Future<List<FpsShop>> fetchFPSList() async {

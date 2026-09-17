@@ -50,10 +50,11 @@ class InspectionSubmissionIn(BaseModel):
     expected_wheat_kg: Optional[float] = 0.0
     observed_wheat_kg: Optional[float] = None
     moisture_pct: Optional[float] = None
+    scale_error_g: Optional[float] = None
+    scale_error_grams: Optional[float] = None
     seizure_issued: bool = False
     seizure_reason: Optional[str] = None
     moisture_percentage: Optional[float] = None
-    scale_error_grams: Optional[float] = None
     issue_seizure_notice: bool = False
     evidence_urls: Optional[List[str]] = None
     evidence_items: Optional[List[dict]] = None
