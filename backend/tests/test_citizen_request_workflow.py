@@ -39,11 +39,11 @@ def test_card_statutory_entitlement_derivation():
         assert aay_ent["statutory_entitlement_rice_kg"] == 25.0
         assert aay_ent["statutory_entitlement_wheat_kg"] == 10.0
 
-        # Beneficiary 1 (PHH card)
+        # Beneficiary 1 (PHH card - 4 members)
         phh_ent = ai_request_advisor.get_beneficiary_entitlement(conn, "BEN-KA-0001", "Rice")
         assert phh_ent["card_type"] == "PHH"
-        assert phh_ent["statutory_entitlement_rice_kg"] == 20.0
-        assert phh_ent["statutory_entitlement_wheat_kg"] == 5.0
+        assert phh_ent["statutory_entitlement_rice_kg"] == 16.0
+        assert phh_ent["statutory_entitlement_wheat_kg"] == 4.0
     finally:
         conn.close()
 
@@ -82,7 +82,7 @@ def test_ai_advisor_healthy_shop_recommendation():
             beneficiary_id="BEN-KA-0001",
             intended_fps_id="FPS-KA-BLR-001",
             commodity="Rice",
-            requested_quantity_kg=20.0,
+            requested_quantity_kg=16.0,
             cycle_id="2026-09"
         )
 
@@ -103,12 +103,12 @@ def test_ai_advisor_quota_capping_factor():
             beneficiary_id="BEN-KA-0001",
             intended_fps_id="FPS-KA-BLR-001",
             commodity="Rice",
-            requested_quantity_kg=25.0,  # 5kg above 20kg ceiling for PHH
+            requested_quantity_kg=25.0,  # above 16kg ceiling for 4-member PHH
             cycle_id="2026-09"
         )
 
         assert eval_res["ai_assessment"]["recommendation"] == "PARTIAL_ALLOCATION"
-        assert eval_res["ai_assessment"]["recommended_quantity_kg"] == 20.0
+        assert eval_res["ai_assessment"]["recommended_quantity_kg"] == 16.0
         assert "Statutory Entitlement Cap" in eval_res["ai_assessment"]["factors"][0]
     finally:
         conn.close()
@@ -126,13 +126,13 @@ async def test_citizen_intent_populates_review_queue():
         cycle_id = "2026-09"
         ben_id = "BEN-KA-0002"
 
-        # Submit valid citizen request
+        # Submit valid citizen request within 16kg quota
         req_payload = {
             "beneficiary_id": ben_id,
             "cycle_id": cycle_id,
             "intended_fps_id": "FPS-KA-BLR-004",
             "commodity": "Rice",
-            "declared_quantity_kg": 20.0,
+            "declared_quantity_kg": 16.0,
             "confidence": 0.95
         }
         submit_res = await ac.post("/api/intent", json=req_payload)
@@ -150,7 +150,7 @@ async def test_citizen_intent_populates_review_queue():
         req_item = matching[0]
         assert req_item["status"] in ["PENDING_OFFICER_REVIEW", "OFFICER_APPROVED"]
         assert req_item["ai_recommendation"] is not None
-        assert req_item["requested_quantity_kg"] == 20.0
+        assert req_item["requested_quantity_kg"] == 16.0
 
 
 # ============================================================================ #
@@ -350,9 +350,9 @@ async def test_citizen_entitlement_summary_and_authoritative_calculation():
 
         assert data["beneficiary_id"] == "BEN-KA-0001"
         assert data["card_type"] == "PHH"
-        assert data["statutory_entitlement_rice_kg"] == 20.0
-        assert data["statutory_entitlement_wheat_kg"] == 5.0
-        assert data["total_eligible_balance_kg"] == 25.0
+        assert data["statutory_entitlement_rice_kg"] == 16.0
+        assert data["statutory_entitlement_wheat_kg"] == 4.0
+        assert data["total_eligible_balance_kg"] == 20.0
         assert "transport_policy" in data
 
 
@@ -378,7 +378,7 @@ async def test_home_delivery_transparent_fee_calculation():
         assert data["delivery_distance_km"] == 4.5
         # Base fee 20 + (4.5 - 2.0)*5 = 20 + 12.5 = 32.5 INR
         assert data["transport_fee_inr"] == 32.5
-        assert data["declared_quantity_kg"] == 20.0  # Server-calculated statutory ceiling
+        assert data["declared_quantity_kg"] == 8.0  # Server-calculated statutory ceiling (2 members * 4kg)
 
 
 @pytest.mark.asyncio
@@ -406,18 +406,18 @@ async def test_citizen_delivery_confirmation_and_dispute_workflow():
             "officer_name": "K. Srinivas Murthy",
             "officer_role": "DISTRICT_SUPPLY_OFFICER",
             "decision": "APPROVE",
-            "allocated_quantity_kg": 20.0,
+            "allocated_quantity_kg": 16.0,
             "officer_justification": "Approved full statutory home delivery"
         })
         assert auth_res.status_code == 200
 
-        # 3. Citizen raises a Delivery Dispute due to shortfall (e.g. received 15kg instead of 20kg)
+        # 3. Citizen raises a Delivery Dispute due to shortfall (received 11kg instead of 16kg -> 5kg shortfall)
         dispute_payload = {
             "request_id": req_id,
             "confirmation_status": "DELIVERY_DISPUTE",
-            "received_rice_kg": 15.0,
+            "received_rice_kg": 11.0,
             "received_wheat_kg": 0.0,
-            "dispute_notes": "Received 15kg rice in package instead of 20kg statutory allocation."
+            "dispute_notes": "Received 11kg rice in package instead of 16kg statutory allocation."
         }
         disp_res = await ac.post(f"/api/beneficiary/{ben_id}/confirm-delivery", json=dispute_payload)
         assert disp_res.status_code == 200

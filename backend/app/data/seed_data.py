@@ -692,28 +692,32 @@ def seed_dso_operational_baseline(cursor):
     INSERT OR REPLACE INTO truck_route_tracking (
         tracking_id, truck_id, gatepass_id, cycle_id, driver_name, driver_phone,
         source_depot_id, source_depot_name, destination_fps_id, destination_fps_name,
-        assigned_route_id, route_name, current_status, distance_travelled_km, distance_remaining_km,
-        total_route_distance_km, eta_minutes, expected_arrival_time, delay_status,
-        checkpoints_json, current_checkpoint_name, next_checkpoint_name
+        assigned_route_id, route_name, current_status, checkpoints_json, current_checkpoint_idx,
+        current_checkpoint_name, next_checkpoint_name, distance_travelled_km, distance_remaining_km,
+        total_route_distance_km, eta_minutes, expected_arrival_time, delay_status
     ) VALUES (
         'TRK-TRK-0912', 'TRK-KA-0032', 'GP-BLR-0912', '2026-09', 'Venkatesh Gowda', '+91-9884880752',
         'DEPOT-01', 'Bengaluru Central FCI Godown (Hebbal)', 'FPS-KA-BLR-015', 'Fair Price Shop 15 (Bengaluru Urban)',
-        'RT-DEPOT-01-BLR-015', 'Hebbal to East Corridor Arterial Route', 'DISPATCHED', 0.0, 18.4, 18.4, 45, '09:45 AM', 'ON_TIME',
-        '["Hebbal FCI Godown", "Outer Ring Road Junction", "Fair Price Shop 15"]', 'Hebbal FCI Godown', 'Outer Ring Road Junction'
+        'RT-DEPOT-01-BLR-015', 'Hebbal to East Corridor Arterial Route', 'DISPATCHED',
+        '[{"name": "Hebbal Godown", "status": "PASSED"}, {"name": "East Corridor Checkpoint", "status": "CURRENT"}, {"name": "FPS-KA-BLR-015", "status": "PENDING"}]',
+        0, 'Hebbal Godown', 'East Corridor Checkpoint',
+        0.0, 18.4, 18.4, 45, '09:45 AM', 'ON_TIME'
     );
     """)
     cursor.execute("""
     INSERT OR REPLACE INTO truck_route_tracking (
         tracking_id, truck_id, gatepass_id, cycle_id, driver_name, driver_phone,
         source_depot_id, source_depot_name, destination_fps_id, destination_fps_name,
-        assigned_route_id, route_name, current_status, distance_travelled_km, distance_remaining_km,
-        total_route_distance_km, eta_minutes, expected_arrival_time, delay_status,
-        checkpoints_json, current_checkpoint_name, next_checkpoint_name
+        assigned_route_id, route_name, current_status, checkpoints_json, current_checkpoint_idx,
+        current_checkpoint_name, next_checkpoint_name, distance_travelled_km, distance_remaining_km,
+        total_route_distance_km, eta_minutes, expected_arrival_time, delay_status
     ) VALUES (
         'TRK-TRK-0913', 'TRK-KA-0031', 'GP-BLR-0913', '2026-09', 'Harish Sharma', '+91-9875779236',
         'DEPOT-01', 'Bengaluru Central FCI Godown (Hebbal)', 'FPS-001', 'Fair Price Shop 1 (Bengaluru Urban)',
-        'RT-DEPOT-01-BLR-001', 'Hebbal to North-West Feeder Route', 'IN_TRANSIT', 6.5, 8.4, 14.9, 25, '10:15 AM', 'ON_TIME',
-        '["Hebbal FCI Godown", "Yeshwanthpur Toll", "Fair Price Shop 1"]', 'Yeshwanthpur Toll', 'Fair Price Shop 1'
+        'RT-DEPOT-01-BLR-001', 'Hebbal to North-West Feeder Route', 'IN_TRANSIT',
+        '[{"name": "Hebbal Godown", "status": "PASSED"}, {"name": "North-West Checkpoint", "status": "CURRENT"}, {"name": "FPS-001", "status": "PENDING"}]',
+        1, 'Hebbal Godown', 'North-West Checkpoint',
+        6.5, 8.4, 14.9, 25, '10:15 AM', 'ON_TIME'
     );
     """)
 

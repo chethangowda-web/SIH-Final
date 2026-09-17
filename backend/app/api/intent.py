@@ -49,8 +49,23 @@ def submit_intent(
             detail="Declared quantity must be greater than 0 kg."
         )
 
-    # 2. Validate beneficiary exists
-    cursor.execute("SELECT pseudonymous_beneficiary_id, registered_fps_id FROM beneficiaries WHERE pseudonymous_beneficiary_id = ?;", (payload.beneficiary_id.strip(),))
+    # 2. Validate beneficiary exists (support both BEN-KA-0003 and RC-KA-000003 formats)
+    ben_id = payload.beneficiary_id.strip()
+    alt_id = None
+    if ben_id.startswith("BEN-KA-"):
+        try:
+            num = int(ben_id.replace("BEN-KA-", ""))
+            alt_id = f"RC-KA-{num:06d}"
+        except Exception:
+            pass
+    elif ben_id.startswith("RC-KA-"):
+        try:
+            num = int(ben_id.replace("RC-KA-", ""))
+            alt_id = f"BEN-KA-{num:04d}"
+        except Exception:
+            pass
+
+    cursor.execute("SELECT pseudonymous_beneficiary_id, registered_fps_id FROM beneficiaries WHERE pseudonymous_beneficiary_id = ? OR pseudonymous_beneficiary_id = ?;", (ben_id, alt_id or ben_id))
     ben_row = cursor.fetchone()
     if not ben_row:
         raise HTTPException(
@@ -58,6 +73,7 @@ def submit_intent(
             detail=f"Beneficiary '{payload.beneficiary_id}' not found."
         )
 
+    canonical_ben_id = ben_row["pseudonymous_beneficiary_id"]
     home_fps_id = ben_row["registered_fps_id"]
 
     # 3. Validate intended FPS exists
@@ -156,7 +172,7 @@ def submit_intent(
         status = 'SUBMITTED',
         created_at = CURRENT_TIMESTAMP;
     """, (
-        payload.beneficiary_id.strip(),
+        canonical_ben_id,
         payload.cycle_id.strip(),
         payload.intended_fps_id.strip(),
         payload.commodity,
@@ -165,7 +181,7 @@ def submit_intent(
     ))
 
     # 8. Insert or Update (UPSERT) Citizen Request in Review Queue
-    req_suffix = payload.beneficiary_id.strip().split("-")[-1]
+    req_suffix = canonical_ben_id.split("-")[-1]
     request_id = f"REQ-{payload.cycle_id.strip()}-{req_suffix}-{payload.commodity[:1]}"
     req_type = "PORTABILITY_PREFERENCE" if is_portability else "MONTHLY_PREFERENCE_SIGNAL"
 
@@ -199,7 +215,7 @@ def submit_intent(
         updated_at = CURRENT_TIMESTAMP;
     """, (
         request_id,
-        payload.beneficiary_id.strip(),
+        canonical_ben_id,
         entitlement["card_type"],
         entitlement["family_members_count"],
         entitlement["statutory_entitlement_rice_kg"],
@@ -312,6 +328,7 @@ def get_beneficiary_entitlement_summary(
         name=ent["name"],
         card_type=ent["card_type"],
         family_members_count=ent["family_members_count"],
+        eligible_members_count=ent.get("eligible_members_count", ent["family_members_count"]),
         card_label=ent["card_label"],
         cycle_id=cycle_id.strip(),
         registered_fps_id=ent["registered_fps_id"],

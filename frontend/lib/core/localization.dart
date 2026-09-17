@@ -30,6 +30,7 @@ class LanguageController extends ChangeNotifier {
   static final LanguageController instance = LanguageController._();
 
   AppLanguage _currentLanguage = AppLanguage.english;
+  void Function(AppLanguage)? onLanguageChangedCallback;
 
   AppLanguage get currentLanguage => _currentLanguage;
 
@@ -37,6 +38,7 @@ class LanguageController extends ChangeNotifier {
     if (_currentLanguage != language) {
       _currentLanguage = language;
       notifyListeners();
+      onLanguageChangedCallback?.call(language);
     }
   }
 
@@ -62,6 +64,128 @@ class LanguageController extends ChangeNotifier {
 // Global helper function for concise translation calls
 String tr(String key, {Map<String, String>? params}) {
   return LanguageController.instance.translate(key, params: params);
+}
+
+class ProminentLanguageBar extends StatelessWidget {
+  const ProminentLanguageBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: LanguageController.instance,
+      builder: (context, _) {
+        final current = LanguageController.instance.currentLanguage;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.language_rounded, size: 20, color: Color(0xFF0F2942)),
+                const SizedBox(width: 8),
+                Text(
+                  tr('lang.selector_title'),
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0F2942),
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: AppLanguage.values.map((lang) {
+                final isSelected = lang == current;
+                Color activeColor;
+                String subtext;
+
+                switch (lang) {
+                  case AppLanguage.kannada:
+                    activeColor = const Color(0xFF15803D); // Vivid Emerald Green
+                    subtext = 'Kannada';
+                    break;
+                  case AppLanguage.hindi:
+                    activeColor = const Color(0xFFD97706); // Rich Saffron Amber
+                    subtext = 'Hindi';
+                    break;
+                  case AppLanguage.english:
+                    activeColor = const Color(0xFF0F2942); // Deep Navy
+                    subtext = 'English';
+                    break;
+                }
+
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: InkWell(
+                      onTap: () => LanguageController.instance.setLanguage(lang),
+                      borderRadius: BorderRadius.circular(14),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected ? activeColor : Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSelected ? activeColor : const Color(0xFFCBD5E1),
+                            width: isSelected ? 2.5 : 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isSelected ? activeColor.withValues(alpha: 0.28) : const Color(0x08000000),
+                              blurRadius: isSelected ? 10 : 4,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (isSelected) ...[
+                                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 16),
+                                  const SizedBox(width: 4),
+                                ],
+                                Flexible(
+                                  child: Text(
+                                    lang.nativeName,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w900,
+                                      color: isSelected ? Colors.white : const Color(0xFF0F2942),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              subtext,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 // Centralized Translation Dictionary
@@ -565,6 +689,103 @@ const Map<String, Map<String, String>> _translations = {
     'beneficiary.voice.demo_mode': 'Demo voice mode is active. Real microphone not connected.',
     'beneficiary.voice.listen_prompt': 'Tap and speak.',
     'beneficiary.voice.listening': 'Listening... Speak now!',
+  
+    // Beneficiary Entitlement & Voice Additions
+    'login.select_portal_title': 'Select Login Portal',
+    'login.select_portal_sub': 'Choose Citizen OTP or Department Official to continue',
+    'login.citizen_card_title': 'Citizen OTP / Beneficiary',
+    'login.citizen_card_desc': 'Login with Ration Card & Mobile OTP to access entitlements, grain tracking, and vending machine.',
+    'login.citizen_card_btn': 'Select Citizen Login',
+    'login.official_card_title': 'Department Official',
+    'login.official_card_desc': 'Authorized access for DSO Command, Field Food Inspector, FPS Owner, and Vigilance Auditor.',
+    'login.official_card_btn': 'Select Official Login',
+    'entitlement.card_header': "YOUR FAMILY'S RATION ENTITLEMENT",
+    'entitlement.family_title': "Your Family's Ration Entitlement",
+    'entitlement.family_members_count': 'Family Members',
+    'entitlement.rice_label': 'Rice',
+    'entitlement.wheat_label': 'Wheat',
+    'entitlement.total_label': 'TOTAL',
+    'entitlement.eligible_notice': 'This is your eligible quantity for this distribution cycle.',
+    'entitlement.eligible_tag': 'Eligible quantity for this cycle',
+    'entitlement.free_gov_subsidy': '100% Free • Government Subsidy',
+    'simple.home_title': 'My Ration & Services',
+    'simple.next_demand_title': "Your Family's Ration Entitlement",
+    'simple.next_demand_sub': 'Authoritative statutory monthly foodgrain allocation for this cycle',
+    'simple.my_fps_title': 'My Ration Shop',
+    'simple.ration_status_title': 'Where is My Ration?',
+    'simple.help_problem_title': 'Help & Complaints',
+    'simple.rice_only': 'Rice Only 🌾',
+    'simple.wheat_only': 'Wheat Only 🌾',
+    'simple.both_grains': 'Both Rice & Wheat 🌾',
+    'simple.window_open_banner': 'Time to share your next ration choice: 21st–24th of this month (Open now ✓)',
+    'simple.window_locked_banner': 'Your choice is locked 🔒 (Preparation underway for dispatch)',
+    'simple.choice_saved_banner': 'Your choice is saved ✓',
+    'simple.btn_select_choice': 'View Entitlement & Shop 👉',
+    'simple.btn_select_shop': 'Change Shop / View Route 🗺️',
+    'simple.btn_report_problem': 'Report a Problem 💬',
+    'simple.btn_speak': 'Speak Your Choice 🎤',
+    'simple.elderly_mode': 'Elderly Mode',
+    'simple.elderly_mode_desc': 'Extra large buttons, simple words and voice help',
+    'simple.audio_help': 'Listen 🔊',
+    'simple.did_you_get_ration': 'Did you receive your ration?',
+    'simple.got_it': 'Yes, Received 😊',
+    'simple.had_problem': 'Had a Problem 😐',
+    'simple.not_received': 'Did Not Receive 😞',
+    'simple.what_was_problem': 'What was the problem?',
+    'simple.problem_short_weight': '🌾 Less Ration Given (Short Weight)',
+    'simple.problem_delayed': '⏰ Delivery Delay',
+    'simple.problem_no_stock': '📦 Stock Not Available / Out of Stock',
+    'simple.problem_shop_closed': '🏪 Shop Closed / Dealer Issue',
+    'simple.problem_poor_quality': '🌾 Poor Quality / Damaged Grain',
+    'simple.problem_other': '💬 Other Problem',
+    'simple.speak_problem': 'Speak your problem 🎤',
+    'simple.journey_1': 'Choice Saved',
+    'simple.journey_2': 'Ration Prepared',
+    'simple.journey_3': 'Truck On the Way',
+    'simple.journey_4': 'Arriving at Shop',
+    'simple.journey_5': 'Ready for Pickup',
+    'simple.collection_shop': 'Self-Pickup at Shop',
+    'simple.collection_home': 'Home Delivery',
+    'simple.free_badge': 'FREE',
+    'simple.open_status': 'Open 🟢',
+    'simple.closed_status': 'Closed 🔴',
+    'simple.confirm_received_btn': 'I Received My Ration ✓',
+    'simple.dispute_reported_btn': 'Problem Reported ⚠️',
+    'grain_atm.action_title': 'Ration Vending Machine',
+    'grain_atm.action_subtitle': 'Ration Vending Machine • Automated 24/7 Ration Pickup',
+    'grain_atm.action_btn': 'Use Vending Machine 📦',
+    'grain_atm.welcome_title': 'Ration Vending Machine',
+    'grain_atm.welcome_subtitle': 'Collect your ration from an automated vending machine.',
+    'grain_atm.start_btn': 'Start',
+    'grain_atm.back_btn': 'Back',
+    'grain_atm.verify_title': 'Beneficiary Identification',
+    'grain_atm.verify_subtitle': 'Demo Verification • Select your preferred method',
+    'grain_atm.opt_ration_id': 'Ration Card ID',
+    'grain_atm.opt_aadhaar_demo': 'Aadhaar Demo Verification',
+    'grain_atm.opt_mobile_otp': 'Registered Mobile OTP',
+    'grain_atm.demo_badge': 'Demo Verification • No real biometric or Aadhaar data is collected',
+    'grain_atm.verify_btn': 'Verify & Check Entitlement',
+    'grain_atm.your_ration': 'Your Ration',
+    'grain_atm.statutory_tag': '₹0 Free • Statutory Entitlement',
+    'grain_atm.machine_title': 'Ration Vending Machine (VM-001)',
+    'grain_atm.location_label': 'Location: Demo PDS Centre',
+    'grain_atm.status_ready': 'Status: 🟢 Ready',
+    'grain_atm.stock_available': 'Ration available: Rice — 182 KG',
+    'grain_atm.collect_btn': 'Collect My Ration',
+    'grain_atm.simulation_notice': 'DIGITAL SIMULATION of automated ration vending machine',
+    'grain_atm.already_received_title': 'RATION ALREADY RECEIVED',
+    'grain_atm.already_received_desc': 'Your ration for this cycle has already been received. You cannot collect ration again in this cycle.',
+    'grain_atm.receipt_title': 'RATION RECEIPT ✓',
+    'grain_atm.pickup_center': 'Pickup: Vending Machine-001',
+    'grain_atm.done_home_btn': 'Return to Home',
+    'grain_atm.track_btn': 'Track Ration',
+    'grain_atm.step1': 'Verifying Beneficiary',
+    'grain_atm.step2': 'Authentication Successful',
+    'grain_atm.step3': 'Checking Entitlement',
+    'grain_atm.step4': 'Checking Grain Stock',
+    'grain_atm.step5': 'Dispensing Ration',
+    'grain_atm.step6': 'Ration Dispensed',
+    'grain_atm.step7': 'Receipt Generated',
   },
 
   'hi': {
@@ -1018,6 +1239,103 @@ const Map<String, Map<String, String>> _translations = {
     'beneficiary.voice.demo_mode': 'डेमो वॉयस मोड सक्रिय है। असली माइक्रोफोन नहीं जुड़ा है।',
     'beneficiary.voice.listen_prompt': 'दबाएं और बोलें।',
     'beneficiary.voice.listening': 'सुन रहे हैं... बोलिए!',
+  
+    // Beneficiary Entitlement & Voice Additions
+    'login.select_portal_title': 'लॉगिन पोर्टल चुनें',
+    'login.select_portal_sub': 'आगे बढ़ने के लिए नागरिक OTP या विभागीय अधिकारी चुनें',
+    'login.citizen_card_title': 'नागरिक OTP / लाभार्थी',
+    'login.citizen_card_desc': 'राशन पात्रता, खाद्यान्न ट्रैकिंग और स्मार्ट पिकअप के लिए राशन कार्ड और मोबाइल OTP से लॉगिन करें।',
+    'login.citizen_card_btn': 'नागरिक लॉगिन चुनें',
+    'login.official_card_title': 'विभागीय अधिकारी',
+    'login.official_card_desc': 'डीएसओ कमांड, फील्ड फूड इंस्पेक्टर, एफपीएस मालिक और ऑडिटर के लिए अधिकृत लॉगिन।',
+    'login.official_card_btn': 'अधिकारी लॉगिन चुनें',
+    'entitlement.card_header': 'आपके परिवार का राशन हक',
+    'entitlement.family_title': 'आपके परिवार का राशन हक',
+    'entitlement.family_members_count': 'परिवार के सदस्य',
+    'entitlement.rice_label': 'चावल',
+    'entitlement.wheat_label': 'गेहूं',
+    'entitlement.total_label': 'कुल मात्रा',
+    'entitlement.eligible_notice': 'यह आपकी इस वितरण चक्र के लिए पात्र मात्रा है।',
+    'entitlement.eligible_tag': 'यह आपकी पात्र मात्रा है',
+    'entitlement.free_gov_subsidy': '100% मुफ़्त • सरकारी सब्सिडी',
+    'simple.home_title': 'मेरा राशन एवं सेवाएं',
+    'simple.next_demand_title': 'आपके परिवार का राशन हक',
+    'simple.next_demand_sub': 'इस चक्र के लिए आपके परिवार का आधिकारिक राशन आवंटन',
+    'simple.my_fps_title': 'मेरी राशन दुकान',
+    'simple.ration_status_title': 'राशन कहां पहुंचा?',
+    'simple.help_problem_title': 'मदद और समस्या',
+    'simple.rice_only': 'सिर्फ चावल 🌾',
+    'simple.wheat_only': 'सिर्फ गेहूं 🌾',
+    'simple.both_grains': 'चावल + गेहूं दोनों 🌾',
+    'simple.window_open_banner': 'आपकी अगली राशन की पसंद बताने का समय: 21–24 तारीख (अब खुला है ✓)',
+    'simple.window_locked_banner': 'आपकी पसंद अब दर्ज हो चुकी है 🔒 (राशन की तैयारी चल रही है)',
+    'simple.choice_saved_banner': 'आपकी पसंद दर्ज हो गई है ✓',
+    'simple.btn_select_choice': 'राशन हक और दुकान देखें 👉',
+    'simple.btn_select_shop': 'दुकान बदलें / रास्ता देखें 🗺️',
+    'simple.btn_report_problem': 'समस्या बताएं 💬',
+    'simple.btn_speak': 'बोलकर बताएं 🎤',
+    'simple.elderly_mode': 'बुजुर्ग मोड',
+    'simple.elderly_mode_desc': 'बड़े बटन, सरल शब्द और आवाज़ से सहायता',
+    'simple.audio_help': 'सुनें 🔊',
+    'simple.did_you_get_ration': 'क्या आपको राशन मिला?',
+    'simple.got_it': 'हाँ, मिल गया 😊',
+    'simple.had_problem': 'समस्या हुई 😐',
+    'simple.not_received': 'नहीं मिला 😞',
+    'simple.what_was_problem': 'क्या समस्या हुई?',
+    'simple.problem_short_weight': '🌾 कम राशन मिला (कम तौल)',
+    'simple.problem_delayed': '⏰ मिलने में देर हुई',
+    'simple.problem_no_stock': '📦 राशन उपलब्ध नहीं था',
+    'simple.problem_shop_closed': '🏪 दुकान बंद थी / डीलर की समस्या',
+    'simple.problem_poor_quality': '🌾 खराब अनाज / गुणवत्ता की समस्या',
+    'simple.problem_other': '💬 कोई दूसरी समस्या',
+    'simple.speak_problem': 'बोलकर बताएं 🎤',
+    'simple.journey_1': 'पसंद दर्ज',
+    'simple.journey_2': 'राशन तैयार',
+    'simple.journey_3': 'रास्ते में है',
+    'simple.journey_4': 'दुकान पर पहुंच रहा',
+    'simple.journey_5': 'लेने के लिए तैयार',
+    'simple.collection_shop': 'दुकान से लेंगे (मुफ्त)',
+    'simple.collection_home': 'घर पर डिलीवरी (₹20 शुल्क)',
+    'simple.free_badge': 'मुफ्त',
+    'simple.open_status': 'खुली है 🟢',
+    'simple.closed_status': 'बंद है 🔴',
+    'simple.confirm_received_btn': 'मुझे राशन मिल गया ✓',
+    'simple.dispute_reported_btn': 'समस्या दर्ज है ⚠️',
+    'grain_atm.action_title': 'राशन वेंडिंग मशीन',
+    'grain_atm.action_subtitle': 'राशन वेंडिंग मशीन • स्वचालित 24/7 राशन संग्रह',
+    'grain_atm.action_btn': 'वेंडिंग मशीन से लें 📦',
+    'grain_atm.welcome_title': 'राशन वेंडिंग मशीन',
+    'grain_atm.welcome_subtitle': 'स्वचालित वेंडिंग मशीन से अपना राशन प्राप्त करें।',
+    'grain_atm.start_btn': 'शुरू करें',
+    'grain_atm.back_btn': 'वापस जाएं',
+    'grain_atm.verify_title': 'लाभार्थी पहचान व सत्यापन',
+    'grain_atm.verify_subtitle': 'डेमो सत्यापन • अपनी पसंदीदा विधि चुनें',
+    'grain_atm.opt_ration_id': 'राशन कार्ड संख्या',
+    'grain_atm.opt_aadhaar_demo': 'आधार डेमो सत्यापन',
+    'grain_atm.opt_mobile_otp': 'पंजीकृत मोबाइल OTP',
+    'grain_atm.demo_badge': 'डेमो सत्यापन • कोई वास्तविक बायोमेट्रिक या आधार डेटा संग्रहीत नहीं',
+    'grain_atm.verify_btn': 'सत्यापित करें और पात्रता जांचें',
+    'grain_atm.your_ration': 'आपका अधिकृत राशन',
+    'grain_atm.statutory_tag': '₹0 मुफ्त • वैधानिक पात्रता',
+    'grain_atm.machine_title': 'राशन वेंडिंग मशीन (VM-001)',
+    'grain_atm.location_label': 'स्थान: डेमो पीडीएस केंद्र',
+    'grain_atm.status_ready': 'स्थिति: 🟢 तैयार',
+    'grain_atm.stock_available': 'उपलब्ध राशन: चावल — 182 किलो',
+    'grain_atm.collect_btn': 'मेरा राशन निकालें',
+    'grain_atm.simulation_notice': 'स्वचालित राशन वेंडिंग मशीन का डिजिटल सिमुलेशन',
+    'grain_atm.already_received_title': 'राशन पहले ही प्राप्त हो चुका है',
+    'grain_atm.already_received_desc': 'इस चक्र का आपका राशन पहले ही प्राप्त हो चुका है। आप इस चक्र में दोबारा राशन नहीं ले सकते।',
+    'grain_atm.receipt_title': 'राशन रसीद ✓',
+    'grain_atm.pickup_center': 'पिकअप: राशन वेंडिंग मशीन-001',
+    'grain_atm.done_home_btn': 'मुख्य पृष्ठ पर जाएं',
+    'grain_atm.track_btn': 'राशन ट्रैक करें',
+    'grain_atm.step1': 'लाभार्थी का सत्यापन',
+    'grain_atm.step2': 'सत्यापन सफल',
+    'grain_atm.step3': 'पात्रता की जांच',
+    'grain_atm.step4': 'अनाज भंडार की जांच',
+    'grain_atm.step5': 'राशन निकाला जा रहा है',
+    'grain_atm.step6': 'राशन सफलतापूर्वक निकल गया',
+    'grain_atm.step7': 'डिजिटल रसीद तैयार',
   },
 
   'kn': {
@@ -1480,6 +1798,103 @@ const Map<String, Map<String, String>> _translations = {
     'beneficiary.voice.demo_mode': 'ಡೆಮೊ ವಾಯ್ಸ್ ಮೋಡ್ ಸಕ್ರಿಯವಾಗಿದೆ. ನಿಜವಾದ ಮೈಕ್ ಸಂಪರ್ಕಿಸಲಾಗಿಲ್ಲ.',
     'beneficiary.voice.listen_prompt': 'ಒತ್ತಿ ಮಾತನಾಡಿ.',
     'beneficiary.voice.listening': 'ಕೇಳುತ್ತಿದ್ದೇವೆ... ಮಾತನಾಡಿ!',
+  
+    // Beneficiary Entitlement & Voice Additions
+    'login.select_portal_title': 'ಲಾಗಿನ್ ಪೋರ್ಟಲ್ ಆಯ್ಕೆಮಾಡಿ',
+    'login.select_portal_sub': 'ಮುಂದುವರಿಯಲು ನಾಗರಿಕ OTP ಅಥವಾ ಇಲಾಖಾ ಅಧಿಕಾರಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ',
+    'login.citizen_card_title': 'ನಾಗರಿಕ OTP / ಫಲಾನುಭವಿ',
+    'login.citizen_card_desc': 'ಪಡಿತರ ಹಕ್ಕುಗಳು, ಧಾನ್ಯ ಟ್ರ್ಯಾಕಿಂಗ್ ಮತ್ತು ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ ಪ್ರವೇಶಿಸಲು ಪಡಿತರ ಚೀಟಿ ಮತ್ತು ಮೊಬೈಲ್ ಒಟಿಪಿ ಮೂಲಕ ಲಾಗಿನ್ ಮಾಡಿ.',
+    'login.citizen_card_btn': 'ನಾಗರಿಕ ಲಾಗಿನ್ ಆಯ್ಕೆಮಾಡಿ',
+    'login.official_card_title': 'ಇಲಾಖಾ ಅಧಿಕಾರಿ',
+    'login.official_card_desc': 'ಡಿಎಸ್‌ಒ, ಫೀಲ್ಡ್ ಫುಡ್ ಇನ್ಸ್‌ಪೆಕ್ಟರ್, ಎಫ್‌ಪಿಎಸ್ ಮಾಲೀಕರು ಮತ್ತು ಆಡಿಟರ್‌ಗಳಿಗಾಗಿ ಅಧಿಕೃತ ಪ್ರವೇಶ.',
+    'login.official_card_btn': 'ಅಧಿಕಾರಿ ಲಾಗಿನ್ ಆಯ್ಕೆಮಾಡಿ',
+    'entitlement.card_header': 'ನಿಮ್ಮ ಕುಟುಂಬದ ಪಡಿತರ ಹಕ್ಕು',
+    'entitlement.family_title': 'ನಿಮ್ಮ ಕುಟುಂಬದ ಪಡಿತರ ಹಕ್ಕು',
+    'entitlement.family_members_count': 'ಕುಟುಂಬದ ಸದಸ್ಯರು',
+    'entitlement.rice_label': 'ಅಕ್ಕಿ',
+    'entitlement.wheat_label': 'ಗೋಧಿ',
+    'entitlement.total_label': 'ಒಟ್ಟು ಪ್ರಮಾಣ',
+    'entitlement.eligible_notice': 'ಇದು ಈ ವಿತರಣಾ ಚಕ್ರಕ್ಕೆ ನಿಮ್ಮ ಅರ್ಹ ಪ್ರಮಾಣವಾಗಿದೆ.',
+    'entitlement.eligible_tag': 'ಇದು ನಿಮ್ಮ ಅರ್ಹ ಪ್ರಮಾಣವಾಗಿದೆ',
+    'entitlement.free_gov_subsidy': '100% ಉಚಿತ • ಸರ್ಕಾರಿ ಸಬ್ಸಿಡಿ',
+    'simple.home_title': 'ನನ್ನ ಪಡಿತರ ಮತ್ತು ಸೇವೆಗಳು',
+    'simple.next_demand_title': 'ನಿಮ್ಮ ಕುಟುಂಬದ ಪಡಿತರ ಹಕ್ಕು',
+    'simple.next_demand_sub': 'ಈ ಚಕ್ರಕ್ಕೆ ನಿಮ್ಮ ಕುಟುಂಬದ ಅಧಿಕೃತ ಪಡಿತರ ಹಂಚಿಕೆ',
+    'simple.my_fps_title': 'ನನ್ನ ಪಡಿತರ ಅಂಗಡಿ',
+    'simple.ration_status_title': 'ಪಡಿತರ ಎಲ್ಲಿದೆ?',
+    'simple.help_problem_title': 'ಸಹಾಯ ಮತ್ತು ದೂರುಗಳು',
+    'simple.rice_only': 'ಕೇವಲ ಅಕ್ಕಿ 🌾',
+    'simple.wheat_only': 'ಕೇವಲ ಗೋಧಿ 🌾',
+    'simple.both_grains': 'ಅಕ್ಕಿ + ಗೋಧಿ ಎರಡೂ 🌾',
+    'simple.window_open_banner': 'ಮುಂದಿನ ಪಡಿತರ ಆಯ್ಕೆ ಸಮಯ: 21–24 ನೇ ತಾರೀಖು (ಈಗ ತೆರೆದಿದೆ ✓)',
+    'simple.window_locked_banner': 'ನಿಮ್ಮ ಆಯ್ಕೆ ಈಗ ಲಾಕ್ ಆಗಿದೆ 🔒 (ಸಿದ್ಧತೆ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ)',
+    'simple.choice_saved_banner': 'ನಿಮ್ಮ ಆಯ್ಕೆ ಯಶಸ್ವಿಯಾಗಿ ದಾಖಲಾಗಿದೆ ✓',
+    'simple.btn_select_choice': 'ಪಡಿತರ ಹಕ್ಕು ಮತ್ತು ಅಂಗಡಿ ನೋಡಿ 👉',
+    'simple.btn_select_shop': 'ಅಂಗಡಿ ಬದಲಾಯಿಸಿ / ದಾರಿ ನೋಡಿ 🗺️',
+    'simple.btn_report_problem': 'ಸಮಸ್ಯೆ ತಿಳಿಸಿ 💬',
+    'simple.btn_speak': 'ಮಾತನಾಡಿ ತಿಳಿಸಿ 🎤',
+    'simple.elderly_mode': 'ಹಿರಿಯರ ಮೋಡ್',
+    'simple.elderly_mode_desc': 'ದೊಡ್ಡ ಬಟನ್‌ಗಳು ಮತ್ತು ಧ್ವನಿ ನೆರವು',
+    'simple.audio_help': 'ಕೇಳಿ 🔊',
+    'simple.did_you_get_ration': 'ನಿಮಗೆ ಪಡಿತರ ಸಿಕ್ಕಿತೇ?',
+    'simple.got_it': 'ಹೌದು, ಸಿಕ್ಕಿದೆ 😊',
+    'simple.had_problem': 'ಸಮಸ್ಯೆ ಆಯಿತು 😐',
+    'simple.not_received': 'ಸಿಗಲಿಲ್ಲ 😞',
+    'simple.what_was_problem': 'ಏನು ಸಮಸ್ಯೆ ಆಯಿತು?',
+    'simple.problem_short_weight': '🌾 ಕಡಿಮೆ ಪಡಿತರ ನೀಡಲಾಗಿದೆ',
+    'simple.problem_delayed': '⏰ ಬರುವುದು ತಡವಾಯಿತು',
+    'simple.problem_no_stock': '📦 ಪಡಿತರ ಸ್ಟಾಕ್ ಇರಲಿಲ್ಲ',
+    'simple.problem_shop_closed': '🏪 ಅಂಗಡಿ ಮುಚ್ಚಿತ್ತು',
+    'simple.problem_poor_quality': '🌾 ಕಳಪೆ ಗುಣಮಟ್ಟ',
+    'simple.problem_other': '💬 ಇತರೆ ಸಮಸ್ಯೆ',
+    'simple.speak_problem': 'ಮಾತನಾಡಿ ತಿಳಿಸಿ 🎤',
+    'simple.journey_1': 'ಆಯ್ಕೆ ದಾಖಲಾಗಿದೆ',
+    'simple.journey_2': 'ಪಡಿತರ ಸಿದ್ಧವಾಗಿದೆ',
+    'simple.journey_3': 'ದಾರಿಯಲ್ಲಿದೆ',
+    'simple.journey_4': 'ಅಂಗಡಿಗೆ ತಲುಪುತ್ತಿದೆ',
+    'simple.journey_5': 'ಪಡೆಯಲು ಸಿದ್ಧವಾಗಿದೆ',
+    'simple.collection_shop': 'ಅಂಗಡಿಯಿಂದ ಪಡೆಯುವುದು (ಉಚಿತ)',
+    'simple.collection_home': 'ಮನೆ ಬಾಗಿಲಿಗೆ (₹20 ಶುಲ್ಕ)',
+    'simple.free_badge': 'ಉಚಿತ',
+    'simple.open_status': 'ತೆರೆದಿದೆ 🟢',
+    'simple.closed_status': 'ಮುಚ್ಚಿದೆ 🔴',
+    'simple.confirm_received_btn': 'ಪಡಿತರ ಸಿಕ್ಕಿದೆ ✓',
+    'simple.dispute_reported_btn': 'ದೂರು ದಾಖಲಾಗಿದೆ ⚠️',
+    'grain_atm.action_title': 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್',
+    'grain_atm.action_subtitle': 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ • ಸ್ವಯಂಚಾಲಿತ 24/7 ಪಡಿತರ',
+    'grain_atm.action_btn': 'ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ ಬಳಸಿ 📦',
+    'grain_atm.welcome_title': 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್',
+    'grain_atm.welcome_subtitle': 'ಸ್ವಯಂಚಾಲಿತ ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್‌ನಿಂದ ನಿಮ್ಮ ಪಡಿತರವನ್ನು ಪಡೆಯಿರಿ.',
+    'grain_atm.start_btn': 'ಪ್ರಾರಂಭಿಸಿ',
+    'grain_atm.back_btn': 'ಹಿಂದಕ್ಕೆ',
+    'grain_atm.verify_title': 'ಫಲಾನುಭವಿ ಗುರುತಿಸುವಿಕೆ',
+    'grain_atm.verify_subtitle': 'ಡೆಮೊ ಪರಿಶೀಲನೆ • ನಿಮ್ಮ ವಿಧಾನವನ್ನು ಆಯ್ಕೆಮಾಡಿ',
+    'grain_atm.opt_ration_id': 'ಪಡಿತರ ಚೀಟಿ ಸಂಖ್ಯೆ',
+    'grain_atm.opt_aadhaar_demo': 'ಆಧಾರ್ ಡೆಮೊ ಪರಿಶೀಲನೆ',
+    'grain_atm.opt_mobile_otp': 'ನೋಂದಾಯಿತ ಮೊಬೈಲ್ OTP',
+    'grain_atm.demo_badge': 'ಡೆಮೊ ಪರಿಶೀಲನೆ • ಯಾವುದೇ ನೈಜ ಬಯೋಮೆಟ್ರಿಕ್ ಅಥವಾ ಆಧಾರ್ ಡೇಟಾ ಸಂಗ್ರಹಿಸಲಾಗುವುದಿಲ್ಲ',
+    'grain_atm.verify_btn': 'ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಅರ್ಹತೆ ನೋಡಿ',
+    'grain_atm.your_ration': 'ನಿಮ್ಮ ಪಡಿತರ',
+    'grain_atm.statutory_tag': '₹0 ಉಚಿತ • ಶಾಸನಬದ್ಧ ಹಕ್ಕು',
+    'grain_atm.machine_title': 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ (VM-001)',
+    'grain_atm.location_label': 'ಸ್ಥಳ: ಡೆಮೊ ಪಿಡಿಎಸ್ ಕೇಂದ್ರ',
+    'grain_atm.status_ready': 'ಸ್ಥಿತಿ: 🟢 ಸಿದ್ಧವಾಗಿದೆ',
+    'grain_atm.stock_available': 'ಲಭ್ಯವಿರುವ ಪಡಿತರ: ಅಕ್ಕಿ — 182 ಕೆಜಿ',
+    'grain_atm.collect_btn': 'ನನ್ನ ಪಡಿತರ ಪಡೆಯಿರಿ',
+    'grain_atm.simulation_notice': 'ಸ್ವಯಂಚಾಲಿತ ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್‌ನ ಡಿಜಿಟಲ್ ಸಿಮ್ಯುಲೇಶನ್',
+    'grain_atm.already_received_title': 'ಪಡಿತರ ಈಗಾಗಲೇ ಸ್ವೀಕರಿಸಲಾಗಿದೆ',
+    'grain_atm.already_received_desc': 'ಈ ಚಕ್ರದ ನಿಮ್ಮ ಪಡಿತರವನ್ನು ಈಗಾಗಲೇ ಸ್ವೀಕರಿಸಲಾಗಿದೆ. ಈ ಚಕ್ರದಲ್ಲಿ ನೀವು ಮತ್ತೆ ಪಡಿತರವನ್ನು ಪಡೆಯಲು ಸಾಧ್ಯವಿಲ್ಲ.',
+    'grain_atm.receipt_title': 'ಪಡಿತರ ರಸೀದಿ ✓',
+    'grain_atm.pickup_center': 'ಪಿಕಪ್: ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್-001',
+    'grain_atm.done_home_btn': 'ಮುಖಪುಟಕ್ಕೆ ಹಿಂತಿರುಗಿ',
+    'grain_atm.track_btn': 'ಪಡಿತರ ಟ್ರ್ಯಾಕ್ ಮಾಡಿ',
+    'grain_atm.step1': 'ಫಲಾನುಭವಿ ಪರಿಶೀಲನೆ',
+    'grain_atm.step2': 'ದೃಢೀಕರಣ ಯಶಸ್ವಿ',
+    'grain_atm.step3': 'ಪಡಿತರ ಹಕ್ಕು ಪರಿಶೀಲನೆ',
+    'grain_atm.step4': 'ಧಾನ್ಯ ದಾಸ್ತಾನು ಪರಿಶೀಲನೆ',
+    'grain_atm.step5': 'ಪಡಿತರ ವಿತರಿಸಲಾಗುತ್ತಿದೆ',
+    'grain_atm.step6': 'ಪಡಿತರ ವಿತರಿಸಲಾಗಿದೆ',
+    'grain_atm.step7': 'ಡಿಜಿಟಲ್ ರಸೀದಿ ಸಿದ್ಧವಾಗಿದೆ',
   },
 };
 

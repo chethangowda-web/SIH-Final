@@ -148,6 +148,21 @@ class ApiService {
     authSession.clear();
   }
 
+  /// Fetch registered household members and their privacy-masked mobile numbers
+  /// for a ration card.
+  Future<Map<String, dynamic>> fetchHouseholdPhones(String cardId) async {
+    final response = await client.get(
+      Uri.parse('/auth/citizen/household-phones/'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response, 'Failed to fetch household details');
+    }
+  }
+
   /// Request a 6-digit OTP for a citizen Ration Card Number with real phone dispatch.
   Future<Map<String, dynamic>> sendCitizenOtp(
     String cardId, {
