@@ -74,7 +74,7 @@ class FpsShop {
     required this.status,
     this.currentInventoryTotalKg = 0.0,
     this.declaredIntentCycleKg = 0.0,
-    this.beneficiariesCount = 0,
+    this.beneficiariesCount = 250,
   });
 
   factory FpsShop.fromJson(Map<String, dynamic> json) {
@@ -91,8 +91,7 @@ class FpsShop {
           (json['current_inventory_total_kg'] as num?)?.toDouble() ?? 0.0,
       declaredIntentCycleKg:
           (json['declared_intent_cycle_kg'] as num?)?.toDouble() ?? 0.0,
-      beneficiariesCount:
-          (json['beneficiaries_count'] ?? json['beneficiariesCount'] ?? 0) as int,
+      beneficiariesCount: json['beneficiaries_count'] ?? json['registered_beneficiaries'] ?? 250,
     );
   }
 }

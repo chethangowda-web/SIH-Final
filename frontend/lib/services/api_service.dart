@@ -2920,8 +2920,13 @@ class ApiService {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
-      final err = json.decode(response.body);
-      throw parseError(response, 'Failed to submit inspection report: ');
+      dynamic err;
+      try {
+        err = json.decode(response.body);
+      } catch (_) {
+        err = {'detail': response.body.isNotEmpty ? response.body : 'Server returned status ${response.statusCode}'};
+      }
+      throw parseError(response, 'Failed to submit inspection report: ${err is Map ? (err['detail'] ?? response.statusCode) : response.statusCode}');
     }
   }
 
