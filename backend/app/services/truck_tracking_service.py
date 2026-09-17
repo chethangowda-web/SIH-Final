@@ -447,6 +447,80 @@ class TruckTrackingService:
         db.commit()
         return self.get_truck_tracking(db, detail["truck_id"])
 
+    def approve_truck_movement(
+        self,
+        db: sqlite3.Connection,
+        truck_id: str,
+        current_fps_id: str,
+        officer_username: str,
+        next_fps_id: Optional[str] = None,
+        notes: Optional[str] = None,
+        manifest_id: Optional[str] = None,
+        digital_signature: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Record officer movement authorization for onward truck dispatch between FPS stores."""
+        cursor = db.cursor()
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS officer_movement_approvals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            approval_token TEXT UNIQUE NOT NULL,
+            truck_id TEXT NOT NULL,
+            manifest_id TEXT,
+            from_fps_id TEXT NOT NULL,
+            to_fps_id TEXT,
+            officer_id TEXT NOT NULL,
+            officer_name TEXT NOT NULL,
+            approval_notes TEXT,
+            digital_signature TEXT,
+            status TEXT NOT NULL DEFAULT 'APPROVED',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        token = f"CLR-MVT-2026-{uuid.uuid4().hex[:6].upper()}"
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        cursor.execute("""
+        INSERT INTO officer_movement_approvals (
+            approval_token, truck_id, manifest_id, from_fps_id, to_fps_id,
+            officer_id, officer_name, approval_notes, digital_signature, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?);
+        """, (
+            token, truck_id, manifest_id, current_fps_id, next_fps_id,
+            officer_username, f"Food Inspector ({officer_username})",
+            notes or "Officer physical delivery verified. Truck cleared for onward movement.",
+            digital_signature or "OFF-VERIFIED-SEAL",
+            now_str
+        ))
+
+        # Update truck tracking: advance to IN_TRANSIT towards next stop or mark MOVEMENT_APPROVED
+        cursor.execute("""
+        UPDATE truck_route_tracking SET
+            current_status = 'IN_TRANSIT',
+            current_checkpoint_name = ?,
+            next_checkpoint_name = ?,
+            last_telemetry_time = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE truck_id = ?;
+        """, (
+            f"Departed {current_fps_id} (Cleared)",
+            f"En Route to {next_fps_id or 'Next FPS'}",
+            truck_id
+        ))
+        db.commit()
+
+        return {
+            "status": "APPROVED",
+            "clearance_token": token,
+            "truck_id": truck_id,
+            "manifest_id": manifest_id,
+            "current_fps_id": current_fps_id,
+            "next_fps_id": next_fps_id,
+            "cleared_by_officer": officer_username,
+            "cleared_at": now_str,
+            "approval_notes": notes or "Officer physical delivery verified. Truck cleared for onward movement."
+        }
+
+
     def _format_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         """Format SQLite row into API schema structure."""
         try:

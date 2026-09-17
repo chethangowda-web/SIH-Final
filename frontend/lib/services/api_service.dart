@@ -2866,7 +2866,46 @@ class ApiService {
     }
   }
 
+  /// Field Food Inspector: Approve truck movement to next FPS store
+  Future<Map<String, dynamic>> approveTruckMovement({
+    required String truckId,
+    required String currentFpsId,
+    String? nextFpsId,
+    String? manifestId,
+    String? approvalNotes,
+    String? digitalSignature,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/dispatch/approve-movement'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: json.encode({
+        'truck_id': truckId,
+        'current_fps_id': currentFpsId,
+        'next_fps_id': nextFpsId,
+        'manifest_id': manifestId,
+        'approval_notes': approvalNotes ?? 'Field Food Inspector physical delivery verified. Truck cleared for onward movement.',
+        'digital_signature': digitalSignature ?? 'OFF-VERIFIED-SEAL',
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      dynamic err;
+      try {
+        err = json.decode(response.body);
+      } catch (_) {
+        err = {'detail': response.body.isNotEmpty ? response.body : 'Server returned status ${response.statusCode}'};
+      }
+      throw parseError(response, 'Failed to approve truck movement: ${err is Map ? (err['detail'] ?? response.statusCode) : response.statusCode}');
+    }
+  }
+
   /// Field Food Inspector: Submit and cryptographically seal 6-point inspection report
+
   Future<Map<String, dynamic>> submitFpsInspectionReport({
     required String fpsId,
     String? orderId,
@@ -2901,8 +2940,10 @@ class ApiService {
     String cycleId = '2026-09',
   }) async {
     final response = await client.post(
-      Uri.parse('\/officer/inspection/submit'),
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/submit'),
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+
+
       body: json.encode({
         'fps_id': fpsId,
         'order_id': orderId,

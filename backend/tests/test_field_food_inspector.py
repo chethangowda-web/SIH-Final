@@ -149,4 +149,36 @@ def test_7_fps_assigned_dispatch():
     assert "route_stops" in disp
     assert len(disp["route_stops"]) >= 2
     assert "dispatch_timeline" in disp
+    assert "multi_fps_stops" in disp
+    assert len(disp["multi_fps_stops"]) >= 1
+
+
+def test_8_approve_truck_movement():
+    headers = get_auth_header()
+    payload = {
+        "truck_id": "KA-04-GA-9081",
+        "current_fps_id": "FPS-KA-BLR-001",
+        "next_fps_id": "FPS-KA-BLR-002",
+        "manifest_id": "MAN-2026-0914",
+        "approval_notes": "Physical verification completed. Rice bags verified. Clearance granted for onward movement.",
+        "digital_signature": "SIG-FO-BLR-001"
+    }
+    res = client.post("/api/officer/dispatch/approve-movement", json=payload, headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    clr = data["movement_clearance"]
+    assert clr["status"] == "APPROVED"
+    assert "clearance_token" in clr
+    assert clr["truck_id"] == "KA-04-GA-9081"
+    assert clr["cleared_by_officer"] == "inspector_user"
+
+
+    # Verify that get_assigned_dispatch now reflects the approval
+    res2 = client.get("/api/officer/fps/FPS-KA-BLR-001/assigned-dispatch", headers=headers)
+    assert res2.status_code == 200
+    data2 = res2.json()["dispatch_info"]
+    assert data2["movement_approval_status"] == "APPROVED"
+    assert data2["movement_clearance_token"] == clr["clearance_token"]
+
 

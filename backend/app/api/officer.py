@@ -83,6 +83,14 @@ class GeofenceVerifyIn(BaseModel):
     inspector_lon: Optional[float] = None
     truck_id: Optional[str] = None
 
+class ApproveMovementIn(BaseModel):
+    truck_id: str
+    current_fps_id: str
+    next_fps_id: Optional[str] = None
+    manifest_id: Optional[str] = None
+    approval_notes: Optional[str] = "Officer physical delivery verified. Truck cleared for onward movement."
+    digital_signature: Optional[str] = "OFF-VERIFIED-SEAL"
+
 class EposDispenseIn(BaseModel):
     fps_id: str
     beneficiary_id: str
@@ -715,6 +723,128 @@ def get_fps_assigned_dispatch(
     arr_order = cursor.fetchone()
     is_arrival_verified = arr_order is not None or cur_status in ["ARRIVED", "DELIVERY_VERIFIED"]
 
+    # Ensure officer_movement_approvals table exists
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS officer_movement_approvals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        approval_token TEXT UNIQUE NOT NULL,
+        truck_id TEXT NOT NULL,
+        manifest_id TEXT,
+        from_fps_id TEXT NOT NULL,
+        to_fps_id TEXT,
+        officer_id TEXT NOT NULL,
+        officer_name TEXT NOT NULL,
+        approval_notes TEXT,
+        digital_signature TEXT,
+        status TEXT NOT NULL DEFAULT 'APPROVED',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    # Query last movement approval for this truck and current fps
+    cursor.execute("""
+    SELECT * FROM officer_movement_approvals
+    WHERE truck_id = ? AND from_fps_id = ?
+    ORDER BY id DESC LIMIT 1;
+    """, (truck_id, fps_id))
+    approval_row = cursor.fetchone()
+
+    # Query all prior approvals for this truck
+    cursor.execute("""
+    SELECT * FROM officer_movement_approvals
+    WHERE truck_id = ?
+    ORDER BY id ASC;
+    """, (truck_id,))
+    all_approvals = {r["from_fps_id"]: dict(r) for r in cursor.fetchall()}
+
+    # Multi-FPS delivery stops sequence
+    multi_fps_stops = []
+    if manifest_row and manifest_row["delivery_sequence_json"]:
+        try:
+            raw_seq = json.loads(manifest_row["delivery_sequence_json"])
+            if isinstance(raw_seq, list):
+                for idx, s in enumerate(raw_seq):
+                    s_fps_id = s.get("fps_id")
+                    cursor.execute("SELECT name, latitude, longitude, address FROM fps WHERE fps_id = ?;", (s_fps_id,))
+                    s_row = cursor.fetchone()
+                    s_lat = float(s_row["latitude"]) if s_row and s_row["latitude"] else (fps_lat + ((idx - 0.5) * 0.015))
+                    s_lon = float(s_row["longitude"]) if s_row and s_row["longitude"] else (fps_lon - ((idx - 0.5) * 0.012))
+                    s_name = s.get("fps_name") or (s_row["name"] if s_row else f"Fair Price Shop {idx+1}")
+                    s_approved = s_fps_id in all_approvals
+
+                    multi_fps_stops.append({
+                        "sequence": s.get("sequence", idx + 1),
+                        "fps_id": s_fps_id,
+                        "fps_name": s_name,
+                        "commodity": s.get("commodity", commodity),
+                        "quantity_kg": float(s.get("quantity_kg", dispatched_qty)),
+                        "latitude": s_lat,
+                        "longitude": s_lon,
+                        "estimated_arrival": s.get("estimated_arrival", "10:30 AM"),
+                        "is_target": s_fps_id == fps_id,
+                        "is_cleared": s_approved,
+                        "clearance_token": all_approvals.get(s_fps_id, {}).get("approval_token") if s_approved else None
+                    })
+        except Exception:
+            pass
+
+    if not multi_fps_stops:
+        # Provide rich multi-stop sequence for demonstration if no explicit sequence was bound
+        multi_fps_stops = [
+            {
+                "sequence": 1,
+                "fps_id": fps_id,
+                "fps_name": fps_dict["name"],
+                "commodity": commodity,
+                "quantity_kg": dispatched_qty,
+                "latitude": fps_lat,
+                "longitude": fps_lon,
+                "estimated_arrival": trk_row["expected_arrival_time"] if trk_row and trk_row["expected_arrival_time"] else "10:15 AM",
+                "is_target": True,
+                "is_cleared": fps_id in all_approvals,
+                "clearance_token": all_approvals.get(fps_id, {}).get("approval_token") if fps_id in all_approvals else None
+            },
+            {
+                "sequence": 2,
+                "fps_id": "FPS-KA-BLR-002",
+                "fps_name": "Rajajinagar Fair Price Shop 2",
+                "commodity": commodity,
+                "quantity_kg": 1800.0,
+                "latitude": 12.9850,
+                "longitude": 77.5530,
+                "estimated_arrival": "11:15 AM",
+                "is_target": False,
+                "is_cleared": "FPS-KA-BLR-002" in all_approvals,
+                "clearance_token": all_approvals.get("FPS-KA-BLR-002", {}).get("approval_token") if "FPS-KA-BLR-002" in all_approvals else None
+            }
+        ]
+
+    # Determine next FPS in route
+    next_fps_id = None
+    next_fps_name = None
+    curr_target_idx = 0
+    for idx, s in enumerate(multi_fps_stops):
+        if s["fps_id"] == fps_id:
+            curr_target_idx = idx
+            if idx + 1 < len(multi_fps_stops):
+                next_fps_id = multi_fps_stops[idx + 1]["fps_id"]
+                next_fps_name = multi_fps_stops[idx + 1]["fps_name"]
+            break
+
+    # Officer movement approval status
+    if approval_row:
+        mvt_status = "APPROVED"
+        mvt_token = approval_row["approval_token"]
+        mvt_cleared_by = approval_row["officer_name"]
+        mvt_cleared_at = approval_row["created_at"]
+        mvt_notes = approval_row["approval_notes"]
+    else:
+        mvt_status = "PENDING_APPROVAL" if (is_within_geofence or is_arrival_verified) else "EN_ROUTE"
+        mvt_token = None
+        mvt_cleared_by = None
+        mvt_cleared_at = None
+        mvt_notes = None
+
     return {
         "status": "success",
         "fps_id": fps_id,
@@ -768,9 +898,48 @@ def get_fps_assigned_dispatch(
             "dispatch_timeline": dispatch_timeline,
             "geofence_status": "WITHIN_GEOFENCE" if is_within_geofence else "WAITING",
             "distance_to_fps_m": dist_to_fps_m,
-            "is_arrival_verified": is_arrival_verified
+            "is_arrival_verified": is_arrival_verified,
+            "multi_fps_stops": multi_fps_stops,
+            "current_stop_index": curr_target_idx,
+            "next_fps_id": next_fps_id,
+            "next_fps_name": next_fps_name,
+            "movement_approval_status": mvt_status,
+            "movement_clearance_token": mvt_token,
+            "cleared_by_officer": mvt_cleared_by,
+            "cleared_at": mvt_cleared_at,
+            "movement_approval_notes": mvt_notes,
+            "can_approve_movement": (is_within_geofence or is_arrival_verified or cur_status in ["ARRIVED", "DELIVERY_VERIFIED", "IN_TRANSIT"]) and (mvt_status != "APPROVED")
         }
     }
+
+
+@router.post("/officer/dispatch/approve-movement")
+def approve_truck_movement(
+    payload: ApproveMovementIn,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FIELD_FOOD_INSPECTOR", "FIELD_OFFICER", "DSO", "ADMIN"]))
+):
+    """
+    Field Food Inspector / Officer: Grant statutory clearance for truck movement to next FPS store.
+    Records officer authorization token, timestamp, updates truck tracking progression, and seals clearance.
+    """
+    from app.services.truck_tracking_service import truck_tracking_service
+    res = truck_tracking_service.approve_truck_movement(
+        db=db,
+        truck_id=payload.truck_id.strip(),
+        current_fps_id=payload.current_fps_id.strip(),
+        officer_username=current_user.get("username", "officer"),
+        next_fps_id=payload.next_fps_id.strip() if payload.next_fps_id else None,
+        notes=payload.approval_notes,
+        manifest_id=payload.manifest_id,
+        digital_signature=payload.digital_signature
+    )
+    return {
+        "status": "success",
+        "message": f"Officer movement clearance successfully granted for truck {payload.truck_id}.",
+        "movement_clearance": res
+    }
+
 
 
 @router.post("/officer/inspection/submit")

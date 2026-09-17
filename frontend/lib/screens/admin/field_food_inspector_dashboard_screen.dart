@@ -1,9 +1,12 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../core/constants.dart';
 import '../../services/api_service.dart';
 import '../../models/beneficiary_model.dart';
 import '../beneficiary/demo_login_screen.dart';
+
 
 /// ---------------------------------------------------------------------------
 /// PDS DemandSync — FIELD FOOD INSPECTOR OPERATIONAL PORTAL
@@ -57,6 +60,10 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
   // Stage 02 — Inbound Dispatch & Live Truck Route Tracking State
   Map<String, dynamic>? _assignedDispatchData;
   bool _isLoadingDispatch = false;
+  final MapController _liveMapController = MapController();
+  Map<String, dynamic>? _selectedStopDetails;
+  bool _isApprovingMovement = false;
+
 
   // Data Collections from Backend
   List<Map<String, dynamic>> _surpriseOrders = [];
@@ -1361,13 +1368,315 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     );
   }
 
+  void _showMovementApprovalDialog(BuildContext context, Map<String, dynamic> info) {
+    final truckId = info['truck_id'] as String? ?? 'TRK-KA-0031';
+    final currentFpsName = info['destination_fps_name'] as String? ?? (_targetFps?.name ?? 'Fair Price Shop 1');
+    final currentFpsId = info['destination_fps_id'] as String? ?? _selectedFpsId;
+    final nextFpsName = info['next_fps_name'] as String? ?? 'Rajajinagar Fair Price Shop 2';
+    final nextFpsId = info['next_fps_id'] as String? ?? 'FPS-KA-BLR-002';
+    final manifestId = info['manifest_id'] as String? ?? 'MAN-2026-0914';
+    final commodity = info['commodity'] as String? ?? 'Rice';
+    final unloadedQty = (info['dispatched_quantity_kg'] as num?)?.toDouble() ?? 2450.0;
+
+    final notesController = TextEditingController(
+      text: 'Physical delivery verified and bags stacked. Weighbridge scales calibrated. Transit tamper seals certified intact for onward movement to $nextFpsName.',
+    );
+    bool checkDeliveryVerified = true;
+    bool checkScalesCalibrated = true;
+    bool checkTransitSealIntact = true;
+    bool checkDriverAuthorized = true;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          titlePadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.all(20),
+          title: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0F172A),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.verified_user, color: Color(0xFF10B981), size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'OFFICER TRUCK MOVEMENT APPROVAL',
+                        style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                      ),
+                      Text(
+                        'Department of Food & Civil Supplies • Inter-FPS Transit Authorization',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          content: SizedBox(
+            width: 580,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Statutory Notice Banner
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.4)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.gavel, color: Color(0xFF1D4ED8), size: 20),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Statutory Protocol: Carrier vehicle is legally prohibited from departing to subsequent Fair Price Shops without physical delivery verification and digital clearance by the Food Inspector.',
+                            style: TextStyle(fontSize: 11.5, color: Color(0xFF1E3A8A), fontWeight: FontWeight.w600, height: 1.35),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Route Legs Table
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('VEHICLE REGISTRATION', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                                  Text(truckId, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), fontFamily: 'monospace')),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('MANIFEST NUMBER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                                  Text(manifestId, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF2563EB))),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 18),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('COMPLETED STOP (CURRENT)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF059669))),
+                                  Text(currentFpsName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
+                                  Text('Delivered: ${unloadedQty.toStringAsFixed(0)} kg $commodity (Verified)', style: const TextStyle(fontSize: 10.5, color: Color(0xFF10B981), fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward, color: Color(0xFF94A3B8), size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('AUTHORIZED DESTINATION (NEXT)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+                                  Text(nextFpsName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
+                                  Text('Target FPS ID: $nextFpsId', style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B))),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Verification Checkpoints
+                  const Text('STATUTORY VERIFICATION CHECKLIST', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: 0.3)),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: checkDeliveryVerified,
+                    onChanged: (v) => setDialogState(() => checkDeliveryVerified = v ?? false),
+                    title: const Text('Physical stock delivered and unstacked according to quota allocation', style: TextStyle(fontSize: 11.5)),
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: checkScalesCalibrated,
+                    onChanged: (v) => setDialogState(() => checkScalesCalibrated = v ?? false),
+                    title: const Text('Weighbridge scale variance checked within statutory tolerance (±50g)', style: TextStyle(fontSize: 11.5)),
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: checkTransitSealIntact,
+                    onChanged: (v) => setDialogState(() => checkTransitSealIntact = v ?? false),
+                    title: const Text('Transit tamper-evident seals verified intact for onward vehicle cargo', style: TextStyle(fontSize: 11.5)),
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: checkDriverAuthorized,
+                    onChanged: (v) => setDialogState(() => checkDriverAuthorized = v ?? false),
+                    title: const Text('Driver gatepass and digital authorization clearance verified', style: TextStyle(fontSize: 11.5)),
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Officer Remarks
+                  const Text('OFFICER CLEARANCE NOTES / DIRECTIVES', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: notesController,
+                    maxLines: 2,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: InputDecoration(
+                      hintText: 'Enter statutory remarks or transit instructions...',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('CANCEL', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton.icon(
+              onPressed: _isApprovingMovement
+                  ? null
+                  : () async {
+                      if (!checkDeliveryVerified || !checkTransitSealIntact) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please certify all statutory checkboxes before issuing transit clearance.')),
+                        );
+                        return;
+                      }
+                      Navigator.pop(dialogCtx);
+                      await _executeApproveMovement(
+                        truckId: truckId,
+                        currentFpsId: currentFpsId,
+                        nextFpsId: nextFpsId,
+                        manifestId: manifestId,
+                        notes: notesController.text,
+                      );
+                    },
+              icon: const Icon(Icons.verified, size: 16),
+              label: Text(_isApprovingMovement ? 'CLEARING TRANSIT...' : 'AUTHORIZE & CLEAR ONWARD TRANSIT', style: const TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF059669),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _executeApproveMovement({
+    required String truckId,
+    required String currentFpsId,
+    String? nextFpsId,
+    String? manifestId,
+    String? notes,
+  }) async {
+    setState(() => _isApprovingMovement = true);
+    try {
+      final res = await _apiService.approveTruckMovement(
+        truckId: truckId,
+        currentFpsId: currentFpsId,
+        nextFpsId: nextFpsId,
+        manifestId: manifestId,
+        approvalNotes: notes,
+        digitalSignature: 'OFF-SIG-${widget.username ?? "inspector"}-${DateTime.now().millisecondsSinceEpoch}',
+      );
+      if (!mounted) return;
+      final token = res['movement_clearance']?['clearance_token'] ?? 'CLR-MVT-2026-GRANTED';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF065F46),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Truck movement authorized to ${nextFpsId ?? "Next FPS"}! Clearance Token: $token',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      await _loadAssignedDispatch(fpsId: _selectedFpsId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF991B1B),
+          content: Text('Failed to authorize truck movement: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isApprovingMovement = false);
+    }
+  }
+
   Widget _buildDispatchRouteSequenceCard(Map<String, dynamic> info) {
     final stops = (info['route_stops'] as List<dynamic>? ?? []);
+    final multiFpsStops = (info['multi_fps_stops'] as List<dynamic>? ?? []);
     final routeId = info['route_id'] ?? 'RTE-KA-BLR-01';
     final routeName = info['route_name'] ?? 'Hebbal to City Center Delivery Corridor';
     final distTravelled = (info['distance_travelled_km'] as num?)?.toStringAsFixed(1) ?? '6.5';
     final distRemaining = (info['distance_remaining_km'] as num?)?.toStringAsFixed(1) ?? '8.4';
     final totalDist = (info['total_route_distance_km'] as num?)?.toStringAsFixed(1) ?? '14.9';
+
+    final mvtStatus = info['movement_approval_status'] as String? ?? 'PENDING_APPROVAL';
+    final mvtToken = info['movement_clearance_token'] as String?;
+    final clearedBy = info['cleared_by_officer'] as String? ?? 'Food Inspector';
+    final clearedAt = info['cleared_at'] as String? ?? '';
+    final canApprove = info['can_approve_movement'] == true;
+    final nextFpsName = info['next_fps_name'] as String?;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1382,7 +1691,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('CURRENT DISPATCH ROUTE', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: 0.5)),
+              const Text('CURRENT DISPATCH ROUTE & INTER-FPS TRANSIT', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: 0.5)),
               Text('Total: $totalDist km • Travelled: $distTravelled km • Remaining: $distRemaining km', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
             ],
           ),
@@ -1390,7 +1699,174 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
           Text('$routeId • $routeName', style: const TextStyle(fontSize: 11.5, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
           const Divider(height: 20),
 
-          // Sequential Stops list
+          // Multi-Store Delivery Itinerary Banner
+          if (multiFpsStops.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.alt_route, size: 16, color: Color(0xFF0284C7)),
+                          SizedBox(width: 6),
+                          Text('MULTI-STORE DELIVERY ITINERARY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+                        ],
+                      ),
+                      Text('${multiFpsStops.length} STOPS ASSIGNED', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...multiFpsStops.map((ms) {
+                    final m = ms as Map<String, dynamic>;
+                    final seq = m['sequence'] ?? 1;
+                    final sName = m['fps_name'] ?? 'FPS Store';
+                    final sId = m['fps_id'] ?? '';
+                    final sQty = m['quantity_kg'] ?? 0;
+                    final sComm = m['commodity'] ?? 'Rice';
+                    final isTarget = m['is_target'] == true;
+                    final isCleared = m['is_cleared'] == true;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isTarget ? const Color(0xFFEFF6FF) : Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: isTarget ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
+                          width: isTarget ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 11,
+                            backgroundColor: isCleared ? const Color(0xFF10B981) : (isTarget ? const Color(0xFF3B82F6) : const Color(0xFF94A3B8)),
+                            child: Text('$seq', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('$sName ($sId)', style: TextStyle(fontSize: 11.5, fontWeight: isTarget ? FontWeight.w900 : FontWeight.bold, color: const Color(0xFF0F172A))),
+                                Text('Allocation: $sQty kg $sComm • ETA: ${m['estimated_arrival'] ?? "10:30 AM"}', style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                              ],
+                            ),
+                          ),
+                          if (isCleared)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(3), border: Border.all(color: const Color(0xFF16A34A))),
+                              child: const Text('✓ MOVEMENT CLEARED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                            )
+                          else if (isTarget)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(3), border: Border.all(color: const Color(0xFF2563EB))),
+                              child: const Text('CURRENT TARGET SHOP', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8))),
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(3)),
+                              child: const Text('PENDING TRANSIT', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Statutory Officer Movement Approval Card
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: mvtStatus == 'APPROVED' ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: mvtStatus == 'APPROVED' ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                width: 1.2,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          mvtStatus == 'APPROVED' ? Icons.check_circle : Icons.gavel,
+                          color: mvtStatus == 'APPROVED' ? const Color(0xFF059669) : const Color(0xFFD97706),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          mvtStatus == 'APPROVED' ? 'OFFICER MOVEMENT CLEARANCE: GRANTED' : 'OFFICER MOVEMENT APPROVAL REQUIRED',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: mvtStatus == 'APPROVED' ? const Color(0xFF065F46) : const Color(0xFF92400E),
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (mvtStatus == 'APPROVED')
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: const Color(0xFF10B981), borderRadius: BorderRadius.circular(10)),
+                        child: Text(mvtToken ?? 'CLR-MVT-GRANTED', style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  mvtStatus == 'APPROVED'
+                      ? 'Officer $clearedBy certified delivery verification at this FPS. Truck has statutory clearance to proceed onward to ${nextFpsName ?? "subsequent shops"}. Timestamp: $clearedAt'
+                      : 'Under Karnataka PDS statutory protocols, the carrier truck is legally prohibited from departing to subsequent Fair Price Shops without Food Inspector physical verification, seal integrity check, and digital clearance.',
+                  style: TextStyle(fontSize: 11, color: mvtStatus == 'APPROVED' ? const Color(0xFF047857) : const Color(0xFF78350F), height: 1.35),
+                ),
+                if (mvtStatus != 'APPROVED' || canApprove) ...[
+                  const SizedBox(height: 10),
+                  ElevatedButton.icon(
+
+                    onPressed: () => _showMovementApprovalDialog(context, info),
+                    icon: const Icon(Icons.verified, size: 15),
+                    label: Text(
+                      nextFpsName != null ? 'APPROVE TRUCK MOVEMENT TO $nextFpsName →' : 'APPROVE TRUCK MOVEMENT TO NEXT FPS →',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Sequential Route Checkpoints
+          const Text('ROUTE WAYPOINTS & STATIC CHECKPOINTS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 0.3)),
+          const SizedBox(height: 8),
           if (stops.isEmpty)
             const Text('Route information unavailable.', style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B)))
           else
@@ -1421,27 +1897,27 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                 }
 
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.symmetric(vertical: 5),
                   child: Row(
                     children: [
                       Container(
-                        width: 22,
-                        height: 22,
+                        width: 20,
+                        height: 20,
                         decoration: BoxDecoration(shape: BoxShape.circle, color: dotBg),
                         child: Center(child: icon),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(name, style: TextStyle(fontSize: 12.5, fontWeight: isCurrent ? FontWeight.w900 : FontWeight.bold, color: const Color(0xFF0F172A))),
-                            Text('$type • Planned: $plannedTime', style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B))),
+                            Text(name, style: TextStyle(fontSize: 12, fontWeight: isCurrent ? FontWeight.w900 : FontWeight.bold, color: const Color(0xFF0F172A))),
+                            Text('$type • Planned: $plannedTime', style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
                           ],
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                         decoration: BoxDecoration(
                           color: isCompleted ? const Color(0xFFDCFCE7) : (isCurrent ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9)),
                           borderRadius: BorderRadius.circular(4),
@@ -1449,7 +1925,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                         child: Text(
                           statusLabel,
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 9.5,
                             fontWeight: FontWeight.bold,
                             color: isCompleted ? const Color(0xFF15803D) : (isCurrent ? const Color(0xFF1D4ED8) : const Color(0xFF64748B)),
                           ),
@@ -1464,6 +1940,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
       ),
     );
   }
+
 
   Widget _buildDispatchTimelineCard(Map<String, dynamic> info) {
     final timeline = (info['dispatch_timeline'] as List<dynamic>? ?? []);
@@ -1550,6 +2027,19 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
           icon: const Icon(Icons.history, size: 14),
           label: const Text('VIEW PREVIOUS INSPECTIONS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
         ),
+        if (info['movement_approval_status'] == 'APPROVED')
+          OutlinedButton.icon(
+            onPressed: () => _showMovementApprovalDialog(context, info),
+            icon: const Icon(Icons.verified, size: 14, color: Color(0xFF10B981)),
+            label: Text('MOVEMENT CLEARED (${info['movement_clearance_token'] ?? "ACTIVE"})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF065F46))),
+          )
+        else
+          ElevatedButton.icon(
+            onPressed: () => _showMovementApprovalDialog(context, info),
+            icon: const Icon(Icons.gavel, size: 14),
+            label: const Text('APPROVE TRUCK MOVEMENT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white),
+          ),
       ],
     );
   }
@@ -1559,6 +2049,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     final inGeofence = info['geofence_status'] == 'WITHIN_GEOFENCE' || (info['distance_to_fps_m'] as num? ?? 999) <= 250.0;
     final etaTime = info['expected_arrival_time'] ?? '10:30 AM';
     final etaMin = info['eta_minutes'] ?? 25;
+    final mvtStatus = info['movement_approval_status'] as String? ?? 'PENDING_APPROVAL';
 
     if (isArrived) {
       return Container(
@@ -1578,11 +2069,24 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                 Text('TRUCK ARRIVAL VERIFIED AT TARGET FPS', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFF065F46))),
               ],
             ),
-            ElevatedButton.icon(
-              onPressed: () => setState(() => _currentStage = InspectorStage.inspection),
-              icon: const Icon(Icons.arrow_forward, size: 16),
-              label: const Text('PROCEED TO 6-POINT INSPECTION →', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+            Row(
+              children: [
+                if (mvtStatus != 'APPROVED') ...[
+                  ElevatedButton.icon(
+                    onPressed: () => _showMovementApprovalDialog(context, info),
+                    icon: const Icon(Icons.gavel, size: 15),
+                    label: const Text('APPROVE ONWARD MOVEMENT', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                ElevatedButton.icon(
+                  onPressed: () => setState(() => _currentStage = InspectorStage.inspection),
+                  icon: const Icon(Icons.arrow_forward, size: 16),
+                  label: const Text('PROCEED TO 6-POINT INSPECTION →', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+                ),
+              ],
             ),
           ],
         ),
@@ -1613,11 +2117,23 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                 ),
               ],
             ),
-            ElevatedButton.icon(
-              onPressed: () => setState(() => _currentStage = InspectorStage.arrival),
-              icon: const Icon(Icons.arrow_forward, size: 16),
-              label: const Text('PROCEED TO FPS ARRIVAL →', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB45309), foregroundColor: Colors.white),
+            Row(
+              children: [
+                if (mvtStatus != 'APPROVED') ...[
+                  OutlinedButton.icon(
+                    onPressed: () => _showMovementApprovalDialog(context, info),
+                    icon: const Icon(Icons.gavel, size: 15, color: Color(0xFF92400E)),
+                    label: const Text('CLEAR MOVEMENT', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF78350F))),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                ElevatedButton.icon(
+                  onPressed: () => setState(() => _currentStage = InspectorStage.arrival),
+                  icon: const Icon(Icons.arrow_forward, size: 16),
+                  label: const Text('PROCEED TO FPS ARRIVAL →', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB45309), foregroundColor: Colors.white),
+                ),
+              ],
             ),
           ],
         ),
@@ -1647,11 +2163,23 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
               ),
             ],
           ),
-          ElevatedButton.icon(
-            onPressed: () => setState(() => _currentStage = InspectorStage.arrival),
-            icon: const Icon(Icons.arrow_forward, size: 16),
-            label: const Text('PROCEED TO ARRIVAL CHECK →', style: TextStyle(fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+          Row(
+            children: [
+              if (mvtStatus != 'APPROVED') ...[
+                OutlinedButton.icon(
+                  onPressed: () => _showMovementApprovalDialog(context, info),
+                  icon: const Icon(Icons.gavel, size: 14),
+                  label: const Text('PRE-CLEAR ONWARD MOVEMENT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+                const SizedBox(width: 10),
+              ],
+              ElevatedButton.icon(
+                onPressed: () => setState(() => _currentStage = InspectorStage.arrival),
+                icon: const Icon(Icons.arrow_forward, size: 16),
+                label: const Text('PROCEED TO ARRIVAL CHECK →', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+              ),
+            ],
           ),
         ],
       ),
@@ -1735,10 +2263,32 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     );
   }
 
+  Widget _buildMapFloatingButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFF334155)),
+        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4)],
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: const Color(0xFFE2E8F0), size: 16),
+        onPressed: onTap,
+        tooltip: tooltip,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        padding: const EdgeInsets.all(6),
+      ),
+    );
+  }
+
   Widget _buildLiveMapCanvas(Map<String, dynamic> info) {
     final originLat = (info['origin_lat'] as num?)?.toDouble() ?? 13.0358;
     final originLon = (info['origin_lon'] as num?)?.toDouble() ?? 77.5970;
-    final originName = info['origin_depot_name'] as String? ?? 'Bengaluru Central Godown';
+    final originName = info['origin_depot_name'] as String? ?? 'Bengaluru Central Godown (Hebbal)';
 
     final destLat = (info['destination_lat'] as num?)?.toDouble() ?? (_targetFps?.latitude ?? 13.0031);
     final destLon = (info['destination_lon'] as num?)?.toDouble() ?? (_targetFps?.longitude ?? 77.5643);
@@ -1748,87 +2298,481 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     final truckLon = (info['current_lon'] as num?)?.toDouble() ?? originLon;
     final truckPlate = info['truck_id'] as String? ?? 'KA-04-GA-9081';
 
+    final multiStops = (info['multi_fps_stops'] as List<dynamic>? ?? []);
     final routeStops = (info['route_stops'] as List<dynamic>? ?? []);
     final isDeviated = info['route_deviation_flag'] == 1;
-    final speed = (info['speed_kmh'] as num?)?.toDouble() ?? 0.0;
-    final heading = (info['heading'] as num?)?.toDouble() ?? 0.0;
-    final withinGeofence = info['geofence_status'] == 'WITHIN_GEOFENCE';
-    final telStatus = info['telemetry_status'] as String? ?? 'LIVE';
+    final speed = (info['speed_kmh'] as num?)?.toDouble() ?? 36.5;
+    final heading = (info['heading'] as num?)?.toDouble() ?? 215.0;
+    final withinGeofence = info['geofence_status'] == 'WITHIN_GEOFENCE' || (info['distance_to_fps_m'] as num? ?? 999) <= 250.0;
 
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: CustomPaint(
-            painter: _LiveTruckRouteMapPainter(
-              originLat: originLat,
-              originLon: originLon,
-              originName: originName,
-              destLat: destLat,
-              destLon: destLon,
-              destName: destName,
-              truckLat: truckLat,
-              truckLon: truckLon,
-              truckPlate: truckPlate,
-              routeStops: routeStops,
-              isDeviated: isDeviated,
-              speedKmh: speed,
-              headingDeg: heading,
-              withinGeofence: withinGeofence,
-              telemetryStatus: telStatus,
+    final mvtStatus = info['movement_approval_status'] as String? ?? 'PENDING_APPROVAL';
+    final mvtToken = info['movement_clearance_token'] as String?;
+    final canApprove = info['can_approve_movement'] == true;
+
+    final depotPoint = LatLng(originLat, originLon);
+    final truckPoint = LatLng(truckLat, truckLon);
+    final targetPoint = LatLng(destLat, destLon);
+
+    // Build route points along real coordinates
+    final List<LatLng> primaryRoute = [depotPoint];
+    for (final s in routeStops) {
+      if (s is Map<String, dynamic> && s['latitude'] != null && s['longitude'] != null) {
+        final sPt = LatLng((s['latitude'] as num).toDouble(), (s['longitude'] as num).toDouble());
+        if (sPt != depotPoint && sPt != targetPoint && !primaryRoute.contains(sPt)) {
+          primaryRoute.add(sPt);
+        }
+      }
+    }
+    if (!primaryRoute.contains(truckPoint)) {
+      primaryRoute.add(truckPoint);
+    }
+    if (!primaryRoute.contains(targetPoint)) {
+      primaryRoute.add(targetPoint);
+    }
+
+    // Secondary onward route to subsequent FPS stores
+    final List<LatLng> onwardRoute = [targetPoint];
+    for (final ms in multiStops) {
+      if (ms is Map<String, dynamic> && ms['latitude'] != null && ms['longitude'] != null) {
+        final pt = LatLng((ms['latitude'] as num).toDouble(), (ms['longitude'] as num).toDouble());
+        if (pt != targetPoint && !onwardRoute.contains(pt)) {
+          onwardRoute.add(pt);
+        }
+      }
+    }
+
+    // Center of map
+    final centerLat = (truckLat + destLat) / 2;
+    final centerLon = (truckLon + destLon) / 2;
+    final centerPoint = LatLng(centerLat, centerLon);
+
+    return ClipRRect(
+      child: Stack(
+        children: [
+          // 1. Real Interactive OpenStreetMap
+          FlutterMap(
+            mapController: _liveMapController,
+            options: MapOptions(
+              initialCenter: centerPoint,
+              initialZoom: 13.0,
+              minZoom: 9.0,
+              maxZoom: 18.0,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'org.karnataka.pds_demandsync',
+                errorTileCallback: (tile, error, stackTrace) {
+                  // Gracefully handles network tile drops
+                },
+              ),
+
+              // Route Polylines
+              PolylineLayer(
+                polylines: [
+                  // Primary Delivery Route (Depot -> Checkpoints -> Truck -> Target FPS)
+                  Polyline(
+                    points: primaryRoute,
+                    strokeWidth: 5.0,
+                    color: const Color(0xFF0284C7),
+                    borderStrokeWidth: 2.0,
+                    borderColor: Colors.white,
+                  ),
+                  // Onward Route to subsequent multi-drop stores (Dashed Amber)
+                  if (onwardRoute.length > 1)
+                    Polyline(
+                      points: onwardRoute,
+                      strokeWidth: 4.0,
+                      color: const Color(0xFFF59E0B),
+                      borderStrokeWidth: 1.5,
+                      borderColor: Colors.white,
+                      pattern: StrokePattern.dashed(segments: const [8, 5]),
+                    ),
+                  // Deviation alert if off course
+                  if (isDeviated)
+                    Polyline(
+                      points: [depotPoint, truckPoint],
+                      strokeWidth: 3.5,
+                      color: const Color(0xFFEF4444),
+                      pattern: StrokePattern.dashed(segments: const [6, 4]),
+                    ),
+                ],
+              ),
+
+              // Circular 250m Geofence around target shop
+              CircleLayer(
+                circles: [
+                  CircleMarker(
+                    point: targetPoint,
+                    radius: 35,
+                    color: (withinGeofence ? const Color(0xFF10B981) : const Color(0xFF0284C7)).withValues(alpha: 0.22),
+                    borderColor: withinGeofence ? const Color(0xFF059669) : const Color(0xFF0284C7),
+                    borderStrokeWidth: 2.5,
+                  ),
+                ],
+              ),
+
+              // Markers Layer
+              MarkerLayer(
+                markers: [
+                  // 1. Origin Godown Marker
+                  Marker(
+                    point: depotPoint,
+                    width: 120,
+                    height: 52,
+                    alignment: Alignment.topCenter,
+                    child: Tooltip(
+                      message: 'Origin Depot: $originName',
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFF38BDF8), width: 1),
+                              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4)],
+                            ),
+                            child: const Text(
+                              '🏢 FCI GODOWN',
+                              style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const Icon(Icons.location_pin, color: Color(0xFF0284C7), size: 26),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 2. Multi-Store FPS Destination Markers
+                  ...multiStops.map((s) {
+                    final sMap = s as Map<String, dynamic>;
+                    final sLat = (sMap['latitude'] as num?)?.toDouble() ?? destLat;
+                    final sLon = (sMap['longitude'] as num?)?.toDouble() ?? destLon;
+                    final sName = sMap['fps_name'] as String? ?? 'FPS Store';
+                    final sSeq = sMap['sequence'] ?? 1;
+                    final isTarget = sMap['is_target'] == true;
+                    final isCleared = sMap['is_cleared'] == true;
+
+                    Color pinColor = const Color(0xFF64748B);
+                    String pinTag = 'STOP $sSeq';
+                    if (isCleared) {
+                      pinColor = const Color(0xFF10B981);
+                      pinTag = '✓ STOP $sSeq (CLEARED)';
+                    } else if (isTarget) {
+                      pinColor = const Color(0xFF0284C7);
+                      pinTag = '📍 TARGET (STOP $sSeq)';
+                    } else {
+                      pinColor = const Color(0xFFF59E0B);
+                      pinTag = '⏳ NEXT (STOP $sSeq)';
+                    }
+
+                    return Marker(
+                      point: LatLng(sLat, sLon),
+                      width: 140,
+                      height: 54,
+                      alignment: Alignment.topCenter,
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() => _selectedStopDetails = sMap);
+                        },
+                        child: Tooltip(
+                          message: '$sName (Stop $sSeq)',
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0F172A),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: pinColor, width: 1.5),
+                                  boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 4)],
+                                ),
+                                child: Text(
+                                  pinTag,
+                                  style: TextStyle(color: pinColor, fontSize: 9, fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                              Icon(Icons.storefront, color: pinColor, size: 26),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+
+                  // 3. Live Moving Carrier Truck Marker
+                  Marker(
+                    point: truckPoint,
+                    width: 130,
+                    height: 64,
+                    alignment: Alignment.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFF38BDF8), width: 1.2),
+                            boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 4)],
+                          ),
+                          child: Text(
+                            '🚚 $truckPlate',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w900,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFF0284C7),
+                            border: Border.all(color: Colors.white, width: 2.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF0284C7).withValues(alpha: 0.6),
+                                blurRadius: 10,
+                                spreadRadius: 3,
+                              ),
+                            ],
+                          ),
+                          child: Transform.rotate(
+                            angle: heading * math.pi / 180,
+                            child: const Icon(Icons.navigation, color: Colors.white, size: 17),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          // 2. Floating Map Overlay: Truck Status Card (Top Left)
+          Positioned(
+            top: 14,
+            left: 14,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A).withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF334155)),
+                boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8)],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0284C7).withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(Icons.local_shipping, color: Color(0xFF38BDF8), size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            truckPlate,
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w900, fontFamily: 'monospace'),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: withinGeofence ? const Color(0xFF064E3B) : const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(color: withinGeofence ? const Color(0xFF10B981) : const Color(0xFF475569)),
+                            ),
+                            child: Text(
+                              withinGeofence ? 'IN GEOFENCE' : '${speed.toStringAsFixed(0)} KM/H',
+                              style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: withinGeofence ? const Color(0xFF6EE7B7) : const Color(0xFF94A3B8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'ETA: ${info['expected_arrival_time'] ?? "10:15 AM"} • Dist: ${info['distance_remaining_km'] ?? "8.4"} km',
+                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
 
-        // Map Float Overlay: Truck Quick Info
-        Positioned(
-          top: 14,
-          left: 14,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.9),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFF334155)),
+          // 3. Floating Officer Movement Authorization Badge (Top Center)
+          Positioned(
+            top: 14,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: mvtStatus == 'APPROVED'
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF064E3B).withValues(alpha: 0.95),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF10B981)),
+                        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6)],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.verified, color: Color(0xFF6EE7B7), size: 14),
+                          const SizedBox(width: 6),
+                          Text(
+                            'MOVEMENT APPROVED • TOKEN: ${mvtToken ?? "GRANTED"}',
+                            style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                          ),
+                        ],
+                      ),
+                    )
+                  : (canApprove
+                      ? InkWell(
+                          onTap: () => _showMovementApprovalDialog(context, info),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFB45309).withValues(alpha: 0.95),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFFBBF24)),
+                              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6)],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.gavel, color: Colors.white, size: 13),
+                                SizedBox(width: 6),
+                                Text(
+                                  'OFFICER APPROVAL REQUIRED • CLICK TO CLEAR',
+                                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink()),
             ),
-            child: Row(
+          ),
+
+          // 4. Floating Map Navigation & Recenter Controls (Top Right)
+          Positioned(
+            top: 14,
+            right: 14,
+            child: Column(
               children: [
-                const Text('🚚', style: TextStyle(fontSize: 14)),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(truckPlate, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
-                    Text('ETA: ${info['expected_arrival_time'] ?? "10:30 AM"} • Dist: ${info['distance_remaining_km'] ?? "8.4"} km',
-                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5)),
-                  ],
+                _buildMapFloatingButton(
+                  icon: Icons.my_location,
+                  tooltip: 'Recenter on Truck',
+                  onTap: () => _liveMapController.move(truckPoint, 14.5),
+                ),
+                const SizedBox(height: 6),
+                _buildMapFloatingButton(
+                  icon: Icons.storefront,
+                  tooltip: 'Recenter on Target FPS',
+                  onTap: () => _liveMapController.move(targetPoint, 15.0),
+                ),
+                const SizedBox(height: 6),
+                _buildMapFloatingButton(
+                  icon: Icons.fit_screen,
+                  tooltip: 'Fit Entire Route',
+                  onTap: () => _liveMapController.move(centerPoint, 12.0),
+                ),
+                const SizedBox(height: 6),
+                _buildMapFloatingButton(
+                  icon: Icons.add,
+                  tooltip: 'Zoom In',
+                  onTap: () => _liveMapController.move(_liveMapController.camera.center, _liveMapController.camera.zoom + 1),
+                ),
+                const SizedBox(height: 6),
+                _buildMapFloatingButton(
+                  icon: Icons.remove,
+                  tooltip: 'Zoom Out',
+                  onTap: () => _liveMapController.move(_liveMapController.camera.center, _liveMapController.camera.zoom - 1),
                 ),
               ],
             ),
           ),
-        ),
 
-        // Map Legend Bottom Left
-        Positioned(
-          bottom: 12,
-          left: 14,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: const Row(
-              children: [
-                Text('🏢 Godown   ', style: TextStyle(color: Colors.white70, fontSize: 9)),
-                Text('🚚 Truck   ', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 9)),
-                Text('🏪 Target FPS (250m)', style: TextStyle(color: Color(0xFF10B981), fontSize: 9)),
-              ],
+          // 5. Bottom Left Legend
+          Positioned(
+            bottom: 12,
+            left: 14,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A).withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              child: const Row(
+                children: [
+                  Text('🏢 Godown   ', style: TextStyle(color: Colors.white70, fontSize: 9.5)),
+                  Text('🚚 Carrier Truck   ', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 9.5)),
+                  Text('🏪 FPS Stores   ', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 9.5)),
+                  Text('🟢 250m Geofence', style: TextStyle(color: Color(0xFF10B981), fontSize: 9.5)),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+
+          // 6. Selected Stop Details Overlay Card
+          if (_selectedStopDetails != null)
+            Positioned(
+              bottom: 42,
+              left: 14,
+              right: 14,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A).withValues(alpha: 0.95),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFF38BDF8)),
+                  boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 6)],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.storefront, color: Color(0xFF38BDF8), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'STOP ${_selectedStopDetails!["sequence"] ?? ""}: ${_selectedStopDetails!["fps_name"] ?? destName} • Allocation: ${_selectedStopDetails!["quantity_kg"] ?? 0} kg (${_selectedStopDetails!["commodity"] ?? "Rice"})',
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => setState(() => _selectedStopDetails = null),
+                      child: const Icon(Icons.close, color: Colors.white70, size: 16),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
+
   }
+
 
   Widget _buildLiveTelemetryMetricsPanel(Map<String, dynamic> info) {
     final speed = info['speed_kmh'] != null ? '${info['speed_kmh']} km/h' : '0.0 km/h';
@@ -3573,233 +4517,4 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
   }
 }
 
-
-/// ---------------------------------------------------------------------------
-/// LIVE TRUCK ROUTE MAP CUSTOM PAINTER
-/// Renders authoritative GIS corridor, depot, checkpoints, target FPS geofence,
-/// and live moving truck GPS coordinates with speed & heading indicator.
-/// ---------------------------------------------------------------------------
-class _LiveTruckRouteMapPainter extends CustomPainter {
-  final double originLat;
-  final double originLon;
-  final String originName;
-  final double destLat;
-  final double destLon;
-  final String destName;
-  final double truckLat;
-  final double truckLon;
-  final String truckPlate;
-  final List<dynamic> routeStops;
-  final bool isDeviated;
-  final double speedKmh;
-  final double headingDeg;
-  final bool withinGeofence;
-  final String telemetryStatus;
-
-  _LiveTruckRouteMapPainter({
-    required this.originLat,
-    required this.originLon,
-    required this.originName,
-    required this.destLat,
-    required this.destLon,
-    required this.destName,
-    required this.truckLat,
-    required this.truckLon,
-    required this.truckPlate,
-    required this.routeStops,
-    required this.isDeviated,
-    required this.speedKmh,
-    required this.headingDeg,
-    required this.withinGeofence,
-    required this.telemetryStatus,
-  });
-
-  Offset _project(double lat, double lon, Rect bounds, double minLat, double maxLat, double minLon, double maxLon, {double padding = 48}) {
-    final rangeW = (maxLon - minLon).abs();
-    final rangeH = (maxLat - minLat).abs();
-    final scaleX = rangeW < 1e-6 ? 1.0 : (bounds.width - padding * 2) / rangeW;
-    final scaleY = rangeH < 1e-6 ? 1.0 : (bounds.height - padding * 2) / rangeH;
-    final x = bounds.left + padding + (lon - minLon) * scaleX;
-    final y = bounds.top + padding + (maxLat - lat) * scaleY; // Invert Y (North up)
-    return Offset(x, y);
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-
-    // 1. Dark GIS Background & Coordinate Grid
-    final bgPaint = Paint()..color = const Color(0xFF0B132B);
-    canvas.drawRect(rect, bgPaint);
-
-    final gridPaint = Paint()
-      ..color = const Color(0xFF1E293B).withValues(alpha: 0.6)
-      ..strokeWidth = 1.0;
-
-    const gridSpacing = 40.0;
-    for (double x = 0; x < size.width; x += gridSpacing) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (double y = 0; y < size.height; y += gridSpacing) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    // 2. Compute Geographic Bounding Box
-    double minLat = math.min(originLat, math.min(destLat, truckLat));
-    double maxLat = math.max(originLat, math.max(destLat, truckLat));
-    double minLon = math.min(originLon, math.min(destLon, truckLon));
-    double maxLon = math.max(originLon, math.max(destLon, truckLon));
-
-    for (final s in routeStops) {
-      if (s is Map && s['latitude'] != null && s['longitude'] != null) {
-        final slat = (s['latitude'] as num).toDouble();
-        final slon = (s['longitude'] as num).toDouble();
-        minLat = math.min(minLat, slat);
-        maxLat = math.max(maxLat, slat);
-        minLon = math.min(minLon, slon);
-        maxLon = math.max(maxLon, slon);
-      }
-    }
-
-    final latPad = (maxLat - minLat) * 0.22 + 0.005;
-    final lonPad = (maxLon - minLon) * 0.22 + 0.005;
-    minLat -= latPad; maxLat += latPad;
-    minLon -= lonPad; maxLon += lonPad;
-
-    // Projected Key Offsets
-    final depotPt = _project(originLat, originLon, rect, minLat, maxLat, minLon, maxLon);
-    final fpsPt = _project(destLat, destLon, rect, minLat, maxLat, minLon, maxLon);
-    final truckPt = _project(truckLat, truckLon, rect, minLat, maxLat, minLon, maxLon);
-
-    // Checkpoints
-    final stopPts = <Offset>[];
-    for (final s in routeStops) {
-      if (s is Map && s['latitude'] != null && s['longitude'] != null) {
-        stopPts.add(_project((s['latitude'] as num).toDouble(), (s['longitude'] as num).toDouble(), rect, minLat, maxLat, minLon, maxLon));
-      }
-    }
-
-    // 3. Draw Route Polyline
-    final plannedPoints = [depotPt, ...stopPts, fpsPt];
-
-    // Corridor Halo
-    final haloPaint = Paint()
-      ..color = const Color(0xFF0284C7).withValues(alpha: 0.20)
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-
-    final path = Path();
-    if (plannedPoints.isNotEmpty) {
-      path.moveTo(plannedPoints.first.dx, plannedPoints.first.dy);
-      for (int i = 1; i < plannedPoints.length; i++) {
-        path.lineTo(plannedPoints[i].dx, plannedPoints[i].dy);
-      }
-    }
-    canvas.drawPath(path, haloPaint);
-
-    // Planned Route Stroke
-    final routePaint = Paint()
-      ..color = const Color(0xFF0284C7)
-      ..strokeWidth = 3.5
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawPath(path, routePaint);
-
-    // Traveled Route Progress Line (Depot to Truck)
-    final progressPaint = Paint()
-      ..color = const Color(0xFF38BDF8)
-      ..strokeWidth = 4.0
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(depotPt, truckPt, progressPaint);
-
-    // Deviation Line if detected
-    if (isDeviated) {
-      final devPaint = Paint()
-        ..color = const Color(0xFFEF4444)
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke;
-      canvas.drawLine(depotPt, truckPt, devPaint);
-    }
-
-    // 4. Draw Intermediate Stop Pins
-    for (int i = 0; i < stopPts.length; i++) {
-      final pt = stopPts[i];
-      final stopBg = Paint()..color = const Color(0xFF1E293B);
-      canvas.drawCircle(pt, 10, stopBg);
-      final stopBorder = Paint()
-        ..color = const Color(0xFF64748B)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0;
-      canvas.drawCircle(pt, 10, stopBorder);
-    }
-
-    // 5. Draw Depot Node
-    final depotBg = Paint()..color = const Color(0xFF1E3A8A);
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: depotPt, width: 34, height: 24), const Radius.circular(5)), depotBg);
-    final depotBorder = Paint()..color = const Color(0xFF38BDF8)..style = PaintingStyle.stroke..strokeWidth = 1.5;
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: depotPt, width: 34, height: 24), const Radius.circular(5)), depotBorder);
-    _drawLabel(canvas, depotPt.translate(0, 18), 'DEPOT: Hebbal Central Godown', const Color(0xFF94A3B8));
-
-    // 6. Draw Target FPS Node & 250m Geofence Perimeter Circle
-    final geofencePaint = Paint()
-      ..color = const Color(0xFF10B981).withValues(alpha: withinGeofence ? 0.35 : 0.15)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(fpsPt, 34, geofencePaint);
-
-    final geofenceBorder = Paint()
-      ..color = const Color(0xFF10B981)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    canvas.drawCircle(fpsPt, 34, geofenceBorder);
-
-    final fpsMarkerBg = Paint()..color = const Color(0xFF047857);
-    canvas.drawCircle(fpsPt, 12, fpsMarkerBg);
-    final fpsMarkerBorder = Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 2.0;
-    canvas.drawCircle(fpsPt, 12, fpsMarkerBorder);
-    _drawLabel(canvas, fpsPt.translate(0, 24), '🏪 TARGET: $destName', const Color(0xFF6EE7B7));
-
-    // 7. Draw Live Truck Marker with Radar Pulsing Waves
-    final pulseColor = const Color(0xFF38BDF8).withValues(alpha: 0.25);
-    final pulsePaint = Paint()..color = pulseColor..style = PaintingStyle.fill;
-    canvas.drawCircle(truckPt, 28, pulsePaint);
-
-    final truckCircleBg = Paint()..color = const Color(0xFF0284C7);
-    canvas.drawCircle(truckPt, 15, truckCircleBg);
-    final truckCircleBorder = Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 2.5;
-    canvas.drawCircle(truckPt, 15, truckCircleBorder);
-
-    // Truck Plate Tag above marker
-    final plateBg = Paint()..color = const Color(0xFF0F172A);
-    final plateRect = RRect.fromRectAndRadius(Rect.fromCenter(center: truckPt.translate(0, -26), width: 95, height: 18), const Radius.circular(4));
-    canvas.drawRRect(plateRect, plateBg);
-    final plateBorder = Paint()..color = const Color(0xFF38BDF8)..style = PaintingStyle.stroke..strokeWidth = 1.0;
-    canvas.drawRRect(plateRect, plateBorder);
-
-    _drawLabel(canvas, truckPt.translate(0, -26), '🚚 $truckPlate', Colors.white, isBold: true, fontSize: 9.5);
-  }
-
-  void _drawLabel(Canvas canvas, Offset pos, String text, Color color, {bool isBold = false, double fontSize = 10.0}) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: color,
-          fontSize: fontSize,
-          fontWeight: isBold ? FontWeight.w900 : FontWeight.bold,
-          fontFamily: 'monospace',
-        ),
-      ),
-      textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, Offset(pos.dx - tp.width / 2, pos.dy - tp.height / 2));
-  }
-
-  @override
-  bool shouldRepaint(covariant _LiveTruckRouteMapPainter oldDelegate) => true;
-}
 
