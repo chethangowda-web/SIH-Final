@@ -1626,13 +1626,12 @@ def _migration_016_smart_grain_atm(cursor: sqlite3.Cursor) -> None:
 def get_or_create_household_members(db: sqlite3.Connection, card_id: str) -> List[Dict[str, Any]]:
     """
     Retrieve registered household members for a ration card.
-    If members have not yet been seeded for an arbitrary card in the dataset,
-    deterministically derives them from the beneficiary record and persists them.
+    Strictly prioritizes the exact card_id from the official master dataset before checking aliases.
     """
     cursor = db.cursor()
     clean_id = card_id.strip()
 
-    # Query existing members
+    # 1. Query existing members for clean_id directly
     cursor.execute("""
     SELECT id, beneficiary_card_id, member_id, name, relationship, age, gender, phone, aadhaar_last4, is_eligible
     FROM household_members
@@ -1643,49 +1642,62 @@ def get_or_create_household_members(db: sqlite3.Connection, card_id: str) -> Lis
     if rows:
         return [dict(r) for r in rows]
 
-    # Also check normalized alternative (e.g. BEN-KA-0001 <-> RC-KA-000001)
-    alt_id = None
-    if clean_id.startswith("BEN-KA-"):
-        try:
-            num_part = int(clean_id.replace("BEN-KA-", ""))
-            alt_id = f"RC-KA-{num_part:06d}"
-        except Exception:
-            pass
-    elif clean_id.startswith("RC-KA-"):
-        try:
-            num_part = int(clean_id.replace("RC-KA-", ""))
-            alt_id = f"BEN-KA-{num_part:04d}"
-        except Exception:
-            pass
-
-    if alt_id:
-        cursor.execute("""
-        SELECT id, beneficiary_card_id, member_id, name, relationship, age, gender, phone, aadhaar_last4, is_eligible
-        FROM household_members
-        WHERE beneficiary_card_id = ?
-        ORDER BY id ASC;
-        """, (alt_id,))
-        alt_rows = cursor.fetchall()
-        if alt_rows:
-            return [dict(r) for r in alt_rows]
-
-    # Find the beneficiary record in master table
+    # 2. Check if clean_id exists in beneficiaries table
     cursor.execute("""
     SELECT pseudonymous_beneficiary_id, name_for_demo, phone, members_count, scheme_type
     FROM beneficiaries
-    WHERE pseudonymous_beneficiary_id = ? OR pseudonymous_beneficiary_id = ?;
-    """, (clean_id, alt_id or clean_id))
+    WHERE pseudonymous_beneficiary_id = ?;
+    """, (clean_id,))
     ben = cursor.fetchone()
+
+    # 3. Only if clean_id is not found in beneficiaries, check alternative alias (e.g. BEN-KA-0001 <-> RC-KA-000001)
+    alt_id = None
+    if not ben:
+        if clean_id.startswith("BEN-KA-"):
+            try:
+                num_part = int(clean_id.replace("BEN-KA-", ""))
+                alt_id = f"RC-KA-{num_part:06d}"
+            except Exception:
+                pass
+        elif clean_id.startswith("RC-KA-"):
+            try:
+                num_part = int(clean_id.replace("RC-KA-", ""))
+                alt_id = f"BEN-KA-{num_part:04d}"
+            except Exception:
+                pass
+
+        if alt_id:
+            cursor.execute("""
+            SELECT id, beneficiary_card_id, member_id, name, relationship, age, gender, phone, aadhaar_last4, is_eligible
+            FROM household_members
+            WHERE beneficiary_card_id = ?
+            ORDER BY id ASC;
+            """, (alt_id,))
+            alt_rows = cursor.fetchall()
+            if alt_rows:
+                return [dict(r) for r in alt_rows]
+
+            cursor.execute("""
+            SELECT pseudonymous_beneficiary_id, name_for_demo, phone, members_count, scheme_type
+            FROM beneficiaries
+            WHERE pseudonymous_beneficiary_id = ?;
+            """, (alt_id,))
+            ben = cursor.fetchone()
+
     if not ben:
         return []
 
     target_card = ben["pseudonymous_beneficiary_id"]
-    head_name = ben["name_for_demo"] or "Beneficiary Head"
+    head_name = ben["name_for_demo"] or f"Beneficiary ({target_card})"
     head_phone = ben["phone"] if "phone" in ben.keys() and ben["phone"] else None
-    if not head_phone:
-        card_digits = ''.join(c for c in target_card if c.isdigit()) or "12345"
-        val = int(card_digits[-5:]) if len(card_digits) >= 5 else 10001
-        head_phone = f"+9198450{val:05d}"
+    if not head_phone or not str(head_phone).strip():
+        card_digits = ''.join(c for c in target_card if c.isdigit())
+        if card_digits:
+            val = int(card_digits)
+            head_phone = f"+9198450{val % 90000 + 10000:05d}"
+        else:
+            val = abs(hash(target_card)) % 90000 + 10000
+            head_phone = f"+9198450{val:05d}"
         cursor.execute("UPDATE beneficiaries SET phone = ? WHERE pseudonymous_beneficiary_id = ?;", (head_phone, target_card))
 
     members_count = int(ben["members_count"]) if ben["members_count"] and int(ben["members_count"]) > 0 else 2
@@ -1696,30 +1708,30 @@ def get_or_create_household_members(db: sqlite3.Connection, card_id: str) -> Lis
 
     created_members = []
     card_hash = abs(hash(target_card)) % 10000
+    head_gender = "F" if any(x in head_name for x in ["Devi", "Bhat", "Reddy", "Swathi", "Deepa", "Sunita", "Lakshmi", "Aditi", "Pooja"]) else "M"
+    last_name = head_name.split()[-1] if len(head_name.split()) > 1 else ""
 
     for i in range(members_count):
         m_id = f"M-{i+1:02d}"
         if i == 0:
             m_name = head_name
             m_rel = "Head of Household"
-            m_gender = "F" if any(x in head_name for x in ["Devi", "Bhat", "Reddy", "Swathi", "Deepa", "Sunita", "Lakshmi"]) else "M"
+            m_gender = head_gender
             m_age = 38
             m_phone = head_phone
             m_aadhaar = f"{(card_hash + 1000) % 10000:04d}"
         elif i == 1:
-            spouse_first = "Rajesh" if created_members[0]["gender"] == "F" else "Kavitha"
-            last_name = head_name.split()[-1] if len(head_name.split()) > 1 else "Kumar"
-            m_name = f"{spouse_first} {last_name}"
+            spouse_first = "Rajesh" if head_gender == "F" else "Kavitha"
+            m_name = f"{spouse_first} {last_name}".strip()
             m_rel = "Spouse"
-            m_gender = "M" if created_members[0]["gender"] == "F" else "F"
+            m_gender = "M" if head_gender == "F" else "F"
             m_age = 41
             clean_digits = ''.join(c for c in head_phone if c.isdigit())
-            num_base = int(clean_digits[-4:]) if len(clean_digits) >= 4 else 1234
-            m_phone = f"+9198451{(num_base + 500) % 90000 + 10000:05d}"
+            num_base = int(clean_digits[-5:]) if len(clean_digits) >= 5 else 12345
+            m_phone = f"+9198451{num_base:05d}"
             m_aadhaar = f"{(card_hash + 2000) % 10000:04d}"
         else:
             idx = (i - 2) % len(first_names)
-            last_name = head_name.split()[-1] if len(head_name.split()) > 1 else ""
             m_name = f"{first_names[idx]} {last_name}".strip()
             m_rel = relationships[min(i, len(relationships)-1)]
             m_gender = genders[min(i, len(genders)-1)]
@@ -1739,7 +1751,7 @@ def get_or_create_household_members(db: sqlite3.Connection, card_id: str) -> Lis
             "is_eligible": 1
         }
         cursor.execute("""
-        INSERT INTO household_members (
+        INSERT OR IGNORE INTO household_members (
             beneficiary_card_id, member_id, name, relationship, age, gender, phone, aadhaar_last4, is_eligible
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, (target_card, m_id, m_name, m_rel, m_age, m_gender, m_phone, m_aadhaar, 1))
@@ -1747,6 +1759,126 @@ def get_or_create_household_members(db: sqlite3.Connection, card_id: str) -> Lis
 
     db.commit()
     return created_members
+
+
+def populate_all_dataset_household_members(conn: Optional[sqlite3.Connection] = None) -> int:
+    """
+    Idempotently populates registered household members and phones for EVERY valid
+    beneficiary in the master dataset if not already present.
+    Ensures 100% data-driven coverage across all 10,000 households and demo beneficiaries.
+    """
+    should_close = False
+    if conn is None:
+        conn = get_db_connection()
+        should_close = True
+
+    cursor = conn.cursor()
+    cursor.execute("SELECT pseudonymous_beneficiary_id, name_for_demo, phone, members_count, scheme_type FROM beneficiaries;")
+    all_bens = [dict(r) for r in cursor.fetchall()]
+    if not all_bens:
+        if should_close:
+            conn.close()
+        return 0
+
+    cursor.execute("SELECT DISTINCT beneficiary_card_id FROM household_members;")
+    existing_cards = set(r[0] for r in cursor.fetchall())
+
+    relationships = ["Head of Household", "Spouse", "Son", "Daughter", "Parent", "Sibling", "Son", "Daughter"]
+    genders = ["F", "M", "M", "F", "F", "M", "M", "F"]
+    first_names = ["Ananya", "Rohan", "Kiran", "Divya", "Suresh", "Priya", "Rahul", "Deepa"]
+
+    new_members = []
+    phone_updates = []
+
+    for b in all_bens:
+        target_card = b["pseudonymous_beneficiary_id"]
+        if target_card in existing_cards:
+            continue
+
+        head_name = b["name_for_demo"] or f"Beneficiary ({target_card})"
+        head_phone = b["phone"]
+        
+        card_digits = ''.join(c for c in target_card if c.isdigit())
+        if card_digits:
+            val = int(card_digits)
+            default_phone = f"+9198450{val % 90000 + 10000:05d}"
+        else:
+            card_hash = abs(hash(target_card)) % 90000 + 10000
+            default_phone = f"+9198450{card_hash:05d}"
+
+        final_head_phone = head_phone if (head_phone and str(head_phone).strip()) else default_phone
+        if not head_phone or not str(head_phone).strip():
+            phone_updates.append((final_head_phone, target_card))
+
+        members_count = int(b["members_count"]) if b["members_count"] and int(b["members_count"]) > 0 else 2
+        card_hash = abs(hash(target_card)) % 10000
+        head_gender = "F" if any(x in head_name for x in ["Devi", "Bhat", "Reddy", "Swathi", "Deepa", "Sunita", "Lakshmi", "Aditi", "Pooja"]) else "M"
+        last_name = head_name.split()[-1] if len(head_name.split()) > 1 else ""
+
+        for i in range(members_count):
+            m_id = f"M-{i+1:02d}"
+            if i == 0:
+                m_name = head_name
+                m_rel = "Head of Household"
+                m_gender = head_gender
+                m_age = 38
+                m_phone = final_head_phone
+                m_aadhaar = f"{(card_hash + 1000) % 10000:04d}"
+            elif i == 1:
+                spouse_first = "Rajesh" if head_gender == "F" else "Kavitha"
+                m_name = f"{spouse_first} {last_name}".strip()
+                m_rel = "Spouse"
+                m_gender = "M" if head_gender == "F" else "F"
+                m_age = 41
+                clean_digits = ''.join(c for c in final_head_phone if c.isdigit())
+                num_base = int(clean_digits[-5:]) if len(clean_digits) >= 5 else 12345
+                m_phone = f"+9198451{num_base:05d}"
+                m_aadhaar = f"{(card_hash + 2000) % 10000:04d}"
+            else:
+                idx = (i - 2) % len(first_names)
+                m_name = f"{first_names[idx]} {last_name}".strip()
+                m_rel = relationships[min(i, len(relationships)-1)]
+                m_gender = genders[min(i, len(genders)-1)]
+                m_age = max(8, 35 - (i * 5))
+                m_phone = None
+                m_aadhaar = f"{(card_hash + (i + 1) * 1000) % 10000:04d}"
+
+            new_members.append((
+                target_card, m_id, m_name, m_rel, m_age, m_gender, m_phone, m_aadhaar, 1
+            ))
+
+    if new_members:
+        cursor.executemany("""
+        INSERT OR IGNORE INTO household_members (
+            beneficiary_card_id, member_id, name, relationship, age, gender, phone, aadhaar_last4, is_eligible
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, new_members)
+
+    if phone_updates:
+        cursor.executemany("""
+        UPDATE beneficiaries SET phone = ? WHERE pseudonymous_beneficiary_id = ?;
+        """, phone_updates)
+
+    # Sync any remaining beneficiaries whose phone is empty to their head of household's registered phone
+    cursor.execute("""
+    UPDATE beneficiaries
+    SET phone = (
+        SELECT phone FROM household_members 
+        WHERE household_members.beneficiary_card_id = beneficiaries.pseudonymous_beneficiary_id 
+          AND household_members.phone IS NOT NULL AND household_members.phone != ''
+        ORDER BY member_id ASC LIMIT 1
+    )
+    WHERE phone IS NULL OR phone = '';
+    """)
+
+    conn.commit()
+    count_created = len(new_members)
+
+    if should_close:
+        conn.close()
+
+    return count_created
+
 
 
 # Migration Registry
@@ -1913,6 +2045,12 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
             except Exception as s_err:
                 logger.warning(f"Auto seed all data failed: {s_err}")
     except Exception as e:
+        pass
+
+    # Ensure all 10,000 households have registered household members and phones populated
+    try:
+        populate_all_dataset_household_members(conn)
+    except Exception as hm_err:
         pass
 
     from app.services.planning_cycle_engine import planning_cycle_engine

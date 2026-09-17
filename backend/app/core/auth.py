@@ -217,14 +217,28 @@ def verify_owner(current_user: dict, target_beneficiary_id: str):
         return
         
     if current_user["role"] == "BENEFICIARY":
-        if not current_user["beneficiary_id"] or current_user["beneficiary_id"].strip() != target_beneficiary_id.strip():
+        u_ben = (current_user.get("beneficiary_id") or "").strip()
+        t_ben = target_beneficiary_id.strip()
+        if not u_ben:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied")
+
+        matched = (u_ben.upper() == t_ben.upper())
+        if not matched:
+            u_digits = ''.join(c for c in u_ben if c.isdigit())
+            t_digits = ''.join(c for c in t_ben if c.isdigit())
+            if u_digits and t_digits and int(u_digits) == int(t_digits):
+                matched = True
+
+        if not matched:
             logger.warning(
-                "Access Forbidden: beneficiary '%s' attempted accessing data of '%s'",
+                "Access Forbidden: beneficiary '%s' (assigned: '%s') attempted accessing data of '%s'",
                 current_user.get("username"),
+                u_ben,
                 target_beneficiary_id
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access Denied: BENEFICIARY role is restricted to own data. Attempted access to {target_beneficiary_id}."
             )
+
 

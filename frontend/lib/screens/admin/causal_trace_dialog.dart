@@ -42,6 +42,9 @@ class _CausalTraceDialogState extends State<CausalTraceDialog> {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
     _selectedFpsId = widget.initialFpsId;
+    if (!_fpsList.any((fps) => fps['id'] == _selectedFpsId)) {
+      _fpsList.insert(0, {'id': _selectedFpsId, 'name': _selectedFpsId});
+    }
     _loadCausalTrace();
   }
 

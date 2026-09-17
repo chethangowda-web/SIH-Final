@@ -158,6 +158,13 @@ def seed_beneficiaries(cursor):
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     """, records)
+
+    try:
+        from app.core.database import populate_all_dataset_household_members
+        populate_all_dataset_household_members(cursor.connection)
+    except Exception:
+        pass
+
     return len(records)
 
 
@@ -755,6 +762,8 @@ def seed_all_data(recreate=False):
     hist_cnt = cursor.fetchone()[0]
     cursor.execute("SELECT COUNT(*) FROM intent;")
     intent_cnt = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM beneficiaries;")
+    ben_cnt = cursor.fetchone()[0]
 
     # Guarantee DEPOT-01 is always present in depots table
     cursor.execute("""
@@ -768,7 +777,9 @@ def seed_all_data(recreate=False):
     """)
     conn.commit()
 
-    if fps_cnt >= 600 and hist_cnt > 1000 and intent_cnt > 1000 and not recreate:
+    if fps_cnt >= 600 and ben_cnt >= 10000 and hist_cnt > 1000 and intent_cnt > 1000 and not recreate:
+        from app.core.database import populate_all_dataset_household_members
+        populate_all_dataset_household_members(conn)
         seed_dso_operational_baseline(cursor)
         conn.commit()
         conn.close()
@@ -777,11 +788,11 @@ def seed_all_data(recreate=False):
     random.seed(42)
 
     # 1. Load FPS from CSV
-    fps_count = seed_fps(cursor)
+    fps_count = seed_fps(cursor) if (fps_cnt < 600 or recreate) else fps_cnt
     print(f"  [1/9] Seeded {fps_count} Fair Price Shops from CSV")
 
     # 2. Load Beneficiaries from CSV
-    ben_count = seed_beneficiaries(cursor)
+    ben_count = seed_beneficiaries(cursor) if (ben_cnt < 10000 or recreate) else ben_cnt
     print(f"  [2/9] Seeded {ben_count} Beneficiaries from CSV")
 
     # 3. Load Historical Demand from CSV

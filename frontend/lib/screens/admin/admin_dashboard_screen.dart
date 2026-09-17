@@ -4225,29 +4225,35 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: AppConstants.cardBorder),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    Column(
-                      children: [
-                        const Text('Baseline Demand', style: TextStyle(fontSize: 9.5, color: AppConstants.textSecondary)),
-                        Text('${baseDemandMT.toStringAsFixed(1)} MT', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
-                      ],
-                    ),
-                    const Icon(Icons.arrow_forward_rounded, size: 14, color: AppConstants.textSecondary),
-                    Column(
-                      children: [
-                        const Text('Simulated Demand', style: TextStyle(fontSize: 9.5, color: AppConstants.accentBlue, fontWeight: FontWeight.w700)),
-                        Text('$simulatedDemandMT MT', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: AppConstants.accentBlue)),
-                      ],
-                    ),
-                    Column(
-                      children: [
-                        const Text('Extra Carrier Fleet', style: TextStyle(fontSize: 9.5, color: Color(0xFF15803D), fontWeight: FontWeight.w700)),
-                        Text('+$extraTrucks Trucks', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: Color(0xFF15803D))),
-                      ],
-                    ),
-                  ],
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Column(
+                        children: [
+                          const Text('Baseline Demand', style: TextStyle(fontSize: 9.5, color: AppConstants.textSecondary)),
+                          Text('${baseDemandMT.toStringAsFixed(1)} MT', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppConstants.primaryNavy)),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.arrow_forward_rounded, size: 14, color: AppConstants.textSecondary),
+                      const SizedBox(width: 8),
+                      Column(
+                        children: [
+                          const Text('Simulated Demand', style: TextStyle(fontSize: 9.5, color: AppConstants.accentBlue, fontWeight: FontWeight.w700)),
+                          Text('$simulatedDemandMT MT', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: AppConstants.accentBlue)),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        children: [
+                          const Text('Extra Carrier Fleet', style: TextStyle(fontSize: 9.5, color: Color(0xFF15803D), fontWeight: FontWeight.w700)),
+                          Text('+$extraTrucks Trucks', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: Color(0xFF15803D))),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -5540,7 +5546,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final maxVal = trendList.fold<double>(0.0, (max, item) => item.totalKg > max ? item.totalKg : max);
 
     return Container(
-      height: 110,
+      height: 120,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppConstants.backgroundLight,

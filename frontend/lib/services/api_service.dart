@@ -152,7 +152,7 @@ class ApiService {
   /// for a ration card.
   Future<Map<String, dynamic>> fetchHouseholdPhones(String cardId) async {
     final response = await client.get(
-      Uri.parse('/auth/citizen/household-phones/'),
+      Uri.parse('/auth/citizen/household-phones/${Uri.encodeComponent(cardId.trim())}'),
       headers: {'Accept': 'application/json'},
     ).timeout(AppConstants.apiTimeout);
 
@@ -160,6 +160,36 @@ class ApiService {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
       throw parseError(response, 'Failed to fetch household details');
+    }
+  }
+
+  /// Alias for fetchHouseholdPhones
+  Future<Map<String, dynamic>> getCitizenHouseholdPhones(String cardId) => fetchHouseholdPhones(cardId);
+
+  /// Search beneficiaries dynamically across all dataset records by Card ID, Name, District, or Phone.
+  Future<List<Map<String, dynamic>>> searchBeneficiaries(String query, {int limit = 15}) async {
+    final cleanQ = query.trim();
+    if (cleanQ.isEmpty) return [];
+    try {
+      final uri = Uri.parse('/auth/citizen/search').replace(
+        queryParameters: {
+          'q': cleanQ,
+          'limit': limit.toString(),
+        },
+      );
+      final response = await client.get(
+        uri,
+        headers: {'Accept': 'application/json'},
+      ).timeout(AppConstants.apiTimeout);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final results = data['results'] as List<dynamic>? ?? [];
+        return results.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
     }
   }
 

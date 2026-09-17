@@ -115,7 +115,7 @@ def get_beneficiary(
 
     from app.services.ai_request_advisor import ai_request_advisor
     try:
-        ent = ai_request_advisor.get_beneficiary_entitlement(db, row["pseudonymous_beneficiary_id"])
+        ent = ai_request_advisor.get_beneficiary_entitlement(db, row["pseudonymous_beneficiary_id"], "Rice")
         statutory_rice = ent["statutory_entitlement_rice_kg"]
         statutory_wheat = ent["statutory_entitlement_wheat_kg"]
         family_members = ent["family_members_count"]

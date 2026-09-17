@@ -97,8 +97,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   void _onCardIdChanged() {
     _cardDebounceTimer?.cancel();
     final cardId = _citizenCardController.text.trim();
-    if (cardId.length >= 6) {
-      _cardDebounceTimer = Timer(const Duration(milliseconds: 400), () {
+    if (cardId.length >= 3) {
+      _cardDebounceTimer = Timer(const Duration(milliseconds: 350), () {
         if (mounted) _fetchHouseholdMembers(cardId);
       });
     } else if (cardId.isEmpty && _householdPhones.isNotEmpty) {
@@ -123,7 +123,12 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         // If phone controller is empty and members exist, prefill with head/first member
         if (_citizenPhoneController.text.trim().isEmpty && phones.isNotEmpty) {
           final first = phones.first;
-          _citizenPhoneController.text = (first['demo_phone'] ?? first['phone_last4'] ?? '').toString();
+          final demoPhone = (first['demo_phone'] ?? '').toString();
+          final cleanPhone = demoPhone.replaceAll('+91', '').replaceAll(' ', '');
+          final last4 = (first['phone_last4'] ?? '').toString();
+          _citizenPhoneController.text = cleanPhone.isNotEmpty
+              ? cleanPhone
+              : (last4.isNotEmpty ? '98450${last4.padLeft(5, '0')}' : '');
           _selectedMemberName = first['name']?.toString();
         }
       });
@@ -603,16 +608,98 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     );
   }
 
-  void _quickFillCitizenCredentials() {
+  void _selectBeneficiary(String cardId, [String? memberName]) {
     setState(() {
-      _citizenCardController.text = 'RC-KA-000001';
-      _citizenPhoneController.text = '9845012345';
-      _selectedMemberName = 'Deepa Reddy';
+      _citizenCardController.text = cardId;
+      _citizenPhoneController.clear();
+      _selectedMemberName = memberName;
     });
-    _fetchHouseholdMembers('RC-KA-000001');
+    _fetchHouseholdMembers(cardId);
     if (_selectedTabIndex == 0 && VoiceAssistantService.instance.isVoiceAssistantMode) {
       VoiceAssistantService.instance.guideLoginStepPhone();
     }
+  }
+
+  void _showBeneficiarySearchDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _BeneficiarySearchModal(
+        apiService: _apiService,
+        onSelect: (cardId, name) {
+          _selectBeneficiary(cardId, name);
+        },
+      ),
+    );
+  }
+
+  Widget _buildQuickSelectChip({
+    required String cardId,
+    required String name,
+    required String scheme,
+    required String district,
+  }) {
+    final currentCard = _citizenCardController.text.trim();
+    final isSelected = currentCard == cardId;
+    final isAay = scheme == 'AAY';
+
+    return InkWell(
+      onTap: () => _selectBeneficiary(cardId, name),
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFF0FDF4) : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF15803D) : _slate200,
+            width: isSelected ? 1.5 : 1,
+          ),
+          boxShadow: isSelected
+              ? const [BoxShadow(color: Color(0x1F15803D), blurRadius: 4, offset: Offset(0, 2))]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: isAay ? const Color(0xFFFEF3C7) : const Color(0xFFDBEAFE),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                scheme,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: isAay ? const Color(0xFFB45309) : const Color(0xFF1D4ED8),
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              name,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                color: isSelected ? const Color(0xFF15803D) : _slate900,
+              ),
+            ),
+            const SizedBox(width: 3),
+            Text(
+              '($district)',
+              style: const TextStyle(
+                fontSize: 9.5,
+                color: _slate500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ================================================================
@@ -1000,38 +1087,102 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         ),
         const SizedBox(height: 12),
 
-        // One-tap Demo Autofill helper
-        InkWell(
-          onTap: _quickFillCitizenCredentials,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFBBF7D0)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+        // Beneficiary Fast Selector & Directory Search
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Icon(Icons.flash_on_rounded, size: 15, color: Color(0xFF15803D)),
-                const SizedBox(width: 6),
-                Flexible(
+                Expanded(
                   child: Text(
                     LanguageController.instance.currentLanguage == AppLanguage.hindi
-                        ? 'डेमो राशन कार्ड भरें (RC-KA-000001)'
+                        ? 'त्वरित लाभार्थी चयन:'
                         : LanguageController.instance.currentLanguage == AppLanguage.kannada
-                            ? 'ಡೆಮೊ ಕಾರ್ಡ್ ಭರ್ತಿ (RC-KA-000001)'
-                            : 'Quick Demo Fill (RC-KA-000001)',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
+                            ? 'ತ್ವರಿತ ಫಲಾನುಭವಿ ಆಯ್ಕೆ:'
+                            : 'Quick Beneficiary Selection:',
+                    style: TextStyle(
+                      fontSize: isSmall ? 10.5 : 11,
+                      fontWeight: FontWeight.w700,
+                      color: _slate700,
+                    ),
                     overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: _showBeneficiarySearchDialog,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.search_rounded, size: 14, color: _govGreen),
+                        const SizedBox(width: 4),
+                        Text(
+                          LanguageController.instance.currentLanguage == AppLanguage.hindi
+                              ? '10,000+ कार्ड खोजें'
+                              : LanguageController.instance.currentLanguage == AppLanguage.kannada
+                                  ? '10,000+ ಕಾರ್ಡ್ ಹುಡುಕಿ'
+                                  : 'Search 10,000+ Cards',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _govGreen,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 6),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildQuickSelectChip(
+                    cardId: 'RC-KA-000001',
+                    name: 'Deepa Reddy',
+                    scheme: 'PHH',
+                    district: 'Bagalkot',
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickSelectChip(
+                    cardId: 'RC-KA-000002',
+                    name: 'Swathi Joshi',
+                    scheme: 'PHH',
+                    district: 'Bagalkot',
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickSelectChip(
+                    cardId: 'RC-KA-000005',
+                    name: 'Manoj Sharma',
+                    scheme: 'AAY',
+                    district: 'Bagalkot',
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickSelectChip(
+                    cardId: 'BEN-KA-0002',
+                    name: 'Suresh S.',
+                    scheme: 'PHH',
+                    district: 'Bengaluru',
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickSelectChip(
+                    cardId: 'BEN-KA-0010',
+                    name: 'Vijay Kulkarni',
+                    scheme: 'AAY',
+                    district: 'Belagavi',
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
+        const SizedBox(height: 10),
 
         // Field 1: Ration Card Number
         Text(tr('login.ration_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
@@ -1040,12 +1191,22 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           controller: _citizenCardController,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'e.g. RC-KA-000001',
+            hintText: 'e.g. RC-KA-000001 or Beneficiary Name',
             prefixIcon: Icon(Icons.credit_card_rounded, size: isSmall ? 16 : 18, color: _slate500),
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.mic_rounded, color: Color(0xFF15803D), size: 20),
-              tooltip: 'Speak Ration Card Number',
-              onPressed: _listenForRationCard,
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.search_rounded, color: _slate500, size: 20),
+                  tooltip: 'Search Beneficiary Directory',
+                  onPressed: _showBeneficiarySearchDialog,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.mic_rounded, color: Color(0xFF15803D), size: 20),
+                  tooltip: 'Speak Ration Card Number',
+                  onPressed: _listenForRationCard,
+                ),
+              ],
             ),
             filled: true,
             fillColor: _slate50,
@@ -1277,8 +1438,10 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               final phoneLast4 = m['phone_last4']?.toString() ?? '';
               final isHead = m['is_head'] == true;
               final currentVal = _citizenPhoneController.text.trim();
+              final cleanDemo = demoPhone.replaceAll('+91', '').replaceAll(' ', '');
               final isSelected = (currentVal.isNotEmpty &&
                   (currentVal == demoPhone ||
+                      currentVal == cleanDemo ||
                       (phoneLast4.isNotEmpty && currentVal.endsWith(phoneLast4)) ||
                       (masked.isNotEmpty && currentVal.endsWith(masked.replaceAll('*', '')))));
 
@@ -1286,9 +1449,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                 onTap: () {
                   setState(() {
                     if (demoPhone.isNotEmpty) {
-                      _citizenPhoneController.text = demoPhone;
+                      _citizenPhoneController.text = cleanDemo;
                     } else if (phoneLast4.isNotEmpty) {
-                      _citizenPhoneController.text = '98450$phoneLast4';
+                      _citizenPhoneController.text = '98450${phoneLast4.padLeft(5, '0')}';
                     }
                     _selectedMemberName = name;
                   });
@@ -1593,6 +1756,242 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           style: TextStyle(fontSize: isSmall ? 9.5 : 10.5, color: _slate400),
         ),
       ],
+    );
+  }
+}
+
+class _BeneficiarySearchModal extends StatefulWidget {
+  final ApiService apiService;
+  final void Function(String cardId, String? name) onSelect;
+
+  const _BeneficiarySearchModal({
+    required this.apiService,
+    required this.onSelect,
+  });
+
+  @override
+  State<_BeneficiarySearchModal> createState() => _BeneficiarySearchModalState();
+}
+
+class _BeneficiarySearchModalState extends State<_BeneficiarySearchModal> {
+  final TextEditingController _queryController = TextEditingController();
+  List<Map<String, dynamic>> _results = [];
+  bool _isLoading = false;
+  Timer? _debounceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _performSearch('');
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _queryController.dispose();
+    super.dispose();
+  }
+
+  void _onQueryChanged(String query) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
+      _performSearch(query);
+    });
+  }
+
+  Future<void> _performSearch(String query) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await widget.apiService.searchBeneficiaries(query, limit: 25);
+      if (mounted) {
+        setState(() {
+          _results = res;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    return Container(
+      height: mediaQuery.size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 4),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFCBD5E1),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.people_alt_rounded, color: Color(0xFF15803D), size: 22),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        LanguageController.instance.currentLanguage == AppLanguage.hindi
+                            ? 'लाभार्थी खोज निर्देशिका'
+                            : LanguageController.instance.currentLanguage == AppLanguage.kannada
+                                ? 'ಫಲಾನುಭವಿಗಳ ಹುಡುಕಾಟ ಕೋಶ'
+                                : 'Beneficiary Directory Search',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF0F2942)),
+                      ),
+                      Text(
+                        LanguageController.instance.currentLanguage == AppLanguage.hindi
+                            ? 'राशन कार्ड, नाम या जिले से खोजें (10,000+ कार्ड)'
+                            : LanguageController.instance.currentLanguage == AppLanguage.kannada
+                                ? 'ರೇಷನ್ ಕಾರ್ಡ್, ಹೆಸರು ಅಥವಾ ಜಿಲ್ಲೆಯಿಂದ ಹುಡುಕಿ (10,000+ ಕಾರ್ಡ್‌ಗಳು)'
+                                : 'Search by card number, name, or district (10,000+ cards)',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+          // Search Input
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              controller: _queryController,
+              autofocus: true,
+              onChanged: _onQueryChanged,
+              decoration: InputDecoration(
+                hintText: LanguageController.instance.currentLanguage == AppLanguage.hindi
+                    ? 'उदा. RC-KA-000002, Deepa, Swathi, Bagalkot...'
+                    : LanguageController.instance.currentLanguage == AppLanguage.kannada
+                        ? 'ಉದಾ. RC-KA-000002, Deepa, Swathi, Bagalkot...'
+                        : 'Search by card ID, name, or district...',
+                prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF15803D)),
+                suffixIcon: _queryController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded),
+                        onPressed: () {
+                          _queryController.clear();
+                          _performSearch('');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFF15803D), width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+            ),
+          ),
+          if (_isLoading)
+            const LinearProgressIndicator(minHeight: 2, color: Color(0xFF15803D)),
+          // Results list
+          Expanded(
+            child: _results.isEmpty
+                ? Center(
+                    child: _isLoading
+                        ? const SizedBox()
+                        : const Text(
+                            'No matching beneficiaries found',
+                            style: TextStyle(color: Color(0xFF64748B), fontStyle: FontStyle.italic),
+                          ),
+                  )
+                : ListView.separated(
+                    itemCount: _results.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                    itemBuilder: (ctx, i) {
+                      final item = _results[i];
+                      final cardId = (item['pseudonymous_beneficiary_id'] ?? '').toString();
+                      final name = (item['name_for_demo'] ?? 'Beneficiary').toString();
+                      final scheme = (item['scheme_type'] ?? 'PHH').toString();
+                      final district = (item['district'] ?? '').toString();
+                      final taluk = (item['taluk'] ?? '').toString();
+                      final members = item['members_count']?.toString() ?? '1';
+                      final isAay = scheme == 'AAY';
+
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: isAay ? const Color(0xFFFEF3C7) : const Color(0xFFDCFCE7),
+                          child: Icon(
+                            isAay ? Icons.stars_rounded : Icons.person_rounded,
+                            color: isAay ? const Color(0xFFB45309) : const Color(0xFF15803D),
+                            size: 20,
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF0F2942)),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: isAay ? const Color(0xFFFEF3C7) : const Color(0xFFDBEAFE),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                scheme,
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: isAay ? const Color(0xFFB45309) : const Color(0xFF1D4ED8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Text(
+                          '$cardId • $district${taluk.isNotEmpty ? ' ($taluk)' : ''} • $members Members',
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF94A3B8)),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          widget.onSelect(cardId, name);
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
