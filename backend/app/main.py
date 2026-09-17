@@ -196,7 +196,49 @@ if WEB_BUILD_DIR.exists():
         if index_file.exists():
             from fastapi.responses import FileResponse
             return FileResponse(index_file)
-        return RedirectResponse(url="/")
+    @app.get("/jury-report", tags=["Jury Report"])
+    async def view_jury_report():
+        """Serves the complete SIH Final Technical Evaluation Report in printable HTML format."""
+        html_path = WEB_BUILD_DIR / "jury_report.html"
+        if not html_path.exists():
+            html_path = Path(__file__).resolve().parent.parent.parent / "docs" / "SIH_FINAL_EVALUATION_JURY_REPORT.html"
+        if html_path.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(html_path, media_type="text/html")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Jury report document not found.")
+
+    @app.get("/download-jury-report", tags=["Jury Report"])
+    async def download_jury_report():
+        """Directly downloads the SIH Final Technical Evaluation Report in printable HTML format."""
+        html_path = WEB_BUILD_DIR / "jury_report.html"
+        if not html_path.exists():
+            html_path = Path(__file__).resolve().parent.parent.parent / "docs" / "SIH_FINAL_EVALUATION_JURY_REPORT.html"
+        if html_path.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(
+                html_path,
+                media_type="text/html",
+                filename="SIH_PDS_DemandSync_Jury_Defense_Report.html"
+            )
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Jury report document not found.")
+
+    @app.get("/download-jury-report-md", tags=["Jury Report"])
+    async def download_jury_report_md():
+        """Directly downloads the SIH Final Technical Evaluation Report in Markdown format."""
+        md_path = WEB_BUILD_DIR / "SIH_FINAL_EVALUATION_JURY_REPORT.md"
+        if not md_path.exists():
+            md_path = Path(__file__).resolve().parent.parent.parent / "docs" / "SIH_FINAL_EVALUATION_JURY_REPORT.md"
+        if md_path.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(
+                md_path,
+                media_type="text/markdown",
+                filename="SIH_PDS_DemandSync_Jury_Defense_Report.md"
+            )
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Jury report markdown document not found.")
 
 @app.get("/", tags=["Root"])
 def root(request: Request):
