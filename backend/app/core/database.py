@@ -244,6 +244,23 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
     """)
 
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS fps_operational_sessions (
+        fps_id TEXT PRIMARY KEY,
+        operational_date DATE NOT NULL DEFAULT (DATE('now')),
+        active_step INTEGER NOT NULL DEFAULT 0,
+        workflow_status TEXT NOT NULL DEFAULT 'SHOP_CLOSED',
+        session_data TEXT NOT NULL DEFAULT '{}',
+        opened_at TIMESTAMP,
+        closed_at TIMESTAMP,
+        closure_id TEXT,
+        reconciliation_status TEXT NOT NULL DEFAULT 'PENDING',
+        reconciliation_exception_reason TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (fps_id) REFERENCES fps (fps_id)
+    );
+    """)
+
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS epos_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         transaction_id TEXT NOT NULL UNIQUE,

@@ -2879,6 +2879,82 @@ class ApiService {
     }
   }
 
+  /// FPS Owner: Fetch persistent daily operational session from backend
+  Future<Map<String, dynamic>> fetchFpsOperationalSession(String fpsId) async {
+    try {
+      final response = await client.get(
+        Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/operational-session'),
+        headers: {'Accept': 'application/json'},
+      ).timeout(AppConstants.apiTimeout);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return {
+      'fps_id': fpsId,
+      'active_step': 0,
+      'workflow_status': 'SHOP_CLOSED',
+      'session_data': {},
+      'opened_at': null,
+      'closed_at': null,
+      'closure_id': null,
+    };
+  }
+
+  /// FPS Owner: Persist active operational workflow step & state to backend
+  Future<Map<String, dynamic>> saveFpsOperationalSession({
+    required String fpsId,
+    int activeStep = 0,
+    String workflowStatus = 'SHOP_CLOSED',
+    Map<String, dynamic>? sessionData,
+    String? reconciliationExceptionReason,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/operational-session'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'active_step': activeStep,
+        'workflow_status': workflowStatus,
+        'session_data': sessionData,
+        'reconciliation_exception_reason': reconciliationExceptionReason,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to save operational session: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// FPS Owner: Verify beneficiary via Aadhaar Biometric or OTP
+  Future<Map<String, dynamic>> verifyBeneficiaryEpos({
+    required String fpsId,
+    required String beneficiaryId,
+    String verificationMode = 'AADHAAR_BIOMETRIC',
+    String? otpCode,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/epos/verify-beneficiary'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'fps_id': fpsId,
+        'beneficiary_id': beneficiaryId,
+        'verification_mode': verificationMode,
+        'otp_code': otpCode,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Beneficiary verification failed: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
   /// FPS Owner: Mark shop OPEN for today
   Future<Map<String, dynamic>> openFpsShop(String fpsId) async {
     final response = await client.post(
@@ -2895,10 +2971,13 @@ class ApiService {
   }
 
   /// FPS Owner: Mark shop CLOSED for today
-  Future<Map<String, dynamic>> closeFpsShop(String fpsId) async {
+  Future<Map<String, dynamic>> closeFpsShop(String fpsId, {String? exceptionReason}) async {
     final response = await client.post(
       Uri.parse('${AppConstants.apiBaseUrl}/fps/$fpsId/close-shop'),
-      headers: {'Accept': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        if (exceptionReason != null && exceptionReason.isNotEmpty) 'exception_reason': exceptionReason,
+      }),
     ).timeout(AppConstants.apiTimeout);
 
     if (response.statusCode >= 200 && response.statusCode < 300) {

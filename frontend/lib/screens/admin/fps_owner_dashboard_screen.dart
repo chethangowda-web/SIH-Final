@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../models/beneficiary_model.dart';
+import '../beneficiary/demo_login_screen.dart';
 
 class FpsOwnerDashboardScreen extends StatefulWidget {
   final ApiService? apiService;
@@ -18,18 +19,32 @@ class FpsOwnerDashboardScreen extends StatefulWidget {
 
 class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
   late final ApiService _apiService;
-  
-  // Persistent 8-Stage Workflow Bar Index (0 to 7)
+
+  bool _isLoading = true;
+  bool _isActionLoading = false;
+  bool _isDispensing = false;
+
+  // Active Navigation Tab: 0 = Operations Workflow, 1 = Stock, 2 = Beneficiary Service, 3 = e-PoS Transactions, 4 = Digital Register, 5 = Reconciliation, 6 = Reports, 7 = Settings
+  int _selectedNavTab = 0;
+
+  // 8-Stage Sequential Workflow Stepper (0 to 7)
   // 0: OPEN SHOP, 1: STOCK, 2: REPLENISHMENT, 3: SERVE BENEFICIARY, 4: e-PoS DISPENSE, 5: DIGITAL REGISTER, 6: RECONCILIATION, 7: CLOSE DAY
   int _activeStep = 0;
-  bool _isLoading = true;
 
-  // Selected FPS & Header State
+  // Selected FPS & Identity State
   String _selectedFpsId = 'FPS-KA-BAG-0001';
   String _selectedFpsName = 'Fair Price Shop 1 (Bagalkot)';
+  String _selectedFpsDistrict = 'Bagalkot';
   List<FpsShop> _fpsList = [];
-  final String _currentCycle = '2026-09';
-  String _shopStatusLabel = 'OPEN'; // OPEN, ATTENTION REQUIRED, CLOSED
+  final String _currentCycle = '2026-09 (Cycle 7)';
+
+  // Operational Session State from Backend
+  String _shopOperationalStatus = 'CLOSED'; // OPEN, CLOSED
+  String _workflowStatus = 'SHOP_CLOSED';
+  String? _openedAt;
+  String? _closedAt;
+  String? _closureId;
+  String? _reconciliationExceptionReason;
   Map<String, dynamic>? _dailyStatusData;
 
   // Current Stock State
@@ -43,40 +58,55 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
   List<Map<String, dynamic>> _consignments = [];
   bool _isLoadingConsignments = false;
 
-  // Serve Beneficiary & e-PoS Terminal State
+  // Stage 04 & 05: Serve Beneficiary & e-PoS State
   final TextEditingController _cardSearchController = TextEditingController(text: 'RC-KA-000001');
   bool _isSearchingBeneficiary = false;
   Map<String, dynamic>? _searchedBeneficiary;
   double _dispenseRiceKg = 0.0;
   double _dispenseWheatKg = 0.0;
-  bool _isBiometricVerified = false;
-  bool _isScanningBiometrics = false;
-  bool _isDispensing = false;
+
+  // Beneficiary Verification State
+  String _verificationMode = 'AADHAAR_BIOMETRIC'; // AADHAAR_BIOMETRIC, OTP
+  String _verificationStatus = 'VERIFICATION_REQUIRED'; // VERIFICATION_REQUIRED, VERIFYING, VERIFIED, FAILED
+  String? _verifiedTimestamp;
+  final TextEditingController _otpCodeController = TextEditingController(text: '123456');
+
+  // Stage 06: Last Digital Receipt State
+  Map<String, dynamic>? _lastReceiptData;
 
   // Digital Register State
   List<Map<String, dynamic>> _digitalRegister = [];
   final TextEditingController _registerSearchController = TextEditingController();
+  String _registerDateFilter = 'TODAY'; // TODAY, ALL
 
   // Reconciliation State
   Map<String, dynamic>? _reconciliationData;
+  final TextEditingController _exceptionReasonController = TextEditingController();
 
-  // Statutory Design Tokens
+  // Statutory Government Design Tokens
   static const Color _govNavy = Color(0xFF0F2942);
   static const Color _govGreen = Color(0xFF15803D);
-  static const Color _amber = Color(0xFFD97706);
+  static const Color _govGreenBg = Color(0xFFF0FDF4);
+  static const Color _govGreenBorder = Color(0xFF86EFAC);
+  static const Color _amberAlert = Color(0xFFD97706);
+  static const Color _amberBg = Color(0xFFFFFBEB);
+  static const Color _amberBorder = Color(0xFFFDE68A);
+  static const Color _dangerRed = Color(0xFFDC2626);
+  static const Color _dangerRedBg = Color(0xFFFEF2F2);
   static const Color _slate900 = Color(0xFF0F172A);
-  static const Color _slate800 = Color(0xFF1E293B);
   static const Color _slate700 = Color(0xFF334155);
   static const Color _slate500 = Color(0xFF64748B);
+  static const Color _slate400 = Color(0xFF94A3B8);
   static const Color _slate200 = Color(0xFFE2E8F0);
   static const Color _slate100 = Color(0xFFF1F5F9);
+  static const Color _slate50 = Color(0xFFF8FAFC);
 
   // Preset Sample Cards for One-Click Dataset Lookup
   final List<Map<String, String>> _sampleRationCards = [
-    {'cardId': 'RC-KA-000001', 'label': 'RC-KA-000001 (BPHH)'},
+    {'cardId': 'RC-KA-000001', 'label': 'RC-KA-000001 (PHH)'},
+    {'cardId': 'RC-KA-000004', 'label': 'RC-KA-000004 (PHH 4 Mem)'},
     {'cardId': 'RC-KA-000005', 'label': 'RC-KA-000005 (AAY)'},
-    {'cardId': 'RC-KA-000010', 'label': 'RC-KA-000010 (BPHH 8 Mem)'},
-    {'cardId': 'RC-KA-000012', 'label': 'RC-KA-000012 (ONORC Portable)'},
+    {'cardId': 'RC-KA-000010', 'label': 'RC-KA-000010 (8 Mem)'},
     {'cardId': 'BEN-KA-0001', 'label': 'BEN-KA-0001 (PHH)'},
   ];
 
@@ -105,15 +135,21 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
   void dispose() {
     _cardSearchController.dispose();
     _registerSearchController.dispose();
+    _otpCodeController.dispose();
+    _exceptionReasonController.dispose();
     super.dispose();
   }
+
+  // ================================================================
+  // 1. DATA LOADING & BACKEND SESSION PERSISTENCE
+  // ================================================================
 
   Future<void> _loadAllFpsData() async {
     setState(() => _isLoading = true);
     try {
       // 1. Fetch FPS Shops List
       try {
-        final list = await _apiService.fetchFpsList();
+        final list = await _apiService.fetchFPSList();
         if (list.isNotEmpty) {
           _fpsList = list;
           final current = _fpsList.firstWhere(
@@ -122,28 +158,94 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
           );
           _selectedFpsId = current.fpsId;
           _selectedFpsName = current.name;
+          _selectedFpsDistrict = current.district;
         }
       } catch (_) {}
 
-      // 2. Load Store Daily Operational Status
+      // 2. Fetch Persistent Operational Session from Backend
+      await _loadOperationalSession();
+
+      // 3. Load Store Daily Operational Status
       await _loadDailyStatus();
 
-      // 3. Load Store Inventory
+      // 4. Load Store Inventory
       await _loadInventory();
 
-      // 4. Load Replenishment Consignments
+      // 5. Load Replenishment Consignments
       await _loadConsignments();
 
-      // 5. Load Digital Register Transactions
+      // 6. Load Digital Register Transactions
       await _loadTransactions();
 
-      // 6. Load Reconciliation Data
+      // 7. Load Reconciliation Data
       await _loadReconciliation();
+
+      // 8. Load Stock Ledger
+      await _loadStockLedger();
 
       if (mounted) setState(() => _isLoading = false);
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Restore Persistent Daily Operational Session
+  Future<void> _loadOperationalSession() async {
+    try {
+      final sess = await _apiService.fetchFpsOperationalSession(_selectedFpsId);
+      if (mounted) {
+        setState(() {
+          _activeStep = (sess['active_step'] as num?)?.toInt() ?? 0;
+          _workflowStatus = sess['workflow_status'] ?? 'SHOP_CLOSED';
+          _openedAt = sess['opened_at'];
+          _closedAt = sess['closed_at'];
+          _closureId = sess['closure_id'];
+          _reconciliationExceptionReason = sess['reconciliation_exception_reason'];
+          if (_reconciliationExceptionReason != null && _reconciliationExceptionReason!.isNotEmpty) {
+            _exceptionReasonController.text = _reconciliationExceptionReason!;
+          }
+
+          if (_workflowStatus == 'DAY_CLOSED') {
+            _shopOperationalStatus = 'CLOSED';
+          } else if (_workflowStatus != 'SHOP_CLOSED') {
+            _shopOperationalStatus = 'OPEN';
+          } else {
+            _shopOperationalStatus = 'CLOSED';
+          }
+
+          final sData = (sess['session_data'] as Map<String, dynamic>?) ?? {};
+          if (sData['last_receipt'] != null) {
+            _lastReceiptData = Map<String, dynamic>.from(sData['last_receipt'] as Map);
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  /// Sync Current Workflow Step & State to Backend
+  Future<void> _syncOperationalSession(int step, {String? status}) async {
+    try {
+      final newStatus = status ?? _workflowStatus;
+      final sessionData = {
+        'searched_card_id': _cardSearchController.text.trim(),
+        'last_receipt': _lastReceiptData,
+      };
+
+      await _apiService.saveFpsOperationalSession(
+        fpsId: _selectedFpsId,
+        activeStep: step,
+        workflowStatus: newStatus,
+        sessionData: sessionData,
+        reconciliationExceptionReason: _exceptionReasonController.text.trim(),
+      );
+
+      if (mounted) {
+        setState(() {
+          _activeStep = step;
+          _workflowStatus = newStatus;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadDailyStatus() async {
@@ -152,7 +254,11 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
       if (mounted) {
         setState(() {
           _dailyStatusData = status;
-          _shopStatusLabel = status['shop_operational_status'] ?? 'OPEN';
+          if (status['shop_operational_status'] != null) {
+            _shopOperationalStatus = status['shop_operational_status'];
+          }
+          if (status['fps_name'] != null) _selectedFpsName = status['fps_name'];
+          if (status['district'] != null) _selectedFpsDistrict = status['district'];
         });
       }
     } catch (_) {}
@@ -205,6 +311,10 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
       if (mounted) {
         setState(() {
           _reconciliationData = rec;
+          if (rec['reconciliation_exception_reason'] != null) {
+            _reconciliationExceptionReason = rec['reconciliation_exception_reason'];
+            _exceptionReasonController.text = _reconciliationExceptionReason!;
+          }
         });
       }
     } catch (_) {}
@@ -221,6 +331,41 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     } catch (_) {}
   }
 
+  // ================================================================
+  // 2. OPERATIONAL ACTIONS (OPEN SHOP, REPLENISH, VERIFY, DISPENSE, CLOSE)
+  // ================================================================
+
+  /// Action: Start Today's Operations (Open Shop)
+  Future<void> _handleStartOperations() async {
+    setState(() => _isActionLoading = true);
+    try {
+      final res = await _apiService.openFpsShop(_selectedFpsId);
+      if (!mounted) return;
+      setState(() {
+        _shopOperationalStatus = 'OPEN';
+        _workflowStatus = 'SHOP_OPENED';
+        _openedAt = res['opened_at'] ?? DateTime.now().toString().substring(0, 19);
+        _activeStep = 1; // Transition to STOCK
+        _isActionLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fair Price Shop is OPEN for today\'s operational cycle.'),
+          backgroundColor: _govGreen,
+        ),
+      );
+      await _loadDailyStatus();
+      await _syncOperationalSession(1, status: 'STOCK_VERIFIED');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isActionLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to open shop: $e'), backgroundColor: _dangerRed),
+      );
+    }
+  }
+
+  /// Action: Confirm Consignment Receipt
   Future<void> _handleConfirmConsignment(String gatepassId) async {
     try {
       final res = await _apiService.confirmConsignmentReceipt(_selectedFpsId, gatepassId);
@@ -234,14 +379,16 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
       await _loadInventory();
       await _loadConsignments();
       await _loadReconciliation();
+      await _loadStockLedger();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Receipt Confirmation Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Receipt Confirmation Error: $e'), backgroundColor: _dangerRed),
       );
     }
   }
 
+  /// Action: Search Beneficiary Ration Card
   Future<void> _handleSearchBeneficiary({String? targetCardId}) async {
     final query = (targetCardId ?? _cardSearchController.text).trim();
     if (query.isEmpty) return;
@@ -253,627 +400,496 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     setState(() {
       _isSearchingBeneficiary = true;
       _searchedBeneficiary = null;
-      _isBiometricVerified = false;
+      _verificationStatus = 'VERIFICATION_REQUIRED';
+      _verifiedTimestamp = null;
     });
 
     try {
-      final el = await _apiService.checkEposEligibility(
+      final res = await _apiService.checkEposEligibility(
         fpsId: _selectedFpsId,
         beneficiaryId: query,
-        cycleId: _currentCycle,
       );
+
       if (!mounted) return;
-      final rKg = (el['statutory_rice_kg'] as num?)?.toDouble() ?? 0.0;
-      final wKg = (el['statutory_wheat_kg'] as num?)?.toDouble() ?? 0.0;
       setState(() {
-        _searchedBeneficiary = {
-          'cardId': el['beneficiary_id'] ?? query,
-          'name': el['name'] ?? 'Citizen Holder ($query)',
-          'members': el['family_members_count'] ?? 1,
-          'cardCategory': el['category_label'] ?? 'Priority Household (BPHH)',
-          'riceEntitlementKg': rKg,
-          'wheatEntitlementKg': wKg,
-          'alreadyCollected': el['already_collected'] == true,
-          'collectedAt': el['collected_at'],
-          'isPortability': el['is_portability'] == true,
-          'homeFps': el['registered_fps_name'] ?? el['registered_fps_id'] ?? 'Home FPS',
-        };
-        _dispenseRiceKg = rKg;
-        _dispenseWheatKg = wKg;
+        _searchedBeneficiary = res;
+        _dispenseRiceKg = (res['statutory_rice_kg'] as num?)?.toDouble() ?? 0.0;
+        _dispenseWheatKg = (res['statutory_wheat_kg'] as num?)?.toDouble() ?? 0.0;
+        _isSearchingBeneficiary = false;
       });
     } catch (e) {
       if (!mounted) return;
-      // Show explicit "Data unavailable" state if record does not exist
-      setState(() {
-        _searchedBeneficiary = {
-          'cardId': query,
-          'name': 'Data unavailable',
-          'members': 0,
-          'cardCategory': 'Data unavailable',
-          'riceEntitlementKg': 0.0,
-          'wheatEntitlementKg': 0.0,
-          'alreadyCollected': false,
-          'isError': true,
-          'errorMessage': e.toString(),
-        };
-        _dispenseRiceKg = 0.0;
-        _dispenseWheatKg = 0.0;
-      });
-    } finally {
-      if (mounted) setState(() => _isSearchingBeneficiary = false);
+      setState(() => _isSearchingBeneficiary = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Beneficiary Lookup Error: $e'), backgroundColor: _dangerRed),
+      );
     }
   }
 
-  Future<void> _simulateBiometricScan() async {
-    setState(() => _isScanningBiometrics = true);
-    await Future.delayed(const Duration(milliseconds: 1000));
-    if (mounted) {
+  /// Action: Verify Beneficiary (Biometric or OTP)
+  Future<void> _handleVerifyBeneficiary() async {
+    if (_searchedBeneficiary == null) return;
+    final benId = _searchedBeneficiary!['beneficiary_id'] as String;
+
+    setState(() => _verificationStatus = 'VERIFYING');
+
+    try {
+      final res = await _apiService.verifyBeneficiaryEpos(
+        fpsId: _selectedFpsId,
+        beneficiaryId: benId,
+        verificationMode: _verificationMode,
+        otpCode: _verificationMode == 'OTP' ? _otpCodeController.text.trim() : null,
+      );
+
+      if (!mounted) return;
       setState(() {
-        _isScanningBiometrics = false;
-        _isBiometricVerified = true;
+        _verificationStatus = 'VERIFIED';
+        _verifiedTimestamp = res['verified_at'] ?? DateTime.now().toString().substring(0, 19);
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Identity Verified: Beneficiary identity authorized via $_verificationMode.'),
+          backgroundColor: _govGreen,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _verificationStatus = 'FAILED');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Verification Failed: $e'), backgroundColor: _dangerRed),
+      );
     }
   }
 
+  /// Action: Atomic e-PoS Dispensation
   Future<void> _handleDispenseRation() async {
-    if (_searchedBeneficiary == null || _searchedBeneficiary!['isError'] == true) return;
-    final cardId = _searchedBeneficiary!['cardId'] as String;
+    if (_searchedBeneficiary == null) return;
+    if (_verificationStatus != 'VERIFIED') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Beneficiary must be verified before biometric ration dispensing.'),
+          backgroundColor: _amberAlert,
+        ),
+      );
+      return;
+    }
+
+    if (_shopOperationalStatus == 'CLOSED') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot dispense ration: Fair Price Shop operations are CLOSED today.'),
+          backgroundColor: _dangerRed,
+        ),
+      );
+      return;
+    }
+
+    final benId = _searchedBeneficiary!['beneficiary_id'] as String;
 
     setState(() => _isDispensing = true);
     try {
       final res = await _apiService.dispenseEposRation(
         fpsId: _selectedFpsId,
-        beneficiaryId: cardId,
+        beneficiaryId: benId,
         riceKg: _dispenseRiceKg,
         wheatKg: _dispenseWheatKg,
-        authMode: 'AADHAAR_BIOMETRIC_FINGERPRINT',
-        cycleId: _currentCycle,
+        authMode: _verificationMode,
       );
 
       if (!mounted) return;
+
       setState(() {
+        _lastReceiptData = {
+          'transaction_id': res['transaction_id'],
+          'beneficiary_id': benId,
+          'beneficiary_name': _searchedBeneficiary!['name'] ?? 'Beneficiary',
+          'card_type': _searchedBeneficiary!['card_type'] ?? 'PHH',
+          'fps_id': _selectedFpsId,
+          'cycle_id': res['cycle_id'] ?? '2026-09',
+          'rice_kg': _dispenseRiceKg,
+          'wheat_kg': _dispenseWheatKg,
+          'timestamp': res['receipt_confirmed_at'] ?? DateTime.now().toString().substring(0, 19),
+          'auth_mode': _verificationMode,
+          'status': 'DISPENSED / COMPLETED',
+        };
         _isDispensing = false;
-        _searchedBeneficiary!['alreadyCollected'] = true;
+        _activeStep = 5; // Transition to Digital Register / Receipt
       });
 
-      // Reload persistent states
       await _loadInventory();
       await _loadTransactions();
-      await _loadDailyStatus();
       await _loadReconciliation();
+      await _loadStockLedger();
+      await _syncOperationalSession(5, status: 'REGISTER_UPDATED');
 
-      final txId = res['transaction_id'] ?? 'TX-EPOS-OK';
-      _showReceiptDialog(txId: txId, cardId: cardId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('e-PoS Transaction ${res['transaction_id']} successfully completed & sealed!'),
+          backgroundColor: _govGreen,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isDispensing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('e-PoS Dispensation Error: $e'),
-          backgroundColor: Colors.red.shade700,
-        ),
+        SnackBar(content: Text('Dispensation Error: $e'), backgroundColor: _dangerRed),
       );
     }
   }
 
-  void _showReceiptDialog({required String txId, required String cardId}) {
-    showDialog(
+  /// Action: Close Today's Operations
+  Future<void> _handleCloseShop() async {
+    // 1. Confirm dialog
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.verified_rounded, color: _govGreen, size: 28),
-            SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Official e-PoS Transaction Receipt', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text('Issued under NFSA 2013 & PDS Control Order', style: TextStyle(fontSize: 11, color: _slate500)),
-                ],
-              ),
-            ),
+            Icon(Icons.gavel_rounded, color: _govNavy, size: 22),
+            SizedBox(width: 8),
+            Text('Close Today\'s FPS Operations', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _govNavy)),
           ],
         ),
-        content: Container(
-          width: 440,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _slate200),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
-                child: Column(
-                  children: [
-                    const Text('DEPARTMENT OF FOOD & CIVIL SUPPLIES', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: _govNavy, letterSpacing: 0.5)),
-                    Text('FPS Terminal: $_selectedFpsId • $_selectedFpsName', style: const TextStyle(fontSize: 10, color: _slate500)),
-                    const Divider(height: 14),
-                    _buildReceiptLine('Transaction Ref:', txId, isBold: true),
-                    _buildReceiptLine('Ration Card ID:', cardId),
-                    _buildReceiptLine('Citizen Name:', _searchedBeneficiary?['name'] ?? 'Citizen Holder'),
-                    _buildReceiptLine('Card Category:', _searchedBeneficiary?['cardCategory'] ?? 'Priority Household'),
-                    _buildReceiptLine('Auth Mechanism:', 'Aadhaar Biometric (Match Score 98.6%)'),
-                    const Divider(height: 14),
-                    _buildReceiptLine('Fortified Rice Issued:', '${_dispenseRiceKg.toStringAsFixed(1)} kg', valueColor: _govGreen),
-                    _buildReceiptLine('Whole Wheat Issued:', '${_dispenseWheatKg.toStringAsFixed(1)} kg', valueColor: _amber),
-                    const Divider(height: 14),
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Total Charge:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        Text('₹0.00 (NFSA 100% Free)', style: TextStyle(fontWeight: FontWeight.w800, color: _govGreen, fontSize: 13)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.lock_rounded, size: 12, color: _govGreen),
-                  SizedBox(width: 4),
-                  Text('Immutable Digital Register Audit Record Sealed', style: TextStyle(fontSize: 10.5, color: _govGreen, fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ],
-          ),
+        content: const Text(
+          'Are you sure you want to close today\'s FPS operations?\n\n'
+          'After closure, today\'s operational records will become read-only according to system rules.',
+          style: TextStyle(fontSize: 12.5, color: _slate700),
         ),
         actions: [
-          OutlinedButton.icon(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Digital receipt rendered. Printed thermal receipt generated.')),
-              );
-            },
-            icon: const Icon(Icons.print_rounded, size: 16),
-            label: const Text('Print Receipt'),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('CANCEL', style: TextStyle(color: _slate500, fontWeight: FontWeight.bold)),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
-            child: const Text('Done'),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.lock_rounded, size: 16),
+            label: const Text('CONFIRM & CLOSE DAY', style: TextStyle(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: _dangerRed, foregroundColor: Colors.white),
           ),
         ],
       ),
     );
-  }
 
-  Widget _buildReceiptLine(String label, String val, {bool isBold = false, Color? valueColor}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: _slate500)),
-          Text(val, style: TextStyle(fontSize: 11, fontWeight: isBold ? FontWeight.w800 : FontWeight.w600, color: valueColor ?? _slate900)),
-        ],
-      ),
-    );
-  }
+    if (confirmed != true) return;
 
-  void _showStockLedgerDialog() async {
-    await _loadStockLedger();
-    if (!mounted) return;
+    setState(() => _isActionLoading = true);
+    try {
+      final res = await _apiService.closeFpsShop(
+        _selectedFpsId,
+        exceptionReason: _exceptionReasonController.text.trim(),
+      );
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.menu_book_rounded, color: _govNavy, size: 24),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Stock Ledger Audit Trace — $_selectedFpsId', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                  const Text('Opening Stock + Receipts - Dispensed = Closing Available Stock', style: TextStyle(fontSize: 11, color: _slate500)),
-                ],
-              ),
-            ),
-          ],
+      if (!mounted) return;
+      setState(() {
+        _shopOperationalStatus = 'CLOSED';
+        _workflowStatus = 'DAY_CLOSED';
+        _closedAt = res['closed_at'] ?? DateTime.now().toString().substring(0, 19);
+        _closureId = res['closure_id'] ?? 'CLS-CLOSED';
+        _activeStep = 7;
+        _isActionLoading = false;
+      });
+
+      await _loadDailyStatus();
+      await _loadReconciliation();
+      await _syncOperationalSession(7, status: 'DAY_CLOSED');
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Day closed successfully! Closure ID: ${_closureId ?? ""}'),
+          backgroundColor: _govGreen,
         ),
-        content: SizedBox(
-          width: 680,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Formula Breakdown Container
-                if (_stockLedgerData != null && _stockLedgerData!['summary'] != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: _slate100, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
-                    child: Column(
-                      children: [
-                        _buildLedgerSummaryRow('Fortified Rice', _stockLedgerData!['summary']['Rice']),
-                        const Divider(height: 12),
-                        _buildLedgerSummaryRow('Whole Wheat', _stockLedgerData!['summary']['Wheat']),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                const Text('Chronological Stock Movement Log', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _slate900)),
-                const SizedBox(height: 8),
-
-                if (_stockLedgerData == null || (_stockLedgerData!['movements'] as List).isEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Center(child: Text('No movement logs recorded yet for active cycle.', style: TextStyle(fontSize: 12, color: _slate500))),
-                  ),
-                ] else ...[
-                  Container(
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: (_stockLedgerData!['movements'] as List).length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, idx) {
-                        final item = _stockLedgerData!['movements'][idx];
-                        return ListTile(
-                          dense: true,
-                          leading: const CircleAvatar(radius: 12, backgroundColor: Color(0xFFEFF6FF), child: Icon(Icons.swap_vert_rounded, size: 14, color: _govNavy)),
-                          title: Text('${item['transaction_type']} • ${item['quantity_summary']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                          subtitle: Text('Ref: ${item['reference_id']} • Actor: ${item['actor']} • Time: ${item['timestamp']}', style: const TextStyle(fontSize: 10.5, color: _slate500)),
-                          trailing: Text(item['balance_after'], style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: _govGreen)),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
-            child: const Text('Close Ledger'),
-          ),
-        ],
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isActionLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Day Closure Failed: $e'), backgroundColor: _dangerRed),
+      );
+    }
   }
 
-  Widget _buildLedgerSummaryRow(String title, Map<String, dynamic> summary) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-        Text(
-          'Opening: ${summary['opening_stock_kg']}kg  +  Received: ${summary['received_stock_kg']}kg  -  Dispensed: ${summary['dispensed_stock_kg']}kg  =  Available: ${summary['closing_stock_kg']}kg',
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _govNavy),
-        ),
-      ],
-    );
+  void _handleResetForNextBeneficiary() {
+    setState(() {
+      _searchedBeneficiary = null;
+      _verificationStatus = 'VERIFICATION_REQUIRED';
+      _verifiedTimestamp = null;
+      _dispenseRiceKg = 0.0;
+      _dispenseWheatKg = 0.0;
+      _activeStep = 3; // Return to SERVE BENEFICIARY
+    });
+    _syncOperationalSession(3, status: 'SERVING');
   }
+
+  void _handleLogout() {
+    AuthSession.instance.clear();
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const DemoLoginScreen()));
+  }
+
+  // ================================================================
+  // 3. MAIN BUILD WORKSPACE
+  // ================================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: _buildGovernmentHeader(),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+      backgroundColor: const Color(0xFFF1F5F9),
+      body: Column(
+        children: [
+          // TOP GOVERNMENT HEADER
+          _buildGovernmentHeader(),
+
+          // MAIN WORKSTATION BODY
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Persistent 8-Stage Operational Workflow Bar
-                _buildWorkflowNavigationBar(),
+                // LEFT NAVIGATION SIDEBAR
+                _buildLeftSidebar(),
 
-                // Stage Guidance Info Bar
-                _buildStageGuidanceBanner(),
-
-                // Main Workflow View Stack
+                // MAIN CONTENT VIEWPORT
                 Expanded(
-                  child: IndexedStack(
-                    index: _activeStep,
-                    children: [
-                      _buildOpenShopView(),
-                      _buildCurrentStockView(),
-                      _buildReplenishmentView(),
-                      _buildServeBeneficiaryView(),
-                      _buildEposScreenView(),
-                      _buildDigitalRegisterView(),
-                      _buildDailyReconciliationView(),
-                      _buildCloseDayView(),
-                    ],
-                  ),
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator(color: _govNavy))
+                      : _buildActiveContentViewport(),
                 ),
               ],
             ),
-    );
-  }
-
-  // =========================================================================
-  // GOVERNMENT FPS OPERATIONS HEADER
-  // =========================================================================
-  PreferredSizeWidget _buildGovernmentHeader() {
-    return AppBar(
-      backgroundColor: _govNavy,
-      foregroundColor: Colors.white,
-      elevation: 0,
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                'FPS Owner Operations Portal',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: const BoxDecoration(color: Color(0xFF1E3A8A), borderRadius: BorderRadius.all(Radius.circular(4))),
-                child: const Text('DEPARTMENT OF FOOD & CIVIL SUPPLIES', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.white)),
-              ),
-            ],
-          ),
-          Text(
-            'Fair Price Shop ID: $_selectedFpsId • $_selectedFpsName • Cycle: $_currentCycle',
-            style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.8)),
           ),
         ],
       ),
-      actions: [
-        // FPS Shop Switcher dropdown
-        if (_fpsList.isNotEmpty)
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.storefront_rounded),
-            tooltip: 'Switch Fair Price Shop',
-            onSelected: (fpsId) {
-              final selected = _fpsList.firstWhere((f) => f.fpsId == fpsId);
-              setState(() {
-                _selectedFpsId = selected.fpsId;
-                _selectedFpsName = selected.name;
-              });
-              _loadAllFpsData();
-            },
-            itemBuilder: (context) => _fpsList.take(20).map<PopupMenuEntry<String>>((fps) {
-              return PopupMenuItem<String>(
-                value: fps.fpsId,
-                child: Text('${fps.fpsId} - ${fps.name}', style: const TextStyle(fontSize: 12)),
-              );
-            }).toList(),
-          ),
-
-        // Operational Status Badge
-        Container(
-          margin: const EdgeInsets.only(right: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: _shopStatusLabel == 'OPEN' ? const Color(0xFF16A34A).withValues(alpha: 0.2) : Colors.amber.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _shopStatusLabel == 'OPEN' ? const Color(0xFF86EFAC) : Colors.amber),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.circle, size: 8, color: _shopStatusLabel == 'OPEN' ? const Color(0xFF4ADE80) : Colors.amber),
-              const SizedBox(width: 4),
-              Text('Shop $_shopStatusLabel', style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-
-        // e-PoS Gateway Online Status Badge
-        Container(
-          margin: const EdgeInsets.only(right: 12),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: const Color(0xFF16A34A).withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF86EFAC)),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.wifi_rounded, size: 12, color: Color(0xFF4ADE80)),
-              SizedBox(width: 4),
-              Text('e-PoS Online', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-
-        IconButton(
-          icon: const Icon(Icons.refresh_rounded, size: 20),
-          tooltip: 'Refresh Operations Data',
-          onPressed: _loadAllFpsData,
-        ),
-      ],
     );
   }
 
-  // =========================================================================
-  // PERSISTENT 8-STAGE WORKFLOW NAVIGATION BAR
-  // =========================================================================
-  Widget _buildWorkflowNavigationBar() {
+  // ================================================================
+  // 4. TOP GOVERNMENT HEADER
+  // ================================================================
+  Widget _buildGovernmentHeader() {
+    final isOpen = _shopOperationalStatus == 'OPEN';
+
     return Container(
+      height: 66,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: _slate200)),
+        color: _govNavy,
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: List.generate(8, (index) => _buildWorkflowStepButton(index)),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWorkflowStepButton(int index) {
-    final isSelected = _activeStep == index;
-    final isCompleted = index < _activeStep;
-    final stepNum = (index + 1).toString().padLeft(2, '0');
-    final title = _stepTitles[index];
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: InkWell(
-        onTap: () => setState(() => _activeStep = index),
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? _govNavy : (isCompleted ? const Color(0xFFF0FDF4) : _slate100),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: isSelected ? _govNavy : (isCompleted ? const Color(0xFF86EFAC) : _slate200),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSelected ? Colors.white : (isCompleted ? _govGreen : _slate500),
-                ),
-                child: Center(
-                  child: isCompleted && !isSelected
-                      ? const Icon(Icons.check, size: 12, color: Colors.white)
-                      : Text(
-                          stepNum,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? _govNavy : Colors.white,
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                  color: isSelected ? Colors.white : (isCompleted ? _govGreen : _slate700),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStageGuidanceBanner() {
-    final Map<int, String> instructions = {
-      0: 'Confirm daily opening checklist requirements and initialize store operational status.',
-      1: 'Review current store inventory levels and trace physical stock movements in the Stock Ledger.',
-      2: 'Inspect incoming grain consignments from central godown and confirm physical receipt.',
-      3: 'Scan or enter citizen ration card ID to inspect real entitlement quota and check eligibility.',
-      4: 'Perform Aadhaar identity verification and dispense authorized grain quota via e-PoS terminal.',
-      5: 'Inspect statutory Form 5A digital register logs of completed grain dispensations.',
-      6: 'Perform mathematical reconciliation comparing Expected Stock vs Recorded Physical Stock.',
-      7: 'Verify end-of-day checklist and close daily store operations.',
-    };
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: const Color(0xFFEFF6FF),
       child: Row(
         children: [
-          const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF1D4ED8)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(fontSize: 12, color: Color(0xFF1E40AF)),
+          // Emblem & Branding
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFD4AF37), width: 1.5),
+                ),
+                child: const Icon(Icons.storefront_rounded, color: _govNavy, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextSpan(text: 'STAGE ${(_activeStep + 1).toString().padLeft(2, '0')} (${_stepTitles[_activeStep]}): ', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  TextSpan(text: instructions[_activeStep] ?? ''),
+                  Row(
+                    children: [
+                      const Text(
+                        'PDS DemandSync',
+                        style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E3A5F),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFF3B82F6), width: 0.8),
+                        ),
+                        child: const Text('FPS OPERATIONS PORTAL', style: TextStyle(color: Color(0xFF93C5FD), fontSize: 8.5, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    '$_selectedFpsId • $_selectedFpsName • $_selectedFpsDistrict',
+                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
                 ],
               ),
+            ],
+          ),
+
+          const Spacer(),
+
+          // Active Cycle Tag
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E3A5F),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFF334155)),
             ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_month_rounded, size: 13, color: Color(0xFF60A5FA)),
+                const SizedBox(width: 5),
+                Text(_currentCycle, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 10),
+
+          // Shop Status Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+            decoration: BoxDecoration(
+              color: isOpen ? _govGreenBg : _dangerRedBg,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: isOpen ? _govGreenBorder : const Color(0xFFFCA5A5)),
+            ),
+            child: Row(
+              children: [
+                Icon(isOpen ? Icons.door_front_door_rounded : Icons.lock_outline_rounded, size: 12, color: isOpen ? _govGreen : _dangerRed),
+                const SizedBox(width: 4),
+                Text('SHOP: $_shopOperationalStatus', style: TextStyle(color: isOpen ? _govGreen : _dangerRed, fontSize: 10, fontWeight: FontWeight.w900)),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 10),
+
+          // e-PoS Gateway Status
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _govGreenBg,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: _govGreenBorder),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.point_of_sale_rounded, size: 12, color: _govGreen),
+                SizedBox(width: 4),
+                Text('e-PoS: ONLINE', style: TextStyle(color: _govGreen, fontSize: 10, fontWeight: FontWeight.w900)),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // Action Buttons
+          IconButton(
+            onPressed: _isLoading ? null : _loadAllFpsData,
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white70, size: 20),
+            tooltip: 'Refresh Ledger',
+          ),
+          IconButton(
+            onPressed: _showOperationsHelpDialog,
+            icon: const Icon(Icons.help_outline_rounded, color: Colors.white70, size: 20),
+            tooltip: 'Operational Guidelines',
+          ),
+          IconButton(
+            onPressed: _handleLogout,
+            icon: const Icon(Icons.logout_rounded, color: Color(0xFFF87171), size: 20),
+            tooltip: 'Logout',
           ),
         ],
       ),
     );
   }
 
-  // =========================================================================
-  // STEP 01: OPEN SHOP
-  // =========================================================================
-  Widget _buildOpenShopView() {
-    final checklist = _dailyStatusData?['checklist'] as Map<String, dynamic>?;
+  void _showOperationsHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.menu_book_rounded, color: _govNavy, size: 22),
+            SizedBox(width: 8),
+            Text('FPS Operations Statutory Handbook', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _govNavy)),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Fair Price Shop Daily Mandatory SOP:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('1. Verify inventory opening stock before starting transactions.'),
+              SizedBox(height: 4),
+              Text('2. Every ration delivery must be authenticated via e-PoS Aadhaar biometric or verified OTP.'),
+              SizedBox(height: 4),
+              Text('3. Dispensing is locked for beneficiaries who have already collected their monthly quota.'),
+              SizedBox(height: 4),
+              Text('4. Confirm received warehouse consignments to reconcile inventory.'),
+              SizedBox(height: 4),
+              Text('5. Perform daily end-of-day reconciliation before executing Close Day.'),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
+            child: const Text('UNDERSTOOD'),
+          ),
+        ],
+      ),
+    );
+  }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+  // ================================================================
+  // 5. LEFT NAVIGATION SIDEBAR
+  // ================================================================
+  Widget _buildLeftSidebar() {
+    return Container(
+      width: 220,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(right: BorderSide(color: _slate200, width: 1)),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 12),
+          _buildSidebarItem(0, Icons.assignment_turned_in_rounded, 'Today\'s Operations'),
+          _buildSidebarItem(1, Icons.inventory_2_rounded, 'Stock Control'),
+          _buildSidebarItem(2, Icons.person_search_rounded, 'Beneficiary Service'),
+          _buildSidebarItem(3, Icons.point_of_sale_rounded, 'e-PoS Transactions', count: _digitalRegister.length),
+          _buildSidebarItem(4, Icons.menu_book_rounded, 'Digital Register'),
+          _buildSidebarItem(5, Icons.balance_rounded, 'Reconciliation'),
+          _buildSidebarItem(6, Icons.analytics_outlined, 'Reports'),
+          _buildSidebarItem(7, Icons.tune_rounded, 'Settings'),
+
+          const Spacer(),
+
+          // Active Cycle Card
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _slate200)),
+            margin: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _slate50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _slate200),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.store_rounded, color: _govNavy, size: 22),
-                    SizedBox(width: 10),
-                    Text('Daily Store Opening Checklist', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _slate900)),
+                    Icon(Icons.calendar_month_rounded, size: 14, color: _govNavy),
+                    SizedBox(width: 6),
+                    Text('Active Cycle', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: _slate500)),
                   ],
                 ),
-                const SizedBox(height: 6),
-                const Text('All items use actual backend state. Verify store readiness before starting daily operations.', style: TextStyle(fontSize: 12, color: _slate500)),
-                const Divider(height: 20),
-
-                _buildChecklistItem('FPS Identity & License Verified', 'Authorized Shop ID: $_selectedFpsId • $_selectedFpsName', checklist?['fps_identity_verified'] == true),
-                _buildChecklistItem('Active Distribution Cycle Verified', 'Cycle ID: $_currentCycle', checklist?['active_cycle_verified'] == true),
-                _buildChecklistItem('Previous Day Reconciliation Complete', 'Zero unresolved stock discrepancies recorded', checklist?['previous_day_reconciliation'] == true),
-                _buildChecklistItem('Current Inventory Synchronized', 'Rice: ${_riceStockKg.toStringAsFixed(0)}kg • Wheat: ${_wheatStockKg.toStringAsFixed(0)}kg', checklist?['inventory_synchronized'] == true),
-                _buildChecklistItem('e-PoS Gateway Connectivity', 'Connected to Aadhaar Online Gateway (4G Active)', checklist?['epos_connectivity'] == true),
-                _buildChecklistItem('Digital Register Available', 'Form 5A Statutory Ledger Initialized', checklist?['digital_register_available'] == true),
-
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      try {
-                        await _apiService.openFpsShop(_selectedFpsId);
-                        if (!mounted) return;
-                        setState(() {
-                          _shopStatusLabel = 'OPEN';
-                          _activeStep = 1; // Proceed to Stock
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Fair Price Shop is officially OPEN for today\'s operations!'), backgroundColor: _govGreen),
-                        );
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error opening shop: $e'), backgroundColor: Colors.red),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.play_circle_fill_rounded, size: 18),
-                    label: const Text('START TODAY\'S OPERATIONS / OPEN SHOP', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    style: ElevatedButton.styleFrom(backgroundColor: _govGreen, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                  ),
-                ),
+                const SizedBox(height: 4),
+                Text(_currentCycle, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900, color: _govNavy)),
+                const SizedBox(height: 2),
+                Text('Depot: $_selectedFpsId', style: const TextStyle(fontSize: 9.5, color: _slate500)),
               ],
             ),
           ),
@@ -882,155 +898,599 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     );
   }
 
-  Widget _buildChecklistItem(String title, String subtitle, bool isPassed) {
+  Widget _buildSidebarItem(int tabIdx, IconData icon, String label, {int? count}) {
+    final isSelected = _selectedNavTab == tabIdx;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedNavTab = tabIdx;
+            // When user clicks sidebar items, map directly to relevant operational step if applicable
+            if (tabIdx == 0) _activeStep = _activeStep;
+            if (tabIdx == 1) _activeStep = 1;
+            if (tabIdx == 2) _activeStep = 3;
+            if (tabIdx == 3 || tabIdx == 4) _activeStep = 5;
+            if (tabIdx == 5) _activeStep = 6;
+          });
+        },
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: isSelected ? _govNavy : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 17, color: isSelected ? Colors.white : _slate700),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                    color: isSelected ? Colors.white : _slate700,
+                  ),
+                ),
+              ),
+              if (count != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.white24 : _slate100,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : _slate700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ================================================================
+  // 6. ACTIVE VIEWPORT ROUTING
+  // ================================================================
+  Widget _buildActiveContentViewport() {
+    switch (_selectedNavTab) {
+      case 0:
+        return _buildOperationsWorkspace();
+      case 1:
+        return _buildOperationsWorkspace(forcedStep: 1); // Stock
+      case 2:
+        return _buildOperationsWorkspace(forcedStep: 3); // Serve Beneficiary
+      case 3:
+      case 4:
+        return _buildOperationsWorkspace(forcedStep: 5); // Digital Register
+      case 5:
+        return _buildOperationsWorkspace(forcedStep: 6); // Reconciliation
+      case 6:
+        return _buildReportsView();
+      case 7:
+        return _buildSettingsView();
+      default:
+        return _buildOperationsWorkspace();
+    }
+  }
+
+  // ================================================================
+  // 7. OPERATIONS WORKSPACE WITH 8-STAGE WORKFLOW
+  // ================================================================
+  Widget _buildOperationsWorkspace({int? forcedStep}) {
+    final stepToRender = forcedStep ?? _activeStep;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 8-STAGE HORIZONTAL WORKFLOW STEPPER
+          _buildWorkflowStepper(stepToRender),
+
+          const SizedBox(height: 16),
+
+          // TWO-COLUMN WORKSTATION LAYOUT
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // LEFT MAIN COLUMN (Active Step Screen)
+              Expanded(
+                flex: 7,
+                child: _buildCurrentStepContent(stepToRender),
+              ),
+
+              const SizedBox(width: 16),
+
+              // RIGHT CONTEXTUAL OPERATIONAL PANEL
+              Expanded(
+                flex: 4,
+                child: _buildRightContextualPanel(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ================================================================
+  // 8. 8-STAGE WORKFLOW STEPPER
+  // ================================================================
+  Widget _buildWorkflowStepper(int currentStep) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _slate200),
+      ),
+      child: Row(
+        children: List.generate(_stepTitles.length, (idx) {
+          final isCompleted = _workflowStatus == 'DAY_CLOSED' || idx < currentStep;
+          final isCurrent = idx == currentStep;
+          final isLocked = idx > currentStep && _workflowStatus != 'DAY_CLOSED';
+          final isLast = idx == _stepTitles.length - 1;
+
+          Color textColor;
+          if (isCompleted) {
+            textColor = _govGreen;
+          } else if (isCurrent) {
+            textColor = _govNavy;
+          } else {
+            textColor = _slate400;
+          }
+
+          return Expanded(
+            child: InkWell(
+              onTap: () {
+                // Strictly sequential: allow clicking only completed steps or current step
+                if (idx <= _activeStep || isCompleted) {
+                  setState(() {
+                    _activeStep = idx;
+                  });
+                  _syncOperationalSession(idx);
+                }
+              },
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: isCompleted ? _govGreen : (isCurrent ? _govNavy : Colors.transparent),
+                                border: Border.all(
+                                  color: isCompleted ? _govGreen : (isCurrent ? _govNavy : _slate400),
+                                  width: 1.5,
+                                ),
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: isCompleted
+                                  ? const Icon(Icons.check_rounded, size: 12, color: Colors.white)
+                                  : (isLocked
+                                      ? const Icon(Icons.lock_outline_rounded, size: 10, color: _slate400)
+                                      : Text(
+                                          '${idx + 1}',
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: isCurrent ? Colors.white : _slate500,
+                                          ),
+                                        )),
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                _stepTitles[idx],
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w600,
+                                  color: textColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!isLast)
+                    Container(
+                      width: 8,
+                      height: 1.5,
+                      color: isCompleted ? _govGreen : _slate200,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  // ================================================================
+  // 9. DYNAMIC WORKFLOW STEP DISPATCHER
+  // ================================================================
+  Widget _buildCurrentStepContent(int step) {
+    switch (step) {
+      case 0:
+        return _buildStep01OpenShop();
+      case 1:
+        return _buildStep02VerifyStock();
+      case 2:
+        return _buildStep03Replenishment();
+      case 3:
+        return _buildStep04ServeBeneficiary();
+      case 4:
+        return _buildStep05EposDispense();
+      case 5:
+        return _buildStep06DigitalRegisterAndReceipt();
+      case 6:
+        return _buildStep07DailyReconciliation();
+      case 7:
+        return _buildStep08CloseDay();
+      default:
+        return _buildStep01OpenShop();
+    }
+  }
+
+  // ================================================================
+  // STAGE 01 — OPEN SHOP
+  // ================================================================
+  Widget _buildStep01OpenShop() {
+    final isOpen = _shopOperationalStatus == 'OPEN';
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _slate200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.door_front_door_rounded, color: _govNavy, size: 22),
+              const SizedBox(width: 8),
+              const Text('Stage 01: Daily Shop Opening Verification', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isOpen ? _govGreenBg : _amberBg,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: isOpen ? _govGreenBorder : _amberBorder),
+                ),
+                child: Text(
+                  isOpen ? 'OPEN' : 'OPENING CHECK PENDING',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: isOpen ? _govGreen : _amberAlert),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text('Verify readiness checklist before accepting beneficiary transactions for today\'s allocation cycle.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+          const SizedBox(height: 16),
+
+          // Readiness Checklist
+          _buildChecklistRow('FPS Identity Verification', '$_selectedFpsId — $_selectedFpsName', true),
+          _buildChecklistRow('Active Distribution Cycle', _currentCycle, true),
+          _buildChecklistRow('Current Operational Date', DateTime.now().toString().substring(0, 10), true),
+          _buildChecklistRow('Previous Day Closure & Reconciliation', _closedAt != null ? 'Reconciled (Closed at $_closedAt)' : 'Synchronized with Central Ledger', true),
+          _buildChecklistRow('Inventory Synchronization', 'Rice: ${_riceStockKg.toStringAsFixed(0)}kg • Wheat: ${_wheatStockKg.toStringAsFixed(0)}kg', true),
+          _buildChecklistRow('e-PoS Terminal Gateway Status', 'ONLINE • Visiontek 92 Terminal Linked', true),
+          _buildChecklistRow('Digital Register Availability', '${_digitalRegister.length} persistent transactions registered', true),
+
+          const SizedBox(height: 20),
+
+          // Action Area
+          if (!isOpen)
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: _isActionLoading ? null : _handleStartOperations,
+                icon: _isActionLoading
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('START TODAY\'S OPERATIONS', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _govNavy,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: _govGreenBg, borderRadius: BorderRadius.circular(8), border: Border.all(color: _govGreenBorder)),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified_rounded, color: _govGreen, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('SHOP IS OFFICIALLY OPEN', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: _govGreen)),
+                        Text('Opened at: ${_openedAt ?? "Today 08:00 AM"}. Terminal is authorized to dispense rations.', style: const TextStyle(fontSize: 10.5, color: _slate700)),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() => _activeStep = 1);
+                      _syncOperationalSession(1);
+                    },
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                    label: const Text('PROCEED TO STOCK →', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: _govGreen, foregroundColor: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChecklistRow(String title, String detail, bool verified) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: _slate50,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: _slate200),
+      ),
       child: Row(
         children: [
-          Icon(isPassed ? Icons.check_circle_rounded : Icons.warning_amber_rounded, size: 20, color: isPassed ? _govGreen : _amber),
-          const SizedBox(width: 12),
+          Icon(verified ? Icons.check_circle_rounded : Icons.pending_rounded, color: verified ? _govGreen : _amberAlert, size: 18),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _slate900)),
-                Text(subtitle, style: const TextStyle(fontSize: 11, color: _slate500)),
+                Text(title, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: _slate900)),
+                Text(detail, style: const TextStyle(fontSize: 10.5, color: _slate500)),
               ],
             ),
           ),
-          Text(isPassed ? 'VERIFIED ✓' : 'ATTENTION', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isPassed ? _govGreen : _amber)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+            decoration: BoxDecoration(color: _govGreenBg, borderRadius: BorderRadius.circular(4)),
+            child: const Text('VERIFIED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _govGreen)),
+          ),
         ],
       ),
     );
   }
 
-  // =========================================================================
-  // STEP 02: STOCK & INVENTORY
-  // =========================================================================
-  Widget _buildCurrentStockView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+  // ================================================================
+  // STAGE 02 — VERIFY STOCK
+  // ================================================================
+  Widget _buildStep02VerifyStock() {
+    final todayDispensedRice = (_dailyStatusData?['today_summary']?['rice_dispensed_today_kg'] as num?)?.toDouble() ?? 0.0;
+    final todayDispensedWheat = (_dailyStatusData?['today_summary']?['wheat_dispensed_today_kg'] as num?)?.toDouble() ?? 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _slate200),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          const Row(
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Current Store Inventory', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _slate900)),
-                  Text('Actual physical stock recorded in SQLite database', style: TextStyle(fontSize: 12, color: _slate500)),
-                ],
-              ),
-              ElevatedButton.icon(
+              Icon(Icons.inventory_2_rounded, color: _govNavy, size: 22),
+              SizedBox(width: 8),
+              Text('Stage 02: Physical & Digital Inventory Control', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text('Authoritative inventory balance by commodity recorded in the Central Supplies database.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+          const SizedBox(height: 16),
+
+          // Inventory Table
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: _slate200),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Table(
+              columnWidths: const {
+                0: FlexColumnWidth(2),
+                1: FlexColumnWidth(1.5),
+                2: FlexColumnWidth(1.5),
+                3: FlexColumnWidth(1.5),
+                4: FlexColumnWidth(1.5),
+              },
+              children: [
+                TableRow(
+                  decoration: const BoxDecoration(color: _slate50),
+                  children: ['COMMODITY', 'CURRENT STOCK', 'DISPENSED TODAY', 'AVAILABLE BALANCE', 'STATUS'].map((h) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      child: Text(h, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _slate700)),
+                    );
+                  }).toList(),
+                ),
+                _buildCommodityTableRow('Fortified Rice (NFSA)', '${_riceStockKg.toStringAsFixed(1)} kg', '${todayDispensedRice.toStringAsFixed(1)} kg', '${_riceStockKg.toStringAsFixed(1)} kg', _riceStockKg > 300 ? 'ADEQUATE' : 'LOW STOCK'),
+                _buildCommodityTableRow('Whole Wheat (NFSA)', '${_wheatStockKg.toStringAsFixed(1)} kg', '${todayDispensedWheat.toStringAsFixed(1)} kg', '${_wheatStockKg.toStringAsFixed(1)} kg', _wheatStockKg > 100 ? 'ADEQUATE' : 'LOW STOCK'),
+                _buildCommodityTableRow('Refined Sugar (Antyodaya)', '${_sugarStockKg.toStringAsFixed(1)} kg', '0.0 kg', '${_sugarStockKg.toStringAsFixed(1)} kg', 'AVAILABLE'),
+                _buildCommodityTableRow('Kerosene (Domestic)', '${_keroseneStockL.toStringAsFixed(1)} L', '0.0 L', '${_keroseneStockL.toStringAsFixed(1)} L', 'AVAILABLE'),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Actions
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton.icon(
                 onPressed: _showStockLedgerDialog,
-                icon: const Icon(Icons.menu_book_rounded, size: 16),
-                label: const Text('View Stock Ledger', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                icon: const Icon(Icons.menu_book_rounded, size: 14),
+                label: const Text('VIEW STOCK LEDGER', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(foregroundColor: _govNavy),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() => _activeStep = 2);
+                  _syncOperationalSession(2, status: 'REPLENISHMENT_CHECKED');
+                },
+                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                label: const Text('CONTINUE TO REPLENISHMENT →', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                 style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          LayoutBuilder(builder: (context, constraints) {
-            final isWide = constraints.maxWidth > 700;
-            return GridView.count(
-              crossAxisCount: isWide ? 4 : 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: isWide ? 2.0 : 1.6,
-              children: [
-                _buildCommodityStockCard('Fortified Rice', '${_riceStockKg.toStringAsFixed(1)} kg', _riceStockKg > 300 ? 'NORMAL' : 'LOW', 'NFSA ₹0.00/kg', Icons.rice_bowl, _govGreen, const Color(0xFFF0FDF4)),
-                _buildCommodityStockCard('Whole Wheat', '${_wheatStockKg.toStringAsFixed(1)} kg', _wheatStockKg > 100 ? 'NORMAL' : 'LOW', 'NFSA ₹0.00/kg', Icons.grain, _amber, const Color(0xFFFFFBEB)),
-                _buildCommodityStockCard('Refined Sugar', '${_sugarStockKg.toStringAsFixed(1)} kg', 'NORMAL', 'Subsidized ₹13.50/kg', Icons.cake_outlined, const Color(0xFF6B21A8), const Color(0xFFF3E8FF)),
-                _buildCommodityStockCard('Kerosene Fuel', '${_keroseneStockL.toStringAsFixed(1)} L', 'NORMAL', 'Subsidized ₹25.00/L', Icons.local_gas_station, const Color(0xFF1E3A8A), const Color(0xFFEFF6FF)),
-              ],
-            );
-          }),
         ],
       ),
     );
   }
 
-  Widget _buildCommodityStockCard(String title, String qty, String status, String subText, IconData icon, Color color, Color bg) {
+  TableRow _buildCommodityTableRow(String name, String current, String dispensed, String available, String status) {
+    final isLow = status.contains('LOW');
+    return TableRow(
+      children: [
+        Padding(padding: const EdgeInsets.all(10), child: Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _slate900))),
+        Padding(padding: const EdgeInsets.all(10), child: Text(current, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: _govNavy))),
+        Padding(padding: const EdgeInsets.all(10), child: Text(dispensed, style: const TextStyle(fontSize: 11, color: _slate700))),
+        Padding(padding: const EdgeInsets.all(10), child: Text(available, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: _govGreen))),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: isLow ? _amberBg : _govGreenBg,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(status, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isLow ? _amberAlert : _govGreen)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showStockLedgerDialog() {
+    final movements = (_stockLedgerData?['movements'] as List<dynamic>?) ?? [];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.menu_book_rounded, color: _govNavy, size: 20),
+            SizedBox(width: 8),
+            Text('Official FPS Stock Movement Ledger', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _govNavy)),
+          ],
+        ),
+        content: SizedBox(
+          width: 600,
+          child: movements.isEmpty
+              ? const Center(child: Text('No stock movements recorded yet.', style: TextStyle(fontSize: 12, color: _slate500)))
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: movements.length,
+                  separatorBuilder: (_, __) => const Divider(height: 12),
+                  itemBuilder: (context, idx) {
+                    final m = movements[idx];
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(m['transaction_type'].toString().contains('Receipt') ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                            size: 16, color: m['transaction_type'].toString().contains('Receipt') ? _govGreen : _govNavy),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${m['transaction_type']} • ${m['quantity_summary']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              Text('Ref: ${m['reference_id']} • Actor: ${m['actor']}', style: const TextStyle(fontSize: 10, color: _slate500)),
+                            ],
+                          ),
+                        ),
+                        Text(m['timestamp'].toString().substring(0, 16), style: const TextStyle(fontSize: 10, color: _slate400)),
+                      ],
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
+            child: const Text('CLOSE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ================================================================
+  // STAGE 03 — REPLENISHMENT
+  // ================================================================
+  Widget _buildStep03Replenishment() {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withValues(alpha: 0.3))),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _slate200),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
+          const Row(
             children: [
-              Icon(icon, color: color, size: 18),
-              const SizedBox(width: 6),
-              Expanded(child: Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color), overflow: TextOverflow.ellipsis)),
+              Icon(Icons.local_shipping_rounded, color: _govNavy, size: 22),
+              SizedBox(width: 8),
+              Text('Stage 03: Incoming Consignments & Stock Replenishment', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
             ],
           ),
           const SizedBox(height: 6),
-          Text(qty, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
-          const SizedBox(height: 2),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Status: $status', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
-              Text(subText, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: color.withValues(alpha: 0.8))),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+          const Text('Track incoming fleet dispatch manifests and acknowledge physical warehouse receipts.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+          const SizedBox(height: 16),
 
-  // =========================================================================
-  // STEP 03: REPLENISHMENT & CONSIGNMENTS
-  // =========================================================================
-  Widget _buildReplenishmentView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Incoming Consignment Replenishments', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _slate900)),
-                  Text('Track trucks & confirm physical grain receipts from Central Godown', style: TextStyle(fontSize: 12, color: _slate500)),
-                ],
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded, size: 20),
-                onPressed: _loadConsignments,
-                tooltip: 'Refresh Consignments',
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          if (_isLoadingConsignments) ...[
-            const Center(child: CircularProgressIndicator()),
-          ] else if (_consignments.isEmpty) ...[
+          if (_isLoadingConsignments)
+            const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: _govNavy)))
+          else if (_consignments.isEmpty)
             Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: _slate200)),
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
               child: const Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.local_shipping_outlined, size: 40, color: _slate500),
-                    SizedBox(height: 8),
-                    Text('No active consignments pending for this shop.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _slate700)),
-                    Text('Central Godown dispatch schedules will appear here automatically.', style: TextStyle(fontSize: 11, color: _slate500)),
-                  ],
-                ),
+                child: Text('No replenishment records available for current operational window.', style: TextStyle(fontSize: 12, color: _slate500)),
               ),
-            ),
-          ] else ...[
+            )
+          else
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -1038,237 +1498,289 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (context, idx) {
                 final c = _consignments[idx];
-                final gpId = c['gatepass_id'] ?? 'GP-2026-09-001';
-                final truckId = c['truck_id'] ?? 'TRK-KA-001';
                 final isReceived = c['status'] == 'RECEIVED';
-
                 return Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: _slate200)),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isReceived ? _slate50 : Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isReceived ? _slate200 : _govNavy),
+                  ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(color: isReceived ? const Color(0xFFF0FDF4) : const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(8)),
-                        child: Icon(Icons.local_shipping_rounded, color: isReceived ? _govGreen : _amber, size: 24),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: isReceived ? _slate200 : _govGreenBg, borderRadius: BorderRadius.circular(6)),
+                        child: Icon(Icons.local_shipping_rounded, color: isReceived ? _slate500 : _govGreen, size: 20),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Truck $truckId • Gatepass: $gpId', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _slate900)),
-                            Text(c['commodity_summary'] ?? '', style: const TextStyle(fontSize: 11.5, color: _slate700)),
-                            Text('Driver: ${c['driver_name'] ?? 'Ramesh Bhat'} (${c['driver_phone'] ?? '9845012345'})', style: const TextStyle(fontSize: 10.5, color: _slate500)),
+                            Text('Gatepass: ${c['gatepass_id']} • Truck: ${c['truck_id']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _govNavy)),
+                            Text('${c['commodity_summary']} (Total: ${c['quantity_kg']}kg)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _slate700)),
+                            Text('Driver: ${c['driver_name']} (${c['driver_phone']}) • Status: ${c['status']}', style: const TextStyle(fontSize: 10.5, color: _slate500)),
                           ],
                         ),
                       ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: isReceived ? const Color(0xFFF0FDF4) : const Color(0xFFFEF3C7),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: isReceived ? const Color(0xFF86EFAC) : const Color(0xFFFDE68A)),
-                            ),
-                            child: Text(c['status'] ?? 'IN_TRANSIT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isReceived ? _govGreen : _amber)),
-                          ),
-                          const SizedBox(height: 6),
-                          if (!isReceived)
-                            ElevatedButton.icon(
-                              onPressed: () => _handleConfirmConsignment(gpId),
-                              icon: const Icon(Icons.check_circle_outline, size: 14),
-                              label: const Text('Confirm Receipt', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                              style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-                            ),
-                        ],
-                      ),
+                      if (!isReceived)
+                        ElevatedButton.icon(
+                          onPressed: () => _handleConfirmConsignment(c['gatepass_id']),
+                          icon: const Icon(Icons.check_rounded, size: 14),
+                          label: const Text('CONFIRM RECEIPT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(backgroundColor: _govGreen, foregroundColor: Colors.white),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: _govGreenBg, borderRadius: BorderRadius.circular(4)),
+                          child: const Text('RECEIVED & STOCKED', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: _govGreen)),
+                        ),
                     ],
                   ),
                 );
               },
             ),
-          ],
+
+          const SizedBox(height: 20),
+
+          // Actions
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _activeStep = 1),
+                icon: const Icon(Icons.arrow_back_rounded, size: 14),
+                label: const Text('BACK TO STOCK', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(foregroundColor: _slate700),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() => _activeStep = 3);
+                  _syncOperationalSession(3, status: 'SERVING');
+                },
+                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                label: const Text('CONTINUE TO BENEFICIARY SERVICE →', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  // =========================================================================
-  // STEP 04: SERVE BENEFICIARY (PRIMARY DAILY ACTION)
-  // =========================================================================
-  Widget _buildServeBeneficiaryView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+  // ================================================================
+  // STAGE 04 — SERVE BENEFICIARY
+  // ================================================================
+  Widget _buildStep04ServeBeneficiary() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _slate200),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Search Citizen & Verify Entitlement Quota', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _slate900)),
-          const Text('Enter Ration Card ID to pull authoritative backend entitlement record.', style: TextStyle(fontSize: 12, color: _slate500)),
-          const SizedBox(height: 12),
-
-          // Quick Preset Card Chips
-          Row(
+          const Row(
             children: [
-              const Text('Quick Test Preset Cards:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _slate500)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _sampleRationCards.map((preset) {
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: ActionChip(
-                          label: Text(preset['label']!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                          backgroundColor: _cardSearchController.text == preset['cardId'] ? const Color(0xFFEFF6FF) : _slate100,
-                          side: BorderSide(color: _cardSearchController.text == preset['cardId'] ? const Color(0xFF3B82F6) : _slate200),
-                          onPressed: () => _handleSearchBeneficiary(targetCardId: preset['cardId']),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
+              Icon(Icons.person_search_rounded, color: _govNavy, size: 22),
+              SizedBox(width: 8),
+              Text('Stage 04: Beneficiary Identification & Entitlement Lookup', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
+          const Text('Scan or input Ration Card ID to verify statutory entitlement and eligibility for Cycle 2026-09.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+          const SizedBox(height: 16),
 
-          // Search Box
+          // Search Bar & Sample Chips
           Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _cardSearchController,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                   decoration: InputDecoration(
-                    hintText: 'Enter Ration Card ID (e.g. RC-KA-000001)...',
-                    prefixIcon: const Icon(Icons.credit_card_rounded, size: 18),
-                    filled: true,
-                    fillColor: Colors.white,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
+                    labelText: 'Ration Card Number / Beneficiary ID',
+                    hintText: 'e.g. RC-KA-000001',
+                    prefixIcon: const Icon(Icons.credit_card_rounded, color: _govNavy),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   ),
-                  onSubmitted: (_) => _handleSearchBeneficiary(),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               ElevatedButton.icon(
                 onPressed: _isSearchingBeneficiary ? null : () => _handleSearchBeneficiary(),
                 icon: _isSearchingBeneficiary
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Icon(Icons.search_rounded, size: 16),
-                label: const Text('Retrieve Beneficiary', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                label: const Text('SEARCH', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _govNavy,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
-          // Beneficiary Result Details Box
+          // Quick Preset Chips from Dataset
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: _sampleRationCards.map((c) {
+              return ActionChip(
+                label: Text(c['label']!, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+                backgroundColor: _slate100,
+                onPressed: () => _handleSearchBeneficiary(targetCardId: c['cardId']),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 18),
+
+          // Searched Beneficiary Card
           if (_searchedBeneficiary != null) ...[
+            _buildBeneficiaryDetailsCard(),
+            const SizedBox(height: 18),
+            _buildVerificationSection(),
+          ] else
             Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _slate200)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
+              child: const Center(
+                child: Text('Search a beneficiary ration card above to verify eligibility.', style: TextStyle(fontSize: 12, color: _slate500)),
+              ),
+            ),
+
+          const SizedBox(height: 20),
+
+          // Actions
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _activeStep = 2),
+                icon: const Icon(Icons.arrow_back_rounded, size: 14),
+                label: const Text('BACK TO REPLENISHMENT', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(foregroundColor: _slate700),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: (_searchedBeneficiary != null && _verificationStatus == 'VERIFIED' && _searchedBeneficiary!['already_collected'] != true)
+                    ? () {
+                        setState(() => _activeStep = 4);
+                        _syncOperationalSession(4, status: 'DISPENSING');
+                      }
+                    : null,
+                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                label: const Text('CONTINUE TO e-PoS DISPENSE →', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBeneficiaryDetailsCard() {
+    final b = _searchedBeneficiary!;
+    final alreadyCollected = b['already_collected'] == true;
+    final scheme = b['card_type'] ?? 'PHH';
+    final isPortability = b['is_portability'] == true;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _slate50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: alreadyCollected ? _dangerRed : _slate200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  const Icon(Icons.badge_rounded, color: _govNavy, size: 20),
+                  const SizedBox(width: 8),
+                  Text('${b['beneficiary_id']} • ${b['name']}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _govNavy)),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: alreadyCollected ? _dangerRedBg : _govGreenBg,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: alreadyCollected ? const Color(0xFFFCA5A5) : _govGreenBorder),
+                ),
+                child: Text(
+                  alreadyCollected ? 'ALREADY COLLECTED' : 'ELIGIBLE FOR COLLECTION',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: alreadyCollected ? _dangerRed : _govGreen),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text('Scheme: $scheme • Members: ${b['family_members_count']} • Registered Depot: ${b['registered_fps_id']} ${isPortability ? "(ONORC Portability)" : ""}',
+              style: const TextStyle(fontSize: 11, color: _slate500)),
+          const Divider(height: 16),
+
+          // Entitlement breakdown
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: _slate200)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const CircleAvatar(radius: 20, backgroundColor: _govNavy, child: Icon(Icons.person_rounded, color: Colors.white, size: 22)),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(_searchedBeneficiary!['name'], style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: _slate900)),
-                              Text('Ration Card ID: ${_searchedBeneficiary!['cardId']} • ${_searchedBeneficiary!['members']} Family Members', style: const TextStyle(fontSize: 11.5, color: _slate500)),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFFCA5A5) : const Color(0xFF86EFAC)),
-                        ),
-                        child: Text(
-                          (_searchedBeneficiary!['alreadyCollected'] as bool) ? 'COLLECTION COMPLETED' : 'ELIGIBLE FOR DISPENSATION',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: (_searchedBeneficiary!['alreadyCollected'] as bool) ? const Color(0xFFDC2626) : _govGreen,
-                          ),
-                        ),
-                      ),
+                      const Text('Statutory Rice Entitlement', style: TextStyle(fontSize: 10, color: _slate500)),
+                      Text('${b['statutory_rice_kg']} kg', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
                     ],
                   ),
-                  const Divider(height: 20),
-
-                  // Quotas Box
-                  Row(
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: _slate200)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: const Color(0xFFF0FDF4), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFF86EFAC))),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Fortified Rice Quota', style: TextStyle(fontSize: 11, color: _govGreen, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Text('${_dispenseRiceKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _govGreen)),
-                              const Text('Rate: ₹0.00 / kg (NFSA Free)', style: TextStyle(fontSize: 10, color: _govGreen)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFFCD34D))),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Whole Wheat Quota', style: TextStyle(fontSize: 11, color: _amber, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Text('${_dispenseWheatKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _amber)),
-                              const Text('Rate: ₹0.00 / kg (NFSA Free)', style: TextStyle(fontSize: 10, color: _amber)),
-                            ],
-                          ),
-                        ),
-                      ),
+                      const Text('Statutory Wheat Entitlement', style: TextStyle(fontSize: 10, color: _slate500)),
+                      Text('${b['statutory_wheat_kg']} kg', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                ),
+              ),
+            ],
+          ),
 
-                  SizedBox(
-                    width: double.infinity,
-                    height: 46,
-                    child: ElevatedButton.icon(
-                      onPressed: (!(_searchedBeneficiary!['alreadyCollected'] as bool) && _searchedBeneficiary!['isError'] != true)
-                          ? () => setState(() => _activeStep = 4) // Advance to e-PoS Dispense
-                          : null,
-                      icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                      label: Text(
-                        (_searchedBeneficiary!['alreadyCollected'] as bool)
-                            ? 'COLLECTION COMPLETED FOR CYCLE $_currentCycle'
-                            : 'PROCEED TO e-PoS DISPENSATION ➔',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                      style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+          if (alreadyCollected) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: _dangerRedBg, borderRadius: BorderRadius.circular(6)),
+              child: Row(
+                children: [
+                  const Icon(Icons.block_rounded, size: 16, color: _dangerRed),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Ration already collected for cycle 2026-09 on ${b['collected_at'] ?? "earlier date"}. Duplicate collection is prohibited.',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _dangerRed),
                     ),
                   ),
                 ],
@@ -1280,286 +1792,392 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     );
   }
 
-  // =========================================================================
-  // STEP 05: e-PoS DISPENSATION TERMINAL
-  // =========================================================================
-  Widget _buildEposScreenView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+  Widget _buildVerificationSection() {
+    final isVerified = _verificationStatus == 'VERIFIED';
+    final alreadyCollected = _searchedBeneficiary?['already_collected'] == true;
+
+    if (alreadyCollected) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isVerified ? _govGreenBorder : _slate200),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Beneficiary Identity Verification (e-KYC / e-PoS):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _slate900)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isVerified ? _govGreenBg : _amberBg,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _verificationStatus.replaceAll('_', ' '),
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: isVerified ? _govGreen : _amberAlert),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          Row(
+            children: [
+              ChoiceChip(
+                label: const Text('AADHAAR BIOMETRIC', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                selected: _verificationMode == 'AADHAAR_BIOMETRIC',
+                selectedColor: _govNavy,
+                labelStyle: TextStyle(color: _verificationMode == 'AADHAAR_BIOMETRIC' ? Colors.white : _slate700),
+                onSelected: (_) => setState(() => _verificationMode = 'AADHAAR_BIOMETRIC'),
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('OTP SMS VERIFICATION', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                selected: _verificationMode == 'OTP',
+                selectedColor: _govNavy,
+                labelStyle: TextStyle(color: _verificationMode == 'OTP' ? Colors.white : _slate700),
+                onSelected: (_) => setState(() => _verificationMode = 'OTP'),
+              ),
+            ],
+          ),
+
+          if (_verificationMode == 'OTP') ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: 200,
+              height: 36,
+              child: TextField(
+                controller: _otpCodeController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                decoration: const InputDecoration(
+                  labelText: 'Enter 6-Digit OTP',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: _verificationStatus == 'VERIFYING' ? null : _handleVerifyBeneficiary,
+            icon: _verificationStatus == 'VERIFYING'
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.fingerprint_rounded, size: 16),
+            label: Text(isVerified ? 'RE-VERIFY IDENTITY' : 'VERIFY BENEFICIARY IDENTITY', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: isVerified ? _govGreen : _govNavy, foregroundColor: Colors.white),
+          ),
+          if (isVerified && _verifiedTimestamp != null) ...[
+            const SizedBox(height: 6),
+            Text('Verified at $_verifiedTimestamp via $_verificationMode', style: const TextStyle(fontSize: 10.5, color: _govGreen, fontWeight: FontWeight.bold)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ================================================================
+  // STAGE 05 — e-PoS DISPENSE
+  // ================================================================
+  Widget _buildStep05EposDispense() {
+    final b = _searchedBeneficiary;
+    if (b == null) {
+      return const Center(child: Text('No beneficiary selected for dispensing.'));
+    }
+
+    final remRice = _riceStockKg - _dispenseRiceKg;
+    final remWheat = _wheatStockKg - _dispenseWheatKg;
+    final hasEnoughStock = remRice >= 0 && remWheat >= 0;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _slate200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.point_of_sale_rounded, color: _govNavy, size: 22),
+              SizedBox(width: 8),
+              Text('Stage 05: Final e-PoS Dispensation & Inventory Deduction', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text('Confirm commodity physical handover and generate immutable government transaction receipt.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+          const SizedBox(height: 16),
+
+          // Dispensing Confirmation Box
           Container(
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _slate800, width: 2)),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _slate50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _slate200),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: const BoxDecoration(color: _slate900, borderRadius: BorderRadius.only(topLeft: Radius.circular(14), topRight: Radius.circular(14))),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.point_of_sale_rounded, color: Color(0xFF4ADE80), size: 18),
-                          SizedBox(width: 8),
-                          Text('e-PoS HARDWARE TERMINAL • AADHAAR GATEWAY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5)),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Icon(Icons.wifi_rounded, size: 14, color: Color(0xFF4ADE80)),
-                          SizedBox(width: 6),
-                          Text('4G e-SIM ONLINE', style: TextStyle(color: Color(0xFF4ADE80), fontWeight: FontWeight.bold, fontSize: 10)),
-                        ],
-                      ),
-                    ],
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Beneficiary: ${b['beneficiary_id']} (${b['name']})', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _govNavy)),
+                    const Text('Cycle: 2026-09', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _slate700)),
+                  ],
                 ),
+                const Divider(height: 16),
 
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: _searchedBeneficiary == null
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(24),
-                            child: Text('Please select a beneficiary in Stage 04 (SERVE BENEFICIARY) first.', style: TextStyle(fontSize: 13, color: _slate500, fontWeight: FontWeight.bold)),
-                          ),
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Beneficiary: ${_searchedBeneficiary!['name']} (${_searchedBeneficiary!['cardId']})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _slate900)),
-                            const SizedBox(height: 12),
-
-                            // Biometric Panel
-                            Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: _isBiometricVerified ? const Color(0xFF86EFAC) : _slate200)),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 20,
-                                        backgroundColor: _isBiometricVerified ? const Color(0xFFF0FDF4) : _slate100,
-                                        child: Icon(_isBiometricVerified ? Icons.check_circle_rounded : Icons.fingerprint_rounded, size: 24, color: _isBiometricVerified ? _govGreen : _govNavy),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text('Aadhaar Biometric e-KYC Verification', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _slate900)),
-                                          Text(
-                                            _isScanningBiometrics
-                                                ? 'Capturing optical fingerprint sensor pulse...'
-                                                : (_isBiometricVerified ? 'Identity Verified: Match Score 98.6% — Approved ✓' : 'Instruct citizen to place thumb on optical scanner'),
-                                            style: TextStyle(fontSize: 11, color: _isBiometricVerified ? _govGreen : _slate500),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: _isScanningBiometrics ? null : _simulateBiometricScan,
-                                    icon: const Icon(Icons.fingerprint_rounded, size: 16),
-                                    label: Text(_isBiometricVerified ? 'Verified ✓' : 'Scan Fingerprint', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                    style: ElevatedButton.styleFrom(backgroundColor: _isBiometricVerified ? _govGreen : _govNavy, foregroundColor: Colors.white),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Dispense Button
-                            SizedBox(
-                              width: double.infinity,
-                              height: 48,
-                              child: ElevatedButton(
-                                onPressed: (_isBiometricVerified && !_isDispensing && !(_searchedBeneficiary!['alreadyCollected'] as bool)) ? _handleDispenseRation : null,
-                                style: ElevatedButton.styleFrom(backgroundColor: _govGreen, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                                child: _isDispensing
-                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                    : Text(
-                                        (_searchedBeneficiary!['alreadyCollected'] as bool)
-                                            ? 'RATION ALREADY COLLECTED FOR CYCLE $_currentCycle'
-                                            : '⚡ AUTHORIZE & DISPENSE RATION (${_dispenseRiceKg.toStringAsFixed(1)}kg Rice + ${_dispenseWheatKg.toStringAsFixed(1)}kg Wheat)',
-                                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                                      ),
-                              ),
-                            ),
-                          ],
-                        ),
+                // Math Table
+                Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(2),
+                    1: FlexColumnWidth(1.5),
+                    2: FlexColumnWidth(1.5),
+                    3: FlexColumnWidth(1.5),
+                  },
+                  children: [
+                    TableRow(
+                      decoration: const BoxDecoration(color: _slate100),
+                      children: ['COMMODITY', 'CURRENT WAREHOUSE', 'DISPENSE QUANTITY', 'REMAINING STOCK'].map((h) {
+                        return Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text(h, style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: _slate700)),
+                        );
+                      }).toList(),
+                    ),
+                    TableRow(
+                      children: [
+                        const Padding(padding: EdgeInsets.all(8), child: Text('Fortified Rice', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                        Padding(padding: const EdgeInsets.all(8), child: Text('${_riceStockKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 11))),
+                        Padding(padding: const EdgeInsets.all(8), child: Text('${_dispenseRiceKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govNavy))),
+                        Padding(padding: const EdgeInsets.all(8), child: Text('${remRice.toStringAsFixed(1)} kg', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: remRice >= 0 ? _govGreen : _dangerRed))),
+                      ],
+                    ),
+                    TableRow(
+                      children: [
+                        const Padding(padding: EdgeInsets.all(8), child: Text('Whole Wheat', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                        Padding(padding: const EdgeInsets.all(8), child: Text('${_wheatStockKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 11))),
+                        Padding(padding: const EdgeInsets.all(8), child: Text('${_dispenseWheatKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govNavy))),
+                        Padding(padding: const EdgeInsets.all(8), child: Text('${remWheat.toStringAsFixed(1)} kg', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: remWheat >= 0 ? _govGreen : _dangerRed))),
+                      ],
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
 
-  // =========================================================================
-  // STEP 06: DIGITAL REGISTER (Form 5A Statutory Log)
-  // =========================================================================
-  Widget _buildDigitalRegisterView() {
-    final query = _registerSearchController.text.trim().toLowerCase();
-    final filteredList = _digitalRegister.where((tx) {
-      final cardId = (tx['beneficiary_id'] ?? '').toString().toLowerCase();
-      final name = (tx['name_for_demo'] ?? tx['name'] ?? '').toString().toLowerCase();
-      return query.isEmpty || cardId.contains(query) || name.contains(query);
-    }).toList();
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          if (!hasEnoughStock) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: _dangerRedBg, borderRadius: BorderRadius.circular(6)),
+              child: const Row(
                 children: [
-                  const Text('Statutory Digital Grain Dispensation Register', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _slate900)),
-                  Text('${_digitalRegister.length} Immutable Logs for Cycle $_currentCycle', style: const TextStyle(fontSize: 12, color: _slate500)),
+                  Icon(Icons.warning_amber_rounded, color: _dangerRed, size: 18),
+                  SizedBox(width: 8),
+                  Text('Insufficient warehouse inventory to fulfill full statutory quota.', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _dangerRed)),
                 ],
               ),
-              IconButton(icon: const Icon(Icons.refresh_rounded, size: 20), onPressed: _loadTransactions),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          TextField(
-            controller: _registerSearchController,
-            decoration: InputDecoration(
-              hintText: 'Filter register by Card ID or Citizen Name...',
-              prefixIcon: const Icon(Icons.search_rounded, size: 18),
-              isDense: true,
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
             ),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: _slate200)),
-              child: filteredList.isEmpty
-                  ? const Center(child: Text('No digital register records found.', style: TextStyle(color: _slate500, fontSize: 13, fontWeight: FontWeight.bold)))
-                  : ListView.separated(
-                      itemCount: filteredList.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, idx) {
-                        final tx = filteredList[idx];
-                        final txId = tx['transaction_id'] ?? 'TX-EPOS-${idx + 100}';
-                        final cardId = tx['beneficiary_id'] ?? 'BEN-KA-0000';
-                        final name = tx['name_for_demo'] ?? tx['name'] ?? 'Citizen Holder';
-                        final rice = (tx['rice_kg'] as num?)?.toDouble() ?? 0.0;
-                        final wheat = (tx['wheat_kg'] as num?)?.toDouble() ?? 0.0;
-
-                        return ListTile(
-                          dense: true,
-                          leading: const CircleAvatar(backgroundColor: Color(0xFFF0FDF4), radius: 16, child: Icon(Icons.fingerprint_rounded, size: 18, color: _govGreen)),
-                          title: Row(
-                            children: [
-                              Text(cardId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _govNavy)),
-                              const SizedBox(width: 8),
-                              Text(name, style: const TextStyle(fontSize: 12, color: _slate700, fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                          subtitle: Text('Rice: ${rice.toStringAsFixed(1)}kg • Wheat: ${wheat.toStringAsFixed(1)}kg • Charge: ₹0.00 • Auth: Aadhaar Biometric', style: const TextStyle(fontSize: 11, color: _slate500)),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.receipt_rounded, size: 18, color: _govNavy),
-                            onPressed: () => _showReceiptDialog(txId: txId, cardId: cardId),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // =========================================================================
-  // STEP 07: DAILY RECONCILIATION
-  // =========================================================================
-  Widget _buildDailyReconciliationView() {
-    final recData = _reconciliationData?['commodities'] as Map<String, dynamic>?;
-    final riceRec = recData?['Rice'] as Map<String, dynamic>?;
-    final wheatRec = recData?['Wheat'] as Map<String, dynamic>?;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Daily Physical Stock Reconciliation', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _slate900)),
-          const Text('Formula: Opening Stock + Received Stock - Dispensed Stock = Expected Closing Stock', style: TextStyle(fontSize: 12, color: _slate500)),
-          const SizedBox(height: 16),
-
-          if (riceRec != null) _buildReconciliationCommodityBox('Fortified Rice', riceRec),
-          const SizedBox(height: 12),
-          if (wheatRec != null) _buildReconciliationCommodityBox('Whole Wheat', wheatRec),
+          ],
 
           const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Daily Stock Reconciliation Verified & Logged ✓'), backgroundColor: _govGreen),
-                );
-                setState(() => _activeStep = 7); // Advance to Close Day
-              },
-              icon: const Icon(Icons.verified_rounded, size: 18),
-              label: const Text('VERIFY & LOCK DAILY RECONCILIATION ➔', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildReconciliationCommodityBox(String title, Map<String, dynamic> data) {
-    final diff = (data['difference_kg'] as num?)?.toDouble() ?? 0.0;
-    final isReconciled = diff == 0.0;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: _slate200)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+          // Actions
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _slate900)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: isReconciled ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(6)),
-                child: Text(isReconciled ? 'RECONCILED ✓' : 'VARIANCE DETECTED', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isReconciled ? _govGreen : Colors.red)),
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _activeStep = 3),
+                icon: const Icon(Icons.arrow_back_rounded, size: 14),
+                label: const Text('BACK TO SEARCH', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(foregroundColor: _slate700),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: (_isDispensing || !hasEnoughStock) ? null : _handleDispenseRation,
+                icon: _isDispensing
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.verified_rounded, size: 18),
+                label: Text(_isDispensing ? 'DISPENSING RATION...' : 'CONFIRM e-PoS TRANSACTION', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900)),
+                style: ElevatedButton.styleFrom(backgroundColor: _govGreen, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13)),
               ),
             ],
           ),
-          const Divider(height: 16),
+        ],
+      ),
+    );
+  }
+
+  // ================================================================
+  // STAGE 06 — DIGITAL REGISTER & RECEIPT
+  // ================================================================
+  Widget _buildStep06DigitalRegisterAndReceipt() {
+    final filtered = _digitalRegister.where((tx) {
+      final q = _registerSearchController.text.trim().toLowerCase();
+      final id = (tx['transaction_id'] ?? '').toString().toLowerCase();
+      final ben = (tx['beneficiary_id'] ?? '').toString().toLowerCase();
+      final matchesSearch = id.contains(q) || ben.contains(q);
+      if (_registerDateFilter == 'TODAY') {
+        final date = (tx['created_at'] ?? '').toString();
+        final today = DateTime.now().toString().substring(0, 10);
+        return matchesSearch && date.startsWith(today);
+      }
+      return matchesSearch;
+    }).toList();
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _slate200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildRecMetric('Opening', '${data['opening_stock_kg']}kg'),
-              _buildRecMetric('Received', '+${data['received_kg']}kg'),
-              _buildRecMetric('Dispensed', '-${data['dispensed_kg']}kg'),
-              _buildRecMetric('Expected Closing', '${data['expected_closing_kg']}kg', isBold: true),
-              _buildRecMetric('Recorded Physical', '${data['recorded_physical_kg']}kg', isBold: true),
-              _buildRecMetric('Difference', '${diff.toStringAsFixed(1)}kg', color: isReconciled ? _govGreen : Colors.red),
+              const Row(
+                children: [
+                  Icon(Icons.menu_book_rounded, color: _govNavy, size: 22),
+                  SizedBox(width: 8),
+                  Text('Stage 06: Digital Register & Issued Receipts', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: _handleResetForNextBeneficiary,
+                icon: const Icon(Icons.person_add_rounded, size: 14),
+                label: const Text('SERVE NEXT BENEFICIARY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text('Authoritative transaction ledger of all ration distributions permanently recorded in SQLite.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+          const SizedBox(height: 16),
+
+          // Last Receipt Card if available
+          if (_lastReceiptData != null) ...[
+            _buildLastReceiptCard(),
+            const SizedBox(height: 16),
+          ],
+
+          // Filter Controls
+          Row(
+            children: [
+              ChoiceChip(
+                label: const Text('TODAY\'S TRANSACTIONS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                selected: _registerDateFilter == 'TODAY',
+                selectedColor: _govNavy,
+                labelStyle: TextStyle(color: _registerDateFilter == 'TODAY' ? Colors.white : _slate700),
+                onSelected: (_) => setState(() => _registerDateFilter = 'TODAY'),
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('ALL TRANSACTIONS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                selected: _registerDateFilter == 'ALL',
+                selectedColor: _govNavy,
+                labelStyle: TextStyle(color: _registerDateFilter == 'ALL' ? Colors.white : _slate700),
+                onSelected: (_) => setState(() => _registerDateFilter = 'ALL'),
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 200,
+                height: 34,
+                child: TextField(
+                  controller: _registerSearchController,
+                  onChanged: (_) => setState(() {}),
+                  style: const TextStyle(fontSize: 11),
+                  decoration: const InputDecoration(
+                    hintText: 'Search Card / Transaction...',
+                    prefixIcon: Icon(Icons.search_rounded, size: 14),
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Digital Register Table
+          if (filtered.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(8)),
+              child: const Center(child: Text('No matching transactions found.', style: TextStyle(fontSize: 12, color: _slate500))),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: filtered.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, idx) {
+                final tx = filtered[idx];
+                return Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _slate50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: _slate200),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_long_rounded, color: _govGreen, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${tx['transaction_id']} • Card: ${tx['beneficiary_id']}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: _govNavy)),
+                            Text('Dispensed: ${tx['rice_kg']}kg Rice / ${tx['wheat_kg']}kg Wheat • Auth: ${tx['auth_mode']}', style: const TextStyle(fontSize: 10.5, color: _slate700)),
+                          ],
+                        ),
+                      ),
+                      Text(tx['created_at'].toString().substring(0, 16), style: const TextStyle(fontSize: 10, color: _slate400)),
+                    ],
+                  ),
+                );
+              },
+            ),
+
+          const SizedBox(height: 20),
+
+          // Actions
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _activeStep = 4),
+                icon: const Icon(Icons.arrow_back_rounded, size: 14),
+                label: const Text('BACK TO DISPENSE', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(foregroundColor: _slate700),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() => _activeStep = 6);
+                  _syncOperationalSession(6, status: 'RECONCILIATION_PENDING');
+                },
+                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                label: const Text('CONTINUE TO DAILY RECONCILIATION →', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
+              ),
             ],
           ),
         ],
@@ -1567,73 +2185,559 @@ class _FpsOwnerDashboardScreenState extends State<FpsOwnerDashboardScreen> {
     );
   }
 
-  Widget _buildRecMetric(String label, String val, {bool isBold = false, Color? color}) {
-    return Column(
+  Widget _buildLastReceiptCard() {
+    final r = _lastReceiptData!;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _govGreenBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _govGreenBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, color: _govGreen, size: 18),
+                  SizedBox(width: 6),
+                  Text('OFFICIAL DIGITAL RECEIPT ISSUED', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: _govGreen)),
+                ],
+              ),
+              Text('ID: ${r['transaction_id']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govNavy)),
+            ],
+          ),
+          const Divider(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Beneficiary: ${r['beneficiary_name']} (${r['beneficiary_id']})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _slate900)),
+              Text('Handover: ${r['rice_kg']}kg Rice + ${r['wheat_kg']}kg Wheat', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: _govNavy)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ================================================================
+  // STAGE 07 — DAILY RECONCILIATION
+  // ================================================================
+  Widget _buildStep07DailyReconciliation() {
+    final rec = _reconciliationData;
+    final rComm = rec?['commodities']?['Rice'] as Map<String, dynamic>?;
+    final wComm = rec?['commodities']?['Wheat'] as Map<String, dynamic>?;
+
+    final rDiff = (rComm?['difference_kg'] as num?)?.toDouble() ?? 0.0;
+    final wDiff = (wComm?['difference_kg'] as num?)?.toDouble() ?? 0.0;
+    final isReconciled = rDiff == 0.0 && wDiff == 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _slate200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.balance_rounded, color: _govNavy, size: 22),
+              const SizedBox(width: 8),
+              const Text('Stage 07: Daily Inventory & Transaction Reconciliation', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isReconciled ? _govGreenBg : _amberBg,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: isReconciled ? _govGreenBorder : _amberBorder),
+                ),
+                child: Text(
+                  isReconciled ? '✓ STOCK RECONCILED' : '⚠ RECONCILIATION EXCEPTION',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: isReconciled ? _govGreen : _amberAlert),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text('Verification Formula: Opening Stock + Received Today - Dispensed Today = Expected Closing Stock.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+          const SizedBox(height: 16),
+
+          // Reconciliation Math Table
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: _slate200),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Table(
+              columnWidths: const {
+                0: FlexColumnWidth(2),
+                1: FlexColumnWidth(1.2),
+                2: FlexColumnWidth(1.2),
+                3: FlexColumnWidth(1.2),
+                4: FlexColumnWidth(1.2),
+                5: FlexColumnWidth(1.2),
+                6: FlexColumnWidth(1),
+              },
+              children: [
+                TableRow(
+                  decoration: const BoxDecoration(color: _slate50),
+                  children: ['COMMODITY', 'OPENING', '+ RECEIVED', '- DISPENSED', '= EXPECTED', 'RECORDED', 'DIFF'].map((h) {
+                    return Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text(h, style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: _slate700)),
+                    );
+                  }).toList(),
+                ),
+                _buildReconTableRow('Fortified Rice', rComm),
+                _buildReconTableRow('Whole Wheat', wComm),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Exception reason input if variance exists
+          if (!isReconciled) ...[
+            const Text('Document Reconciliation Exception Reason (Required to close day):', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: _amberAlert)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _exceptionReasonController,
+              maxLines: 2,
+              onChanged: (_) {
+                setState(() {});
+                _syncOperationalSession(6);
+              },
+              style: const TextStyle(fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'e.g. Weighing scale calibration variance of 2.5kg verified against delivery log.',
+                filled: true,
+                fillColor: _slate50,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                contentPadding: const EdgeInsets.all(10),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Actions
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _activeStep = 5),
+                icon: const Icon(Icons.arrow_back_rounded, size: 14),
+                label: const Text('BACK TO REGISTER', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(foregroundColor: _slate700),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() => _activeStep = 7);
+                  _syncOperationalSession(7);
+                },
+                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                label: const Text('PROCEED TO CLOSE DAY →', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  TableRow _buildReconTableRow(String name, Map<String, dynamic>? data) {
+    final opening = (data?['opening_stock_kg'] as num?)?.toDouble() ?? 0.0;
+    final rec = (data?['received_kg'] as num?)?.toDouble() ?? 0.0;
+    final disp = (data?['dispensed_kg'] as num?)?.toDouble() ?? 0.0;
+    final exp = (data?['expected_closing_kg'] as num?)?.toDouble() ?? 0.0;
+    final recorded = (data?['recorded_physical_kg'] as num?)?.toDouble() ?? 0.0;
+    final diff = (data?['difference_kg'] as num?)?.toDouble() ?? 0.0;
+
+    return TableRow(
       children: [
-        Text(label, style: const TextStyle(fontSize: 10.5, color: _slate500)),
-        const SizedBox(height: 2),
-        Text(val, style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.w600, color: color ?? _slate900)),
+        Padding(padding: const EdgeInsets.all(8), child: Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+        Padding(padding: const EdgeInsets.all(8), child: Text('${opening.toStringAsFixed(0)}kg', style: const TextStyle(fontSize: 10.5))),
+        Padding(padding: const EdgeInsets.all(8), child: Text('+${rec.toStringAsFixed(0)}kg', style: const TextStyle(fontSize: 10.5, color: _govGreen))),
+        Padding(padding: const EdgeInsets.all(8), child: Text('-${disp.toStringAsFixed(0)}kg', style: const TextStyle(fontSize: 10.5, color: _dangerRed))),
+        Padding(padding: const EdgeInsets.all(8), child: Text('${exp.toStringAsFixed(0)}kg', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: _govNavy))),
+        Padding(padding: const EdgeInsets.all(8), child: Text('${recorded.toStringAsFixed(0)}kg', style: const TextStyle(fontSize: 10.5))),
+        Padding(padding: const EdgeInsets.all(8), child: Text('${diff >= 0 ? "+$diff" : diff}kg', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: diff == 0 ? _govGreen : _amberAlert))),
       ],
     );
   }
 
-  // =========================================================================
-  // STEP 08: CLOSE DAY
-  // =========================================================================
-  Widget _buildCloseDayView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+  // ================================================================
+  // STAGE 08 — CLOSE DAY
+  // ================================================================
+  Widget _buildStep08CloseDay() {
+    final isDayClosed = _workflowStatus == 'DAY_CLOSED';
+    final rec = _reconciliationData;
+    final rDiff = ((rec?['commodities']?['Rice']?['difference_kg'] as num?)?.toDouble()) ?? 0.0;
+    final wDiff = ((rec?['commodities']?['Wheat']?['difference_kg'] as num?)?.toDouble()) ?? 0.0;
+    final hasVariance = rDiff != 0.0 || wDiff != 0.0;
+    final hasExceptionReason = _exceptionReasonController.text.trim().isNotEmpty;
+    final canClose = _shopOperationalStatus == 'OPEN' && (!hasVariance || hasExceptionReason);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _slate200),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              const Icon(Icons.lock_clock_rounded, color: _govNavy, size: 22),
+              const SizedBox(width: 8),
+              const Text('Stage 08: End-of-Day Closure & Ledger Sealing', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isDayClosed ? _govGreenBg : _amberBg,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  isDayClosed ? 'DAY CLOSED SUCCESSFULLY' : 'CLOSURE PENDING',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: isDayClosed ? _govGreen : _amberAlert),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text('Finalize all operational records, reconcile inventory, and lock shop transactions for today.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+          const SizedBox(height: 16),
+
+          // Operational Summary Card
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _slate200)),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _slate50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _slate200),
+            ),
             child: Column(
+              children: [
+                _buildSummaryLine('Total Beneficiary Transactions Today', '${_digitalRegister.length} distributions'),
+                const Divider(height: 12),
+                _buildSummaryLine('Remaining Rice Stock', '${_riceStockKg.toStringAsFixed(1)} kg'),
+                const Divider(height: 12),
+                _buildSummaryLine('Remaining Wheat Stock', '${_wheatStockKg.toStringAsFixed(1)} kg'),
+                const Divider(height: 12),
+                _buildSummaryLine('Stock Reconciliation Status', (!hasVariance || hasExceptionReason) ? 'RECONCILED / DOCUMENTED' : 'VARIANCE UNRESOLVED'),
+                if (isDayClosed) ...[
+                  const Divider(height: 12),
+                  _buildSummaryLine('Official Closure ID', _closureId ?? "CLS-COMPLETED", isHighlight: true),
+                  const Divider(height: 12),
+                  _buildSummaryLine('Closed At', _closedAt ?? "Recent", isHighlight: true),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Close Day Action
+          if (!isDayClosed)
+            Center(
+              child: Column(
+                children: [
+                  if (!canClose)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Text('Document reconciliation exception reason in Stage 07 before closing day.',
+                          style: TextStyle(fontSize: 11, color: _dangerRed, fontWeight: FontWeight.bold)),
+                    ),
+                  ElevatedButton.icon(
+                    onPressed: canClose ? _handleCloseShop : null,
+                    icon: _isActionLoading
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.lock_rounded, size: 18),
+                    label: const Text('CLOSE TODAY\'S OPERATIONS', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _dangerRed,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: _govGreenBg, borderRadius: BorderRadius.circular(8), border: Border.all(color: _govGreenBorder)),
+              child: const Row(
+                children: [
+                  Icon(Icons.verified_rounded, color: _govGreen, size: 24),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('TODAY\'S OPERATIONS SUCCESSFULLY CLOSED', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _govGreen)),
+                        Text('All registers and receipts are permanently sealed and synced with the District Civil Supplies ledger.',
+                            style: TextStyle(fontSize: 11, color: _slate700)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryLine(String title, String value, {bool isHighlight = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(title, style: TextStyle(fontSize: 11.5, color: isHighlight ? _govNavy : _slate700, fontWeight: isHighlight ? FontWeight.bold : FontWeight.w500)),
+        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isHighlight ? _govGreen : _slate900)),
+      ],
+    );
+  }
+
+  // ================================================================
+  // 10. RIGHT CONTEXTUAL OPERATIONAL PANEL
+  // ================================================================
+  Widget _buildRightContextualPanel() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. Current Warehouse Stock Summary Card
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _slate200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.inventory_2_rounded, size: 16, color: _govNavy),
+                  SizedBox(width: 6),
+                  Text('Warehouse Stock Live', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _govNavy)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(6), border: Border.all(color: _slate200)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Rice (NFSA)', style: TextStyle(fontSize: 10, color: _slate500)),
+                          Text('${_riceStockKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _govNavy)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(6), border: Border.all(color: _slate200)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Wheat (NFSA)', style: TextStyle(fontSize: 10, color: _slate500)),
+                          Text('${_wheatStockKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _govNavy)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // 2. Quick Operations Summary Card
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _slate200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.analytics_rounded, size: 16, color: _govNavy),
+                  SizedBox(width: 6),
+                  Text('Today\'s Overview', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _govNavy)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _buildRightStatRow('Beneficiaries Served Today', '${_digitalRegister.length}'),
+              const Divider(height: 12),
+              _buildRightStatRow('Pending Consignments', '${_consignments.where((c) => c['status'] != 'RECEIVED').length}'),
+              const Divider(height: 12),
+              _buildRightStatRow('e-PoS Connectivity', 'ONLINE (GSM 4G)'),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // 3. Quick Actions
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _slate200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Operations Quick Actions', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _govNavy)),
+              const SizedBox(height: 8),
+              _buildQuickActionButton('VIEW STOCK MOVEMENTS', Icons.menu_book_rounded, _showStockLedgerDialog),
+              const SizedBox(height: 6),
+              _buildQuickActionButton('VIEW DIGITAL REGISTER', Icons.receipt_long_rounded, () => setState(() => _activeStep = 5)),
+              const SizedBox(height: 6),
+              _buildQuickActionButton('CHECK RECONCILIATION', Icons.balance_rounded, () => setState(() => _activeStep = 6)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRightStatRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10.5, color: _slate500)),
+        Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _slate900)),
+      ],
+    );
+  }
+
+  Widget _buildQuickActionButton(String label, IconData icon, VoidCallback onTap) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 14),
+      label: Text(label, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _govNavy,
+        minimumSize: const Size(double.infinity, 34),
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+      ),
+    );
+  }
+
+  // ================================================================
+  // 11. SIDEBAR VIEWS: REPORTS, SETTINGS
+  // ================================================================
+  Widget _buildReportsView() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Operational Reports & Compliance Audit', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _govNavy)),
+          const Text('Daily distribution volumes and stock reconciliation summaries.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              _buildMetricCard('Total Distributions', '${_digitalRegister.length}', Icons.point_of_sale_rounded, _govNavy),
+              const SizedBox(width: 14),
+              _buildMetricCard('Warehouse Rice Stock', '${_riceStockKg.toStringAsFixed(0)} kg', Icons.inventory_2_rounded, _govGreen),
+              const SizedBox(width: 14),
+              _buildMetricCard('Warehouse Wheat Stock', '${_wheatStockKg.toStringAsFixed(0)} kg', Icons.warehouse_rounded, _amberAlert),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _slate200),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: color.withAlpha(25), borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
-                  children: [
-                    Icon(Icons.lock_clock_rounded, color: _govNavy, size: 22),
-                    SizedBox(width: 10),
-                    Text('Close Daily Store Operations', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _slate900)),
-                  ],
+                Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _slate500)),
+                const SizedBox(height: 2),
+                Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsView() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('FPS Terminal Settings & Device Linkage', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _govNavy)),
+          const Text('Configuration parameters for Fair Price Shop hardware & gateway.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+          const SizedBox(height: 16),
+
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: _slate200)),
+            child: const Column(
+              children: [
+                ListTile(
+                  leading: Icon(Icons.point_of_sale_rounded, color: _govNavy),
+                  title: Text('Visiontek 92 e-PoS Gateway', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  subtitle: Text('Device ID: EPOS-KA-BAG-001 • Biometric Optical Scanner Active', style: TextStyle(fontSize: 11, color: _slate500)),
+                  trailing: Icon(Icons.check_circle_rounded, color: _govGreen),
                 ),
-                const SizedBox(height: 6),
-                const Text('Verify end-of-day operational summary before closing.', style: TextStyle(fontSize: 12, color: _slate500)),
-                const Divider(height: 20),
-
-                _buildChecklistItem('All Transactions Synchronized', 'Central Audit Trail Updated', true),
-                _buildChecklistItem('Digital Register Sealed', 'Form 5A Finalized', true),
-                _buildChecklistItem('Inventory Reconciled', 'Zero Discrepancy Verified', true),
-                _buildChecklistItem('No Pending e-PoS Transactions', 'All terminal queues cleared', true),
-
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      try {
-                        await _apiService.closeFpsShop(_selectedFpsId);
-                        if (!mounted) return;
-                        setState(() {
-                          _shopStatusLabel = 'CLOSED';
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Fair Price Shop operations successfully CLOSED for today!'), backgroundColor: _govNavy),
-                        );
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error closing shop: $e'), backgroundColor: Colors.red),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.lock_rounded, size: 18),
-                    label: const Text('CLOSE TODAY\'S OPERATIONS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    style: ElevatedButton.styleFrom(backgroundColor: _slate800, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                  ),
+                Divider(),
+                ListTile(
+                  leading: Icon(Icons.scale_rounded, color: _govNavy),
+                  title: Text('Electronic Weighing Scale Link', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  subtitle: Text('RS232 Serial Port Connected • Zero Drift Calibrated', style: TextStyle(fontSize: 11, color: _slate500)),
+                  trailing: Icon(Icons.check_circle_rounded, color: _govGreen),
                 ),
               ],
             ),
