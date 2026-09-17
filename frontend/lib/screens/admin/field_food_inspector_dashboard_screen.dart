@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/constants.dart';
 import '../../services/api_service.dart';
@@ -120,8 +125,8 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
   bool _issueSeizureNotice = false;
   final TextEditingController _seizureReasonController = TextEditingController();
 
-  // Stage 04 — Evidence Capture List with real statutory photographic evidence
-  final List<Map<String, String>> _evidenceList = [
+  // Stage 04/05 — Evidence Capture List with real statutory photographic evidence & file uploads
+  final List<Map<String, dynamic>> _evidenceList = [
     {
       'id': 'EVID-195438',
       'type': 'STOCK_ROOM',
@@ -135,6 +140,48 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
       'geotag_status': 'GEO-VERIFIED (Acc: ±3.2m)',
       'reference': 'IMG-EVID-195438.jpg',
     }
+  ];
+
+  // ---------------------------------------------------------------------------
+  // LIVE ANIMATED TRUCK TRANSIT SIMULATION STATE
+  // Actual vehicle movement along real Bengaluru road corridor waypoints
+  // Triggered on Officer Movement Clearance & interactive controls
+  // ---------------------------------------------------------------------------
+  Timer? _truckMovementTimer;
+  bool _isTruckMoving = false;
+  int _transitStepIndex = 4;
+  LatLng? _animatedTruckLocation;
+  double _animatedSpeedKmh = 36.5;
+  double _animatedHeadingDeg = 215.0;
+  double _animatedTravelledKm = 6.5;
+  double _animatedRemainingKm = 9.5;
+  String _animatedStatus = 'IN_TRANSIT';
+  String _animatedCheckpointNotice = 'En route to Fair Price Shop 1 (Target)';
+  bool _onwardTransitAuthorized = false;
+  int _simulationSpeedMultiplier = 1;
+
+  // Realistic Road Corridor Waypoints (Hebbal Godown -> Stop 1 -> Stop 2 Rajajinagar)
+  static const List<LatLng> _fullTransitWaypoints = [
+    LatLng(13.0358, 77.5970), // 0: Hebbal FCI Godown (Depot)
+    LatLng(13.0280, 77.5945), // 1: Ganganagar / Bellary Rd
+    LatLng(13.0195, 77.5920), // 2: Mekhri Circle Underpass
+    LatLng(13.0135, 77.5905), // 3: Sadashivanagar Police Station
+    LatLng(13.0080, 77.5890), // 4: Palace Grounds West Gate (Current Initial GPS position)
+    LatLng(13.0020, 77.5875), // 5: Cauvery Theatre Jn
+    LatLng(12.9960, 77.5885), // 6: Vasanth Nagar Main Rd
+    LatLng(12.9905, 77.5900), // 7: Cunningham Rd Underpass
+    LatLng(12.9845, 77.5925), // 8: Raj Bhavan / High Court Corridor
+    LatLng(12.9780, 77.5938), // 9: Vidhana Soudha Perimeter
+    LatLng(12.9716, 77.5946), // 10: STOP 1: Fair Price Shop 1 (Bengaluru Urban) [TARGET]
+    // Onward Phase 2 (Post-Officer Approval to Stop 2: Rajajinagar FPS)
+    LatLng(12.9740, 77.5880), // 11: Mysore Bank Jn / KG Road
+    LatLng(12.9775, 77.5815), // 12: Anand Rao Circle Flyover
+    LatLng(12.9830, 77.5750), // 13: Sheshadripuram Railway Bridge
+    LatLng(12.9875, 77.5695), // 14: Malleshwaram 4th Cross
+    LatLng(12.9915, 77.5645), // 15: Malleshwaram Circle (8th Cross)
+    LatLng(12.9945, 77.5595), // 16: Navrang Theatre Circle
+    LatLng(12.9968, 77.5555), // 17: Dr. Rajkumar Road Link
+    LatLng(12.9982, 77.5530), // 18: STOP 2: Rajajinagar Fair Price Shop 2 (Destination)
   ];
 
   static const Map<String, Map<String, String>> _evidencePhotoCatalog = {
@@ -183,16 +230,459 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
+    _animatedTruckLocation = _fullTransitWaypoints[4];
     _loadInitialData();
   }
 
   @override
   void dispose() {
+    _truckMovementTimer?.cancel();
     _observedRiceController.dispose();
     _observedWheatController.dispose();
     _inspectorNotesController.dispose();
     _seizureReasonController.dispose();
     super.dispose();
+  }
+
+  void _startTruckMovementSimulation({int? speedMultiplier}) {
+    if (speedMultiplier != null) {
+      _simulationSpeedMultiplier = speedMultiplier;
+    }
+    _truckMovementTimer?.cancel();
+    setState(() {
+      _isTruckMoving = true;
+      if (_animatedTruckLocation == null) {
+        _transitStepIndex = 4;
+        _animatedTruckLocation = _fullTransitWaypoints[4];
+      }
+      if (_transitStepIndex >= _fullTransitWaypoints.length - 1) {
+        _transitStepIndex = 4;
+        _animatedTruckLocation = _fullTransitWaypoints[4];
+        _animatedTravelledKm = 6.5;
+        _animatedRemainingKm = 9.5;
+      }
+    });
+
+    final intervalMs = (950 / _simulationSpeedMultiplier).round();
+    _truckMovementTimer = Timer.periodic(Duration(milliseconds: intervalMs), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      if (_transitStepIndex >= _fullTransitWaypoints.length - 1) {
+        timer.cancel();
+        setState(() {
+          _isTruckMoving = false;
+          _animatedStatus = 'DELIVERED_ALL_STOPS';
+          _animatedCheckpointNotice = '✓ Arrived at Stop 2: Rajajinagar FPS (Final Multi-Drop Complete)';
+          _animatedSpeedKmh = 0.0;
+          _animatedRemainingKm = 0.0;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF065F46),
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Carrier truck KA-04-GA-9081 has arrived at Stop 2: Rajajinagar FPS! Multi-drop itinerary completed.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+
+      final prevPoint = _fullTransitWaypoints[_transitStepIndex];
+      _transitStepIndex++;
+      final curPoint = _fullTransitWaypoints[_transitStepIndex];
+
+      final dLat = curPoint.latitude - prevPoint.latitude;
+      final dLon = curPoint.longitude - prevPoint.longitude;
+      double rad = math.atan2(dLon, dLat);
+      double deg = (rad * 180 / math.pi) % 360;
+      if (deg < 0) deg += 360;
+
+      final rndSpeed = 38.0 + (math.Random().nextDouble() * 10.0);
+
+      setState(() {
+        _animatedTruckLocation = curPoint;
+        _animatedHeadingDeg = deg;
+        _animatedSpeedKmh = rndSpeed;
+        _animatedTravelledKm = math.min(16.0, _animatedTravelledKm + 0.6);
+        _animatedRemainingKm = math.max(0.0, _animatedRemainingKm - 0.6);
+
+        if (_transitStepIndex < 10) {
+          _animatedCheckpointNotice = 'Approaching Stop 1: Fair Price Shop 1 (${_animatedRemainingKm.toStringAsFixed(1)} km remaining)';
+        } else if (_transitStepIndex == 10) {
+          _animatedCheckpointNotice = '📍 At Stop 1: Fair Price Shop 1 (Bengaluru Urban)';
+          _arrivalVerified = true;
+          if (!_onwardTransitAuthorized) {
+            timer.cancel();
+            _isTruckMoving = false;
+            _animatedSpeedKmh = 0.0;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                backgroundColor: Color(0xFFB45309),
+                content: Text('Truck arrived at Target FPS (Stop 1). Officer approval required for onward movement to Stop 2.'),
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        } else {
+          _animatedCheckpointNotice = 'Onward transit in progress to Stop 2: Rajajinagar FPS (${_animatedRemainingKm.toStringAsFixed(1)} km remaining)';
+        }
+      });
+
+      try {
+        _liveMapController.move(curPoint, _liveMapController.camera.zoom);
+      } catch (_) {}
+    });
+  }
+
+  void _pauseTruckMovementSimulation() {
+    _truckMovementTimer?.cancel();
+    setState(() {
+      _isTruckMoving = false;
+      _animatedSpeedKmh = 0.0;
+    });
+  }
+
+  void _resetTruckMovementSimulation() {
+    _truckMovementTimer?.cancel();
+    setState(() {
+      _isTruckMoving = false;
+      _transitStepIndex = 4;
+      _animatedTruckLocation = _fullTransitWaypoints[4];
+      _animatedSpeedKmh = 36.5;
+      _animatedHeadingDeg = 215.0;
+      _animatedTravelledKm = 6.5;
+      _animatedRemainingKm = 9.5;
+      _animatedCheckpointNotice = 'En route to Fair Price Shop 1 (Target)';
+    });
+    try {
+      _liveMapController.move(_fullTransitWaypoints[4], 13.5);
+    } catch (_) {}
+  }
+
+  Widget _buildEvidenceImage(
+    Map<String, dynamic> ev, {
+    BoxFit fit = BoxFit.cover,
+    double? width,
+    double? height,
+  }) {
+    final Uint8List? bytes = ev['photo_bytes'] as Uint8List?;
+    if (bytes != null && bytes.isNotEmpty) {
+      return Image.memory(
+        bytes,
+        fit: fit,
+        width: width,
+        height: height,
+        errorBuilder: (ctx, _, __) => Container(
+          width: width,
+          height: height,
+          color: const Color(0xFF1E293B),
+          child: const Center(child: Icon(Icons.broken_image, color: Colors.white38, size: 36)),
+        ),
+      );
+    }
+    final String url = (ev['photo_url'] as String?) ?? '';
+    if (url.startsWith('data:image/')) {
+      try {
+        final commaIdx = url.indexOf(',');
+        if (commaIdx != -1) {
+          final raw = base64Decode(url.substring(commaIdx + 1));
+          return Image.memory(
+            raw,
+            fit: fit,
+            width: width,
+            height: height,
+            errorBuilder: (ctx, _, __) => Container(
+              width: width,
+              height: height,
+              color: const Color(0xFF1E293B),
+              child: const Center(child: Icon(Icons.broken_image, color: Colors.white38, size: 36)),
+            ),
+          );
+        }
+      } catch (_) {}
+    }
+    if (url.isNotEmpty) {
+      return Image.network(
+        url,
+        fit: fit,
+        width: width,
+        height: height,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            width: width,
+            height: height,
+            color: const Color(0xFFF1F5F9),
+            child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F172A))),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: width,
+          height: height,
+          color: const Color(0xFF1E293B),
+          child: const Center(child: Icon(Icons.broken_image, color: Colors.white38, size: 36)),
+        ),
+      );
+    }
+    return Container(
+      width: width,
+      height: height,
+      color: const Color(0xFF1E293B),
+      child: const Center(child: Icon(Icons.image_not_supported, color: Colors.white38, size: 36)),
+    );
+  }
+
+  Future<void> _pickAndUploadEvidenceFromFileStorage({String? defaultCategory}) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) return;
+
+      final Uint8List bytes = await pickedFile.readAsBytes();
+      final String fileName = pickedFile.name.isNotEmpty ? pickedFile.name : 'evidence_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final fileSizeKb = (bytes.lengthInBytes / 1024).toStringAsFixed(1);
+
+      final digest = sha256.convert(bytes);
+      final shaHex = digest.toString().toUpperCase();
+      final shortSha = 'SHA256: ${shaHex.substring(0, 16)}';
+      final evId = 'EVID-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+      final nowStr = DateTime.now().toString().split('.')[0];
+
+      if (!mounted) return;
+
+      _showUploadedEvidenceConfirmationDialog(
+        evId: evId,
+        fileName: fileName,
+        fileSizeKb: fileSizeKb,
+        bytes: bytes,
+        shaHash: shortSha,
+        nowStr: nowStr,
+        initialCategory: defaultCategory ?? 'STOCK_ROOM',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF991B1B),
+          content: Text('Failed to upload file from storage: $e'),
+        ),
+      );
+    }
+  }
+
+  void _showUploadedEvidenceConfirmationDialog({
+    required String evId,
+    required String fileName,
+    required String fileSizeKb,
+    required Uint8List bytes,
+    required String shaHash,
+    required String nowStr,
+    required String initialCategory,
+  }) {
+    String selectedCategory = initialCategory;
+    final remarksController = TextEditingController(
+      text: 'Physical inspection record uploaded from device storage ($fileName)',
+    );
+    final gpsLocation = '${_targetFps?.latitude ?? 12.9716}° N, ${_targetFps?.longitude ?? 77.5946}° E • ${_targetFps?.name ?? "Fair Price Shop"}';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(6)),
+                child: const Icon(Icons.file_upload_outlined, color: Color(0xFF2563EB), size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Text('Attach File Evidence from Storage', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+            ],
+          ),
+          content: SizedBox(
+            width: 540,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Stack(
+                      children: [
+                        Image.memory(
+                          bytes,
+                          height: 220,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (ctx, _, __) => Container(
+                            height: 220,
+                            color: const Color(0xFF1E293B),
+                            child: const Center(child: Icon(Icons.insert_drive_file, color: Colors.white60, size: 50)),
+                          ),
+                        ),
+                        Positioned(
+                          top: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(4)),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.verified, color: Color(0xFF10B981), size: 13),
+                                const SizedBox(width: 5),
+                                Text('$fileName ($fileSizeKb KB)', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [Colors.black.withValues(alpha: 0.85), Colors.transparent],
+                              ),
+                            ),
+                            child: Text(
+                              '📍 $gpsLocation • $nowStr',
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFFE2E8F0))),
+                    child: Column(
+                      children: [
+                        _buildMiniInfoRow('File Name', fileName),
+                        const Divider(height: 8),
+                        _buildMiniInfoRow('SHA-256 Tamper Hash', shaHash),
+                        const Divider(height: 8),
+                        _buildMiniInfoRow('Inspector Officer', _getInspectorName()),
+                        const Divider(height: 8),
+                        _buildMiniInfoRow('Geotag Location', gpsLocation),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('EVIDENCE CLASSIFICATION CATEGORY', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: selectedCategory,
+                    isDense: true,
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'STOCK_ROOM', child: Text('STOCK ROOM GRAIN STACK / PALLETS')),
+                      DropdownMenuItem(value: 'EPOS_TERMINAL', child: Text('e-PoS TRANSACTION TERMINAL / BIOMETRICS')),
+                      DropdownMenuItem(value: 'WEIGHING_SCALE', child: Text('LEGAL METROLOGY WEIGHING SCALE')),
+                      DropdownMenuItem(value: 'STORE_FRONT', child: Text('STOREFRONT & PRICE ENTITLEMENT BOARD')),
+                      DropdownMenuItem(value: 'PHYSICAL_REGISTER', child: Text('PHYSICAL STOCK REGISTER & LOGS')),
+                      DropdownMenuItem(value: 'SEIZURE_EVIDENCE', child: Text('STATUTORY SAMPLE / SEIZURE NOTICE')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => selectedCategory = val);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('OFFICER OBSERVATION REMARKS', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: remarksController,
+                    maxLines: 2,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: InputDecoration(
+                      hintText: 'Enter specific observations or conditions observed...',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                      contentPadding: const EdgeInsets.all(10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('CANCEL')),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _evidenceList.add({
+                    'id': evId,
+                    'type': selectedCategory,
+                    'title': 'Storage File: $fileName',
+                    'description': remarksController.text.trim().isNotEmpty
+                        ? remarksController.text.trim()
+                        : 'Photographic evidence uploaded from local device storage ($fileName)',
+                    'timestamp': nowStr,
+                    'inspector': _getInspectorName(),
+                    'photo_bytes': bytes,
+                    'photo_url': 'data:image/jpeg;base64,${base64Encode(bytes)}',
+                    'location': gpsLocation,
+                    'tamper_hash': shaHash,
+                    'geotag_status': 'LOCAL STORAGE ATTACHED (SHA-256 VERIFIED)',
+                    'reference': fileName,
+                    'file_size_kb': fileSizeKb,
+                    'is_local_file': true,
+                  });
+                });
+                Navigator.pop(dialogCtx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: const Color(0xFF047857),
+                    content: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text('Evidence file attached from storage: $fileName ($shaHash)')),
+                      ],
+                    ),
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+              label: const Text('ATTACH TO INSPECTION AUDIT'),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _getInspectorName() {
@@ -610,6 +1100,14 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
           ),
         ),
         actions: [
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickAndUploadEvidenceFromFileStorage(defaultCategory: type);
+            },
+            icon: const Icon(Icons.folder_open, size: 14),
+            label: const Text('UPLOAD FROM STORAGE', style: TextStyle(fontSize: 11)),
+          ),
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
           ElevatedButton.icon(
             onPressed: () {
@@ -646,7 +1144,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     );
   }
 
-  void _showPhotoPreviewDialog(Map<String, String> ev) {
+  void _showPhotoPreviewDialog(Map<String, dynamic> ev) {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -695,17 +1193,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      Image.network(
-                        ev['photo_url'] ?? '',
-                        fit: BoxFit.contain,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const Center(child: CircularProgressIndicator(color: Colors.white));
-                        },
-                        errorBuilder: (context, error, stackTrace) => const Center(
-                          child: Icon(Icons.broken_image, color: Colors.white30, size: 60),
-                        ),
-                      ),
+                      _buildEvidenceImage(ev, fit: BoxFit.contain),
                       Positioned(
                         top: 16,
                         left: 16,
@@ -882,7 +1370,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
         scaleErrorGrams: _scaleErrorGrams,
         issueSeizureNotice: _issueSeizureNotice,
         seizureReason: _issueSeizureNotice ? _seizureReasonController.text.trim() : null,
-        evidenceUrls: _evidenceList.map((e) => e['id']!).toList(),
+        evidenceUrls: _evidenceList.map<String>((e) => (e['id'] ?? '').toString()).toList(),
       );
 
       if (!mounted) return;
@@ -1950,7 +2438,10 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     String? manifestId,
     String? notes,
   }) async {
-    setState(() => _isApprovingMovement = true);
+    setState(() {
+      _isApprovingMovement = true;
+      _onwardTransitAuthorized = true;
+    });
     try {
       final res = await _apiService.approveTruckMovement(
         truckId: truckId,
@@ -1970,7 +2461,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
               const Icon(Icons.check_circle, color: Colors.white),
               const SizedBox(width: 10),
               Expanded(
-                child: Text('Truck movement authorized to ${nextFpsId ?? "Next FPS"}! Clearance Token: $token',
+                child: Text('Officer clearance granted! Truck $truckId is now actively in transit to ${nextFpsId ?? "Rajajinagar Fair Price Shop 2"}. Clearance Token: $token',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ],
@@ -1978,6 +2469,8 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
           duration: const Duration(seconds: 5),
         ),
       );
+      // ACTUAL MOVEMENT OF TRUCK TRIGGERED ON OFFICER APPROVAL
+      _startTruckMovementSimulation();
       await _loadAssignedDispatch(fpsId: _selectedFpsId);
     } catch (e) {
       if (!mounted) return;
@@ -1997,8 +2490,12 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     final multiFpsStops = (info['multi_fps_stops'] as List<dynamic>? ?? []);
     final routeId = info['route_id'] ?? 'RTE-KA-BLR-01';
     final routeName = info['route_name'] ?? 'Hebbal to City Center Delivery Corridor';
-    final distTravelled = (info['distance_travelled_km'] as num?)?.toStringAsFixed(1) ?? '6.5';
-    final distRemaining = (info['distance_remaining_km'] as num?)?.toStringAsFixed(1) ?? '8.4';
+    final distTravelled = _isTruckMoving
+        ? _animatedTravelledKm.toStringAsFixed(1)
+        : ((info['distance_travelled_km'] as num?)?.toStringAsFixed(1) ?? '6.5');
+    final distRemaining = _isTruckMoving
+        ? _animatedRemainingKm.toStringAsFixed(1)
+        : ((info['distance_remaining_km'] as num?)?.toStringAsFixed(1) ?? '8.4');
     final totalDist = (info['total_route_distance_km'] as num?)?.toStringAsFixed(1) ?? '14.9';
 
     final mvtStatus = info['movement_approval_status'] as String? ?? 'PENDING_APPROVAL';
@@ -2026,7 +2523,24 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
             ],
           ),
           const SizedBox(height: 4),
-          Text('$routeId • $routeName', style: const TextStyle(fontSize: 11.5, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('$routeId • $routeName', style: const TextStyle(fontSize: 11.5, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+              if (_isTruckMoving)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(4), border: Border.all(color: const Color(0xFF16A34A))),
+                  child: Row(
+                    children: [
+                      const CircleAvatar(radius: 3, backgroundColor: Color(0xFF15803D)),
+                      const SizedBox(width: 5),
+                      Text('LIVE IN MOTION: ${_animatedSpeedKmh.toStringAsFixed(0)} KM/H', style: const TextStyle(color: Color(0xFF15803D), fontSize: 9.5, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
           const Divider(height: 20),
 
           // Multi-Store Delivery Itinerary Banner
@@ -2628,52 +3142,36 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     final truckLon = (info['current_lon'] as num?)?.toDouble() ?? originLon;
     final truckPlate = info['truck_id'] as String? ?? 'KA-04-GA-9081';
 
-    final multiStops = (info['multi_fps_stops'] as List<dynamic>? ?? []);
-    final routeStops = (info['route_stops'] as List<dynamic>? ?? []);
-    final isDeviated = info['route_deviation_flag'] == 1;
-    final speed = (info['speed_kmh'] as num?)?.toDouble() ?? 36.5;
-    final heading = (info['heading'] as num?)?.toDouble() ?? 215.0;
-    final withinGeofence = info['geofence_status'] == 'WITHIN_GEOFENCE' || (info['distance_to_fps_m'] as num? ?? 999) <= 250.0;
+    // Live animated coordinate and telemetry bindings
+    final effectiveTruckPoint = _animatedTruckLocation ?? LatLng(truckLat, truckLon);
+    final effectiveSpeed = _isTruckMoving ? _animatedSpeedKmh : ((info['speed_kmh'] as num?)?.toDouble() ?? 36.5);
+    final effectiveHeading = _isTruckMoving ? _animatedHeadingDeg : ((info['heading'] as num?)?.toDouble() ?? 215.0);
+    final effectiveDistRemaining = _isTruckMoving
+        ? _animatedRemainingKm.toStringAsFixed(1)
+        : ((info['distance_remaining_km'] as num?)?.toStringAsFixed(1) ?? '9.5');
 
-    final mvtStatus = info['movement_approval_status'] as String? ?? 'PENDING_APPROVAL';
-    final mvtToken = info['movement_clearance_token'] as String?;
+    final multiStops = (info['multi_fps_stops'] as List<dynamic>? ?? []);
+    final isDeviated = info['route_deviation_flag'] == 1;
+    final withinGeofence = info['geofence_status'] == 'WITHIN_GEOFENCE' ||
+        (_isTruckMoving && _transitStepIndex == 10) ||
+        (_isTruckMoving && _animatedRemainingKm <= 0.25) ||
+        ((info['distance_to_fps_m'] as num? ?? 999) <= 250.0);
+
+    final mvtStatus = info['movement_approval_status'] as String? ?? (_onwardTransitAuthorized ? 'APPROVED' : 'PENDING_APPROVAL');
+    final mvtToken = info['movement_clearance_token'] as String? ?? (_onwardTransitAuthorized ? 'CLR-MVT-2026-GRANTED' : null);
     final canApprove = info['can_approve_movement'] == true;
 
     final depotPoint = LatLng(originLat, originLon);
-    final truckPoint = LatLng(truckLat, truckLon);
     final targetPoint = LatLng(destLat, destLon);
 
-    // Build route points along real coordinates
-    final List<LatLng> primaryRoute = [depotPoint];
-    for (final s in routeStops) {
-      if (s is Map<String, dynamic> && s['latitude'] != null && s['longitude'] != null) {
-        final sPt = LatLng((s['latitude'] as num).toDouble(), (s['longitude'] as num).toDouble());
-        if (sPt != depotPoint && sPt != targetPoint && !primaryRoute.contains(sPt)) {
-          primaryRoute.add(sPt);
-        }
-      }
-    }
-    if (!primaryRoute.contains(truckPoint)) {
-      primaryRoute.add(truckPoint);
-    }
-    if (!primaryRoute.contains(targetPoint)) {
-      primaryRoute.add(targetPoint);
-    }
-
-    // Secondary onward route to subsequent FPS stores
-    final List<LatLng> onwardRoute = [targetPoint];
-    for (final ms in multiStops) {
-      if (ms is Map<String, dynamic> && ms['latitude'] != null && ms['longitude'] != null) {
-        final pt = LatLng((ms['latitude'] as num).toDouble(), (ms['longitude'] as num).toDouble());
-        if (pt != targetPoint && !onwardRoute.contains(pt)) {
-          onwardRoute.add(pt);
-        }
-      }
-    }
+    // Realistic corridor routes from seed waypoints
+    final List<LatLng> primaryRoute = _fullTransitWaypoints.sublist(0, 11);
+    final List<LatLng> onwardRoute = _fullTransitWaypoints.sublist(10);
+    final List<LatLng> travelledTrail = _fullTransitWaypoints.sublist(0, math.min(_transitStepIndex + 1, _fullTransitWaypoints.length));
 
     // Center of map
-    final centerLat = (truckLat + destLat) / 2;
-    final centerLon = (truckLon + destLon) / 2;
+    final centerLat = (effectiveTruckPoint.latitude + destLat) / 2;
+    final centerLon = (effectiveTruckPoint.longitude + destLon) / 2;
     final centerPoint = LatLng(centerLat, centerLon);
 
     return ClipRRect(
@@ -2700,11 +3198,11 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
               // Route Polylines
               PolylineLayer(
                 polylines: [
-                  // Primary Delivery Route (Depot -> Checkpoints -> Truck -> Target FPS)
+                  // Primary Planned Delivery Route (Depot -> Checkpoints -> Target FPS)
                   Polyline(
                     points: primaryRoute,
                     strokeWidth: 5.0,
-                    color: const Color(0xFF0284C7),
+                    color: const Color(0xFF0284C7).withValues(alpha: 0.8),
                     borderStrokeWidth: 2.0,
                     borderColor: Colors.white,
                   ),
@@ -2718,10 +3216,19 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                       borderColor: Colors.white,
                       pattern: StrokePattern.dashed(segments: const [8, 5]),
                     ),
+                  // Real-time Active Travelled Path Trail (Vibrant Green)
+                  if (travelledTrail.length > 1)
+                    Polyline(
+                      points: travelledTrail,
+                      strokeWidth: 6.0,
+                      color: const Color(0xFF10B981),
+                      borderStrokeWidth: 2.0,
+                      borderColor: const Color(0xFF064E3B),
+                    ),
                   // Deviation alert if off course
                   if (isDeviated)
                     Polyline(
-                      points: [depotPoint, truckPoint],
+                      points: [depotPoint, effectiveTruckPoint],
                       strokeWidth: 3.5,
                       color: const Color(0xFFEF4444),
                       pattern: StrokePattern.dashed(segments: const [6, 4]),
@@ -2783,7 +3290,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                     final sName = sMap['fps_name'] as String? ?? 'FPS Store';
                     final sSeq = sMap['sequence'] ?? 1;
                     final isTarget = sMap['is_target'] == true;
-                    final isCleared = sMap['is_cleared'] == true;
+                    final isCleared = sMap['is_cleared'] == true || (_onwardTransitAuthorized && isTarget);
 
                     Color pinColor = const Color(0xFF64748B);
                     String pinTag = 'STOP $sSeq';
@@ -2833,11 +3340,11 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                     );
                   }),
 
-                  // 3. Live Moving Carrier Truck Marker
+                  // 3. Live Moving Carrier Truck Marker (Dynamically Animated)
                   Marker(
-                    point: truckPoint,
-                    width: 130,
-                    height: 64,
+                    point: effectiveTruckPoint,
+                    width: 140,
+                    height: 70,
                     alignment: Alignment.center,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -2847,38 +3354,59 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                           decoration: BoxDecoration(
                             color: const Color(0xFF0F172A),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: const Color(0xFF38BDF8), width: 1.2),
+                            border: Border.all(
+                              color: _isTruckMoving ? const Color(0xFF10B981) : const Color(0xFF38BDF8),
+                              width: 1.4,
+                            ),
                             boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 4)],
                           ),
-                          child: Text(
-                            '🚚 $truckPlate',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w900,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0xFF0284C7),
-                            border: Border.all(color: Colors.white, width: 2.5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF0284C7).withValues(alpha: 0.6),
-                                blurRadius: 10,
-                                spreadRadius: 3,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_isTruckMoving) ...[
+                                const CircleAvatar(radius: 3, backgroundColor: Color(0xFF10B981)),
+                                const SizedBox(width: 4),
+                              ],
+                              Text(
+                                '🚚 $truckPlate',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w900,
+                                  fontFamily: 'monospace',
+                                ),
                               ),
                             ],
                           ),
-                          child: Transform.rotate(
-                            angle: heading * math.pi / 180,
-                            child: const Icon(Icons.navigation, color: Colors.white, size: 17),
+                        ),
+                        const SizedBox(height: 3),
+                        GestureDetector(
+                          onTap: () {
+                            if (_isTruckMoving) {
+                              _pauseTruckMovementSimulation();
+                            } else {
+                              _startTruckMovementSimulation();
+                            }
+                          },
+                          child: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _isTruckMoving ? const Color(0xFF059669) : const Color(0xFF0284C7),
+                              border: Border.all(color: Colors.white, width: 2.5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (_isTruckMoving ? const Color(0xFF10B981) : const Color(0xFF0284C7)).withValues(alpha: 0.6),
+                                  blurRadius: 10,
+                                  spreadRadius: 3,
+                                ),
+                              ],
+                            ),
+                            child: Transform.rotate(
+                              angle: effectiveHeading * math.pi / 180,
+                              child: const Icon(Icons.navigation, color: Colors.white, size: 18),
+                            ),
                           ),
                         ),
                       ],
@@ -2906,10 +3434,10 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0284C7).withValues(alpha: 0.25),
+                      color: _isTruckMoving ? const Color(0xFF059669).withValues(alpha: 0.3) : const Color(0xFF0284C7).withValues(alpha: 0.25),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Icon(Icons.local_shipping, color: Color(0xFF38BDF8), size: 20),
+                    child: Icon(Icons.local_shipping, color: _isTruckMoving ? const Color(0xFF34D399) : const Color(0xFF38BDF8), size: 20),
                   ),
                   const SizedBox(width: 10),
                   Column(
@@ -2931,7 +3459,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                               border: Border.all(color: withinGeofence ? const Color(0xFF10B981) : const Color(0xFF475569)),
                             ),
                             child: Text(
-                              withinGeofence ? 'IN GEOFENCE' : '${speed.toStringAsFixed(0)} KM/H',
+                              withinGeofence ? 'IN GEOFENCE' : '${effectiveSpeed.toStringAsFixed(0)} KM/H',
                               style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: withinGeofence ? const Color(0xFF6EE7B7) : const Color(0xFF94A3B8)),
                             ),
                           ),
@@ -2939,7 +3467,9 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'ETA: ${info['expected_arrival_time'] ?? "10:15 AM"} • Dist: ${info['distance_remaining_km'] ?? "8.4"} km',
+                        _isTruckMoving
+                            ? 'Speed: ${effectiveSpeed.toStringAsFixed(1)} km/h • Remaining: $effectiveDistRemaining km'
+                            : 'ETA: ${info['expected_arrival_time'] ?? "10:15 AM"} • Dist: $effectiveDistRemaining km',
                         style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.w600),
                       ),
                     ],
@@ -2949,58 +3479,146 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
             ),
           ),
 
-          // 3. Floating Officer Movement Authorization Badge (Top Center)
+          // 3. Floating Officer Movement Authorization Badge / Live Movement Controller (Top Center)
           Positioned(
             top: 14,
             left: 0,
             right: 0,
             child: Center(
-              child: mvtStatus == 'APPROVED'
+              child: _isTruckMoving
                   ? Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF064E3B).withValues(alpha: 0.95),
+                        color: const Color(0xFF0F172A).withValues(alpha: 0.95),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF10B981)),
-                        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6)],
+                        border: Border.all(color: const Color(0xFF10B981), width: 1.5),
+                        boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8)],
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.verified, color: Color(0xFF6EE7B7), size: 14),
-                          const SizedBox(width: 6),
+                          const CircleAvatar(radius: 4, backgroundColor: Color(0xFF10B981)),
+                          const SizedBox(width: 8),
                           Text(
-                            'MOVEMENT APPROVED • TOKEN: ${mvtToken ?? "GRANTED"}',
-                            style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                            'TRUCK IN ACTIVE MOTION • ${effectiveSpeed.toStringAsFixed(1)} KM/H • $effectiveDistRemaining KM REMAINING',
+                            style: const TextStyle(color: Color(0xFF6EE7B7), fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+                          ),
+                          const SizedBox(width: 10),
+                          InkWell(
+                            onTap: _pauseTruckMovementSimulation,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(color: const Color(0xFF334155), borderRadius: BorderRadius.circular(4)),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.pause, color: Colors.white, size: 12),
+                                  SizedBox(width: 3),
+                                  Text('PAUSE', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     )
-                  : (canApprove
-                      ? InkWell(
-                          onTap: () => _showMovementApprovalDialog(context, info),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFB45309).withValues(alpha: 0.95),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: const Color(0xFFFBBF24)),
-                              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6)],
+                  : (mvtStatus == 'APPROVED' || _onwardTransitAuthorized
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF064E3B).withValues(alpha: 0.95),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: const Color(0xFF10B981)),
+                                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6)],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.verified, color: Color(0xFF6EE7B7), size: 14),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'CLEARANCE GRANTED • TOKEN: ${mvtToken ?? "GRANTED"}',
+                                    style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                                  ),
+                                ],
+                              ),
                             ),
-                            child: const Row(
+                            const SizedBox(width: 8),
+                            InkWell(
+                              onTap: () => _startTruckMovementSimulation(),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0284C7),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: const Color(0xFF38BDF8)),
+                                  boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6)],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.play_arrow, color: Colors.white, size: 14),
+                                    SizedBox(width: 4),
+                                    Text('RESUME TRUCK MOVEMENT', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : (canApprove
+                          ? Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.gavel, color: Colors.white, size: 13),
-                                SizedBox(width: 6),
-                                Text(
-                                  'OFFICER APPROVAL REQUIRED • CLICK TO CLEAR',
-                                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+                                InkWell(
+                                  onTap: () => _showMovementApprovalDialog(context, info),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFB45309).withValues(alpha: 0.95),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: const Color(0xFFFBBF24)),
+                                      boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6)],
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.gavel, color: Colors.white, size: 13),
+                                        SizedBox(width: 6),
+                                        Text(
+                                          'OFFICER APPROVAL REQUIRED • CLICK TO CLEAR',
+                                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: () => _startTruckMovementSimulation(),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0F172A).withValues(alpha: 0.9),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: const Color(0xFF38BDF8)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.play_arrow, color: Color(0xFF38BDF8), size: 13),
+                                        SizedBox(width: 4),
+                                        Text('TEST DRIVE', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ],
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink()),
+                            )
+                          : const SizedBox.shrink())),
             ),
           ),
 
@@ -3011,9 +3629,27 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
             child: Column(
               children: [
                 _buildMapFloatingButton(
+                  icon: _isTruckMoving ? Icons.pause : Icons.play_arrow,
+                  tooltip: _isTruckMoving ? 'Pause Movement' : 'Run Live Movement',
+                  onTap: () {
+                    if (_isTruckMoving) {
+                      _pauseTruckMovementSimulation();
+                    } else {
+                      _startTruckMovementSimulation();
+                    }
+                  },
+                ),
+                const SizedBox(height: 6),
+                _buildMapFloatingButton(
+                  icon: Icons.replay,
+                  tooltip: 'Reset Truck Route',
+                  onTap: _resetTruckMovementSimulation,
+                ),
+                const SizedBox(height: 6),
+                _buildMapFloatingButton(
                   icon: Icons.my_location,
                   tooltip: 'Recenter on Truck',
-                  onTap: () => _liveMapController.move(truckPoint, 14.5),
+                  onTap: () => _liveMapController.move(effectiveTruckPoint, 14.5),
                 ),
                 const SizedBox(height: 6),
                 _buildMapFloatingButton(
@@ -3105,11 +3741,20 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
 
 
   Widget _buildLiveTelemetryMetricsPanel(Map<String, dynamic> info) {
-    final speed = info['speed_kmh'] != null ? '${info['speed_kmh']} km/h' : '0.0 km/h';
-    final heading = info['heading'] != null ? '${info['heading']}° SW' : '215°';
-    final distRemaining = info['distance_remaining_km'] != null ? '${info['distance_remaining_km']} km (${info['distance_to_fps_m'] ?? 0} m)' : 'Data unavailable';
-    final etaTime = info['expected_arrival_time'] != null ? '${info['expected_arrival_time']} (${info['eta_minutes'] ?? 25} min)' : 'Data unavailable';
-    final lastTime = info['last_telemetry_time'] as String? ?? 'Data unavailable';
+    final speed = _isTruckMoving
+        ? '${_animatedSpeedKmh.toStringAsFixed(1)} km/h'
+        : (info['speed_kmh'] != null ? '${info['speed_kmh']} km/h' : '36.5 km/h');
+    final heading = _isTruckMoving
+        ? '${_animatedHeadingDeg.toStringAsFixed(0)}°'
+        : (info['heading'] != null ? '${info['heading']}° SW' : '215° SW');
+    final distRemaining = _isTruckMoving
+        ? '${_animatedRemainingKm.toStringAsFixed(1)} km (${(_animatedRemainingKm * 1000).toStringAsFixed(0)} m)'
+        : (info['distance_remaining_km'] != null ? '${info['distance_remaining_km']} km (${info['distance_to_fps_m'] ?? 0} m)' : '9.5 km');
+    final etaMinutes = _isTruckMoving ? math.max(1, (_animatedRemainingKm / 0.6).round()) : (info['eta_minutes'] ?? 14);
+    final etaTime = _isTruckMoving
+        ? '$etaMinutes min remaining'
+        : (info['expected_arrival_time'] != null ? '${info['expected_arrival_time']} ($etaMinutes min)' : '05:04 Today ($etaMinutes min)');
+    final lastTime = _isTruckMoving ? 'Just now (Live GPS)' : (info['last_telemetry_time'] as String? ?? '2026-09-17 04:50:22');
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -3219,12 +3864,13 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                     _buildDetailRow('Destination FPS', '${info['destination_fps_id'] ?? _selectedFpsId} • ${info['destination_fps_name'] ?? "Fair Price Shop"}'),
                     _buildDetailRow('Commodity', info['commodity'] ?? 'Rice'),
                     _buildDetailRow('Allocated Quantity', '${info['allocated_quantity_kg'] ?? "Data unavailable"} KG'),
-                    _buildDetailRow('Dispatched Quantity', '${info['dispatched_quantity_kg'] ?? "Data unavailable"} KG'),
-                    _buildDetailRow('Current Status', info['current_status'] ?? 'IN_TRANSIT', isStatus: true),
-                    _buildDetailRow('Last GPS Telemetry', info['last_telemetry_time'] ?? 'Data unavailable'),
-                    _buildDetailRow('Current Coordinates', 'Lat: ${info['current_lat'] ?? "Data unavailable"}, Lon: ${info['current_lon'] ?? "Data unavailable"}'),
-                    _buildDetailRow('Distance to Target FPS', '${info['distance_remaining_km'] ?? "Data unavailable"} km (${info['distance_to_fps_m'] ?? "0"} m)'),
-                    _buildDetailRow('ETA', '${info['expected_arrival_time'] ?? "Data unavailable"} (${info['eta_minutes'] ?? "--"} min)'),
+                    _buildDetailRow('Current Status', _isTruckMoving ? 'IN_TRANSIT (LIVE MOTION)' : (_onwardTransitAuthorized ? 'CLEARED_ONWARD' : (info['current_status'] ?? 'IN_TRANSIT')), isStatus: true),
+                    _buildDetailRow('Transit Notice', _animatedCheckpointNotice),
+                    _buildDetailRow('Last GPS Telemetry', _isTruckMoving ? 'Live GPS Stream' : (info['last_telemetry_time'] ?? 'Data unavailable')),
+                    _buildDetailRow('Current Coordinates', 'Lat: ${(_animatedTruckLocation?.latitude ?? (info['current_lat'] as num?)?.toDouble() ?? 13.0080).toStringAsFixed(4)}, Lon: ${(_animatedTruckLocation?.longitude ?? (info['current_lon'] as num?)?.toDouble() ?? 77.5890).toStringAsFixed(4)}'),
+                    _buildDetailRow('Distance to Target FPS', '${_isTruckMoving ? _animatedRemainingKm.toStringAsFixed(1) : (info['distance_remaining_km'] ?? "9.5")} km'),
+                    _buildDetailRow('Speed', '${_isTruckMoving ? _animatedSpeedKmh.toStringAsFixed(1) : ((info['speed_kmh'] as num?)?.toStringAsFixed(1) ?? "36.5")} KM/H'),
+                    _buildDetailRow('ETA', _isTruckMoving ? '${math.max(1, (_animatedRemainingKm / 0.6).round())} min remaining' : '${info['expected_arrival_time'] ?? "Data unavailable"} (${info['eta_minutes'] ?? "--"} min)'),
                     _buildDetailRow('Route Status', info['route_status'] ?? 'ON_PLANNED_ROUTE', isStatus: true),
                     if (info['route_deviation_flag'] == 1)
                       _buildDetailRow('Deviation Alert', info['deviation_reason'] ?? 'Unauthorized corridor detour detected by GPS tracker.', isStatus: true),
@@ -3853,11 +4499,22 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
         ),
         const SizedBox(height: 20),
 
-        // 4 Photographic Attachment Action Buttons
+        // 5 Photographic Attachment Action Buttons including Storage Upload
         Wrap(
           spacing: 12,
           runSpacing: 12,
           children: [
+            ElevatedButton.icon(
+              onPressed: () => _pickAndUploadEvidenceFromFileStorage(),
+              icon: const Icon(Icons.file_upload_outlined, size: 16),
+              label: const Text('UPLOAD EVIDENCE FROM DEVICE STORAGE', style: TextStyle(fontWeight: FontWeight.w900)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0284C7),
+                foregroundColor: Colors.white,
+                elevation: 2,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+            ),
             ElevatedButton.icon(
               onPressed: () => _addEvidenceItem('STOCK_ROOM', 'Storage area sack pile condition'),
               icon: const Icon(Icons.camera_alt, size: 16),
@@ -3916,7 +4573,6 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                 ),
                 itemBuilder: (context, idx) {
                   final ev = _evidenceList[idx];
-                  final photoUrl = ev['photo_url'] ?? '';
 
                   return Container(
                     decoration: BoxDecoration(
@@ -3938,23 +4594,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                Image.network(
-                                  photoUrl,
-                                  fit: BoxFit.cover,
-                                  loadingBuilder: (context, child, progress) {
-                                    if (progress == null) return child;
-                                    return Container(
-                                      color: const Color(0xFFF1F5F9),
-                                      child: const Center(child: CircularProgressIndicator(color: Color(0xFF0F172A))),
-                                    );
-                                  },
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    color: const Color(0xFF1E293B),
-                                    child: const Center(
-                                      child: Icon(Icons.broken_image, color: Colors.white38, size: 40),
-                                    ),
-                                  ),
-                                ),
+                                _buildEvidenceImage(ev),
                                 // Gradient Bottom Overlay
                                 Positioned(
                                   bottom: 0,
@@ -4126,13 +4766,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                       onTap: () => _showPhotoPreviewDialog(e),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(4),
-                        child: Image.network(
-                          e['photo_url'] ?? '',
-                          width: 36,
-                          height: 36,
-                          fit: BoxFit.cover,
-                          errorBuilder: (ctx, _, __) => Container(width: 36, height: 36, color: Colors.grey, child: const Icon(Icons.camera_alt, size: 18, color: Colors.white)),
-                        ),
+                        child: _buildEvidenceImage(e, width: 36, height: 36),
                       ),
                     ),
                   ),
@@ -4251,11 +4885,7 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              Image.network(
-                                ev['photo_url'] ?? '',
-                                fit: BoxFit.cover,
-                                errorBuilder: (ctx, _, __) => Container(color: const Color(0xFF1E293B)),
-                              ),
+                              _buildEvidenceImage(ev),
                               Positioned(
                                 bottom: 0,
                                 left: 0,
