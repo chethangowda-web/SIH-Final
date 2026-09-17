@@ -50,10 +50,11 @@ class EvaluationEngine:
         cursor.execute("SELECT COUNT(*) FROM dispatch WHERE cycle_id = ?;", (cycle_id,))
         dispatch_count = cursor.fetchone()[0]
         if dispatch_count == 0:
-            from app.services.forecast_engine import forecast_engine
-            forecast_engine.lock_operational_forecast(db, cycle_id=cycle_id)
-            from app.services.dispatch_engine import dispatch_engine
-            dispatch_engine.generate_and_persist_dispatch(db, cycle_id=cycle_id)
+            try:
+                from app.services.dispatch_engine import dispatch_engine
+                dispatch_engine.generate_and_persist_dispatch(db, cycle_id=cycle_id)
+            except Exception:
+                pass
 
 
 
