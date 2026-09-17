@@ -233,6 +233,17 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
     """)
 
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS inspector_active_sessions (
+        inspector_id TEXT PRIMARY KEY,
+        fps_id TEXT NOT NULL,
+        current_step INTEGER NOT NULL DEFAULT 1,
+        workflow_status TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+        session_data TEXT NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS epos_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         transaction_id TEXT NOT NULL UNIQUE,

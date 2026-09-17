@@ -57,6 +57,12 @@ class InspectionSubmissionIn(BaseModel):
     checklist_details: Optional[dict] = None
     cycle_id: Optional[str] = "2026-09"
 
+class ActiveSessionIn(BaseModel):
+    fps_id: str
+    current_step: int = 1
+    workflow_status: str = "IN_PROGRESS"
+    session_data: Optional[dict] = None
+
 class GeofenceVerifyIn(BaseModel):
     fps_id: str
     inspector_lat: Optional[float] = None
@@ -338,6 +344,22 @@ def submit_fps_inspection(
         now_str
     ))
 
+    # Record evidence items in inspection_evidence table if provided
+    if payload.evidence_items:
+        for item in payload.evidence_items:
+            ev_id = item.get("evidence_id") or f"EV-{uuid.uuid4().hex[:6].upper()}"
+            try:
+                cursor.execute("""
+                INSERT OR IGNORE INTO inspection_evidence (
+                    evidence_id, inspection_id, fps_id, inspector_id, evidence_type, description, reference_path, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """, (
+                    ev_id, inspection_id, payload.fps_id.strip(), current_user["username"],
+                    item.get("type", "PHOTOGRAPH"), item.get("description", ""), item.get("path", ""), now_str
+                ))
+            except Exception:
+                pass
+
     # Mark corresponding surprise order completed if supplied
     if payload.order_id:
         cursor.execute("""
@@ -348,6 +370,20 @@ def submit_fps_inspection(
         UPDATE surprise_inspection_orders SET status = 'COMPLETED'
         WHERE fps_id = ? AND status = 'PENDING';
         """, (payload.fps_id.strip(),))
+
+    # Update active session to SEALED & completed
+    try:
+        cursor.execute("""
+        INSERT OR REPLACE INTO inspector_active_sessions (
+            inspector_id, fps_id, current_step, workflow_status, session_data, updated_at
+        ) VALUES (?, ?, 7, 'SEALED', ?, ?);
+        """, (
+            current_user["username"], payload.fps_id.strip(),
+            json.dumps({"inspection_id": inspection_id, "sealed_hash": sealed_hash, "compliance_score": payload.compliance_score}),
+            now_str
+        ))
+    except Exception:
+        pass
 
     db.commit()
 
@@ -361,6 +397,101 @@ def submit_fps_inspection(
         "sealed_at": now_str,
         "message": "FPS physical inspection permanently sealed and registered in central compliance ledger."
     }
+
+
+@router.get("/officer/inspection/active-session")
+def get_active_inspection_session(
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FIELD_FOOD_INSPECTOR", "FIELD_OFFICER", "ADMIN"]))
+):
+    """Retrieve active in-progress inspection session for authenticated inspector."""
+    cursor = db.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS inspector_active_sessions (
+        inspector_id TEXT PRIMARY KEY,
+        fps_id TEXT NOT NULL,
+        current_step INTEGER NOT NULL DEFAULT 1,
+        workflow_status TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+        session_data TEXT NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cursor.execute("SELECT * FROM inspector_active_sessions WHERE inspector_id = ?;", (current_user["username"],))
+    row = cursor.fetchone()
+    if not row:
+        return {"has_active_session": False, "session": None}
+
+    session_data = {}
+    try:
+        session_data = json.loads(row["session_data"])
+    except Exception:
+        pass
+
+    return {
+        "has_active_session": True,
+        "session": {
+            "inspector_id": row["inspector_id"],
+            "fps_id": row["fps_id"],
+            "current_step": row["current_step"],
+            "workflow_status": row["workflow_status"],
+            "session_data": session_data,
+            "updated_at": row["updated_at"]
+        }
+    }
+
+
+@router.post("/officer/inspection/active-session")
+def save_active_inspection_session(
+    payload: ActiveSessionIn,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FIELD_FOOD_INSPECTOR", "FIELD_OFFICER", "ADMIN"]))
+):
+    """Save or update current active inspection session for authenticated inspector."""
+    cursor = db.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS inspector_active_sessions (
+        inspector_id TEXT PRIMARY KEY,
+        fps_id TEXT NOT NULL,
+        current_step INTEGER NOT NULL DEFAULT 1,
+        workflow_status TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+        session_data TEXT NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    data_str = json.dumps(payload.session_data or {})
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("""
+    INSERT OR REPLACE INTO inspector_active_sessions (
+        inspector_id, fps_id, current_step, workflow_status, session_data, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?);
+    """, (
+        current_user["username"], payload.fps_id.strip(), payload.current_step,
+        payload.workflow_status, data_str, now_str
+    ))
+    db.commit()
+    return {"status": "SUCCESS", "message": "Active inspection session saved"}
+
+
+@router.delete("/officer/inspection/active-session")
+def clear_active_inspection_session(
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["FIELD_FOOD_INSPECTOR", "FIELD_OFFICER", "ADMIN"]))
+):
+    """Clear active session when inspection is completed or reset."""
+    cursor = db.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS inspector_active_sessions (
+        inspector_id TEXT PRIMARY KEY,
+        fps_id TEXT NOT NULL,
+        current_step INTEGER NOT NULL DEFAULT 1,
+        workflow_status TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+        session_data TEXT NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cursor.execute("DELETE FROM inspector_active_sessions WHERE inspector_id = ?;", (current_user["username"],))
+    db.commit()
+    return {"status": "SUCCESS", "message": "Active session cleared"}
 
 
 

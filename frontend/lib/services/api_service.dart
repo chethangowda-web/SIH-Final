@@ -2950,6 +2950,57 @@ class ApiService {
     }
   }
 
+  /// Field Food Inspector: Fetch active in-progress inspection session from backend
+  Future<Map<String, dynamic>> fetchActiveInspectionSession() async {
+    try {
+      final response = await client.get(
+        Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/active-session'),
+        headers: {'Accept': 'application/json'},
+      ).timeout(AppConstants.apiTimeout);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return {'has_active_session': false, 'session': null};
+  }
+
+  /// Field Food Inspector: Save or update active inspection session on backend
+  Future<Map<String, dynamic>> saveActiveInspectionSession({
+    required String fpsId,
+    int currentStep = 1,
+    String workflowStatus = 'IN_PROGRESS',
+    Map<String, dynamic>? sessionData,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/active-session'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'fps_id': fpsId,
+        'current_step': currentStep,
+        'workflow_status': workflowStatus,
+        'session_data': sessionData,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to save active session: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Field Food Inspector: Clear active inspection session from backend
+  Future<void> clearActiveInspectionSession() async {
+    try {
+      await client.delete(
+        Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/active-session'),
+        headers: {'Accept': 'application/json'},
+      ).timeout(AppConstants.apiTimeout);
+    } catch (_) {}
+  }
+
   /// Field Food Inspector: Fetch full database target inspection context (DB stock, directive, history, truck dispatch)
   Future<Map<String, dynamic>> fetchFpsInspectionContext(String fpsId) async {
     final response = await client.get(
