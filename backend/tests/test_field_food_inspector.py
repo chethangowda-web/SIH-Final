@@ -132,3 +132,21 @@ def test_6_rbac_dso_forbidden():
     payload = {"fps_id": "FPS-KA-BLR-001"}
     res = client.post("/api/officer/inspection/submit", json=payload, headers=dso_headers)
     assert res.status_code == 403
+
+def test_7_fps_assigned_dispatch():
+    headers = get_auth_header()
+    res = client.get("/api/officer/fps/FPS-KA-BLR-001/assigned-dispatch", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert data["fps_id"] == "FPS-KA-BLR-001"
+    assert data["has_inbound_dispatch"] is True
+    disp = data["dispatch_info"]
+    assert disp is not None
+    assert "truck_id" in disp
+    assert "origin_depot_name" in disp
+    assert "dispatched_quantity_kg" in disp
+    assert "route_stops" in disp
+    assert len(disp["route_stops"]) >= 2
+    assert "dispatch_timeline" in disp
+
