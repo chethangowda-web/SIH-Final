@@ -81,76 +81,196 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF6B21A8),
+        backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
         elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, size: 20, color: Colors.white),
+          tooltip: 'Back to Login / Selection',
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const DemoLoginScreen()),
+              );
+            }
+          },
+        ),
+        title: Row(
           children: [
-            const Row(
-              children: [
-                Icon(Icons.verified_user_outlined, size: 18),
-                SizedBox(width: 8),
-                Text(
-                  'Vigilance Auditor Workspace',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              child: const Icon(Icons.verified_user_rounded, size: 18, color: Color(0xFFF59E0B)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Vigilance Auditor Workspace',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.2),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF064E3B),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFF059669)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.circle, size: 6, color: Color(0xFF34D399)),
+                            SizedBox(width: 4),
+                            Text(
+                              'READ-ONLY OVERSIGHT',
+                              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF6EE7B7), letterSpacing: 0.4),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Karnataka Food & Civil Supplies • Auditor: ${widget.username ?? "auditor_user"} • Cycle 2026-09',
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF1E293B),
+              border: Border(
+                top: BorderSide(color: Color(0xFF334155)),
+                bottom: BorderSide(color: Color(0xFF334155)),
+              ),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              indicatorColor: const Color(0xFFF59E0B),
+              indicatorWeight: 3,
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelColor: Colors.white,
+              labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+              unselectedLabelColor: const Color(0xFF94A3B8),
+              unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              tabs: const [
+                Tab(
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock_outline_rounded, size: 15),
+                      SizedBox(width: 6),
+                      Text('01  MANIFEST LOCK'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    children: [
+                      Icon(Icons.local_shipping_outlined, size: 15),
+                      SizedBox(width: 6),
+                      Text('02  TRANSIT TRAIL'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    children: [
+                      Icon(Icons.query_stats_rounded, size: 15),
+                      SizedBox(width: 6),
+                      Text('03  AI MODEL AUDIT'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    children: [
+                      Icon(Icons.fact_check_outlined, size: 15),
+                      SizedBox(width: 6),
+                      Text('04  FIELD RECONCILIATION'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    children: [
+                      Icon(Icons.verified_outlined, size: 15),
+                      SizedBox(width: 6),
+                      Text('05  CAG SIGN-OFF'),
+                    ],
+                  ),
                 ),
               ],
             ),
-            Text(
-              'Independent Read-Only Oversight • ${widget.username ?? "auditor_user"}',
-              style: const TextStyle(fontSize: 10.5, color: Color(0xFFE9D5FF)),
-            ),
-          ],
-        ),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          indicatorColor: Colors.amberAccent,
-          indicatorWeight: 3,
-          labelColor: Colors.amberAccent,
-          unselectedLabelColor: const Color(0xFFE9D5FF).withValues(alpha: 0.75),
-          tabs: const [
-            Tab(text: 'Step 1: 🔒 Manifest Lock'),
-            Tab(text: 'Step 2: 🚚 Transit Trail'),
-            Tab(text: 'Step 3: 📊 AI Model Audit'),
-            Tab(text: 'Step 4: 📋 Field Reconciliation'),
-            Tab(text: 'Step 5: 📜 CAG Sign-Off'),
-          ],
+          ),
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
             child: ElevatedButton.icon(
               onPressed: () => _showAuditCertificateModal(manifestId, manifestHash),
-              icon: const Icon(Icons.picture_as_pdf_outlined, size: 14, color: Color(0xFF581C87)),
-              label: const Text('Export CAG Cert', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF581C87))),
+              icon: const Icon(Icons.picture_as_pdf_rounded, size: 14, color: Color(0xFF0F172A)),
+              label: const Text(
+                'Export CAG Cert',
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+              ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.amberAccent,
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                backgroundColor: const Color(0xFFF59E0B),
+                foregroundColor: const Color(0xFF0F172A),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
               ),
             ),
           ),
           IconButton(
             tooltip: 'Refresh Audit Telemetry',
-            icon: const Icon(Icons.refresh, size: 20),
+            icon: const Icon(Icons.refresh_rounded, size: 20, color: Color(0xFFCBD5E1)),
             onPressed: _loadAuditData,
           ),
-          TextButton.icon(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const DemoLoginScreen()),
-              );
-            },
-            icon: const Icon(Icons.people_alt_outlined, size: 16, color: Colors.white),
-            label: const Text('Switch Role', style: TextStyle(fontSize: 12, color: Colors.white)),
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFF334155)),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DemoLoginScreen()),
+                );
+              },
+              icon: const Icon(Icons.swap_horiz_rounded, size: 15, color: Color(0xFF94A3B8)),
+              label: const Text('Switch Role', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFFCBD5E1))),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
           ),
           IconButton(
             tooltip: 'Logout',
-            icon: const Icon(Icons.logout_rounded, size: 20),
+            icon: const Icon(Icons.logout_rounded, size: 19, color: Color(0xFF94A3B8)),
             onPressed: () {
               _apiService.logout();
               Navigator.of(context).pushAndRemoveUntil(
@@ -159,6 +279,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
               );
             },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _isLoading
@@ -202,7 +323,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
         Row(
           children: [
             Expanded(
-              child: _buildMetricCard('Verified Manifest', manifestId, 'Cryptographically Sealed', Icons.security_rounded, const Color(0xFF7E22CE)),
+              child: _buildMetricCard('Verified Manifest', manifestId, 'Cryptographically Sealed', Icons.security_rounded, const Color(0xFF0F172A)),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -248,7 +369,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Manifest ID: $manifestId', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF6B21A8))),
+                        Text('Manifest ID: $manifestId', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(4)),
@@ -274,7 +395,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                 },
                 icon: const Icon(Icons.file_copy_outlined, size: 16, color: Colors.white),
                 label: const Text('Open Detailed Manifest Inspector', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF7E22CE)),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
               ),
             ],
           ),
@@ -326,7 +447,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.qr_code_2_rounded, size: 22, color: Color(0xFF7E22CE)),
+                          const Icon(Icons.qr_code_2_rounded, size: 22, color: Color(0xFF0F172A)),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -375,7 +496,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _buildMetricCard('Evaluated FPS Count', '620 / 620', '100% Coverage', Icons.storefront_outlined, const Color(0xFF7E22CE)),
+              child: _buildMetricCard('Evaluated FPS Count', '620 / 620', '100% Coverage', Icons.storefront_outlined, const Color(0xFF0F172A)),
             ),
           ],
         ),
@@ -437,7 +558,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
         Row(
           children: [
             Expanded(
-              child: _buildMetricCard('Filed Inspections', '${_inspections.length} Reports', 'Field Officer Audits', Icons.assignment_turned_in_outlined, const Color(0xFF7E22CE)),
+              child: _buildMetricCard('Filed Inspections', '${_inspections.length} Reports', 'Field Officer Audits', Icons.assignment_turned_in_outlined, const Color(0xFF0F172A)),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -625,7 +746,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
             children: [
               const Row(
                 children: [
-                  Icon(Icons.balance_rounded, color: Color(0xFF6B21A8), size: 20),
+                  Icon(Icons.balance_rounded, color: Color(0xFF0F172A), size: 20),
                   SizedBox(width: 8),
                   Text(
                     'Forensic Supply Chain Reconciliation Matrix',
@@ -635,8 +756,8 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: const Color(0xFFF3E8FF), borderRadius: BorderRadius.circular(4)),
-                child: const Text('AUDIT CERTIFIED', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF6B21A8))),
+                decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(4), border: Border.all(color: const Color(0xFFCBD5E1))),
+                child: const Text('AUDIT CERTIFIED', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
               ),
             ],
           ),
@@ -757,10 +878,10 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: const BoxDecoration(
-                      color: Color(0xFF581C87),
+                      color: Color(0xFF0F172A),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.verified, color: Colors.amberAccent, size: 28),
+                    child: const Icon(Icons.verified, color: Color(0xFFF59E0B), size: 28),
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
@@ -842,14 +963,14 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('✔ Official CAG Vigilance Audit Certificate exported as PDF & JSON Digest!'),
-                      backgroundColor: Color(0xFF6B21A8),
+                      backgroundColor: Color(0xFF0F172A),
                     ),
                   );
                 },
                 icon: const Icon(Icons.download_rounded, color: Colors.white),
                 label: const Text('Download Official Audit Certificate (PDF)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B21A8),
+                  backgroundColor: const Color(0xFF0F172A),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
@@ -869,18 +990,18 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
         final double progress = currentStep / 5.0;
 
         final stepTitles = [
-          'Step 1: 🔒 Sealed Manifest Lock (SHA-256)',
-          'Step 2: 🚚 Digital Gatepass & Transit Trail',
-          'Step 3: 📊 AI Model Accuracy & Bias Audit',
-          'Step 4: 📋 Field Inspection Reconciliation',
-          'Step 5: 📜 Executive Audit Sign-Off & CAG Cert',
+          'Stage 01: Sealed Manifest Cryptographic Lock (SHA-256 Digest)',
+          'Stage 02: Digital Gatepass Custody & Live Transit Trail Audit',
+          'Stage 03: Demand-Forecasting AI Model Accuracy & Bias Assessment',
+          'Stage 04: Field Food Inspector Real-Time Reconciliation',
+          'Stage 05: Executive Vigilance Clearance & Statutory CAG Sign-Off',
         ];
 
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: const BoxDecoration(
-            color: Color(0xFFF3E8FF),
-            border: Border(bottom: BorderSide(color: Color(0xFFE9D5FF))),
+            color: Colors.white,
+            border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
           ),
           child: Row(
             children: [
@@ -891,40 +1012,40 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6B21A8),
-                            borderRadius: BorderRadius.circular(12),
+                            color: const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'AUDIT STEP $currentStep / 5',
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                            'AUDIT STAGE $currentStep OF 5',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             stepTitles[_tabController.index],
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF581C87)),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(3),
                       child: LinearProgressIndicator(
                         value: progress,
                         minHeight: 5,
-                        backgroundColor: const Color(0xFFE9D5FF),
-                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6B21A8)),
+                        backgroundColor: const Color(0xFFE2E8F0),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 20),
               Row(
                 children: [
                   if (_tabController.index > 0)
@@ -932,11 +1053,12 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                       onPressed: () {
                         _tabController.animateTo(_tabController.index - 1);
                       },
-                      icon: const Icon(Icons.arrow_back, size: 14, color: Color(0xFF6B21A8)),
-                      label: const Text('Back', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF6B21A8))),
+                      icon: const Icon(Icons.arrow_back_rounded, size: 14, color: Color(0xFF475569)),
+                      label: const Text('Back', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF475569))),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF6B21A8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                        side: const BorderSide(color: Color(0xFFCBD5E1)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
                     ),
                   if (_tabController.index > 0) const SizedBox(width: 8),
@@ -945,24 +1067,27 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                       onPressed: () {
                         _tabController.animateTo(_tabController.index + 1);
                       },
-                      icon: const Icon(Icons.arrow_forward, size: 14, color: Colors.white),
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.white),
                       label: Text(
                         _tabController.index == 3 ? 'Final Sign-Off ➔' : 'Next Step ➔',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6B21A8),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                        backgroundColor: const Color(0xFF0F172A),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       ),
                     ),
                   if (_tabController.index == 4)
                     ElevatedButton.icon(
                       onPressed: () => _showAuditCertificateModal(manifestId, manifestHash),
-                      icon: const Icon(Icons.verified, size: 14, color: Colors.black87),
-                      label: const Text('Issue CAG Cert 📜', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      icon: const Icon(Icons.verified_rounded, size: 14, color: Color(0xFF0F172A)),
+                      label: const Text('Issue CAG Cert', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amber,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                        backgroundColor: const Color(0xFFF59E0B),
+                        foregroundColor: const Color(0xFF0F172A),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       ),
                     ),
                 ],
@@ -983,10 +1108,10 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE9D5FF), width: 1.5),
+            border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: Colors.purple.withOpacity(0.05),
+                color: Colors.black.withOpacity(0.03),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               )
@@ -1000,10 +1125,10 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: const BoxDecoration(
-                      color: Color(0xFF581C87),
+                      color: Color(0xFF0F172A),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.verified_user_rounded, color: Colors.amberAccent, size: 28),
+                    child: const Icon(Icons.verified_user_rounded, color: Color(0xFFF59E0B), size: 28),
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
@@ -1026,7 +1151,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
               const Divider(height: 28),
               const Text(
                 'COMPREHENSIVE AUDIT VERIFICATION CHECKLIST:',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.5, color: Color(0xFF6B21A8)),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.5, color: Color(0xFF0F172A)),
               ),
               const SizedBox(height: 12),
               _buildChecklistItem('Step 1: Manifest Integrity', 'Cryptographic SHA-256 seal verified. Zero post-planning tampering detected.', true),
@@ -1065,7 +1190,7 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
                       icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.white, size: 18),
                       label: const Text('Export Official Certificate', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6B21A8),
+                        backgroundColor: const Color(0xFF0F172A),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
