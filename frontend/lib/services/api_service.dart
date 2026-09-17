@@ -2742,7 +2742,148 @@ class ApiService {
     }
   }
 
+  /// Field Food Inspector: Accept DSO surprise inspection assignment
+  Future<Map<String, dynamic>> acceptInspectionOrder(String orderId) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/accept'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({'order_id': orderId}),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to accept inspection assignment: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Field Food Inspector: Verify physical arrival at target FPS via GPS geofence
+  Future<Map<String, dynamic>> verifyFpsArrival({
+    required String fpsId,
+    String? orderId,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/verify-arrival'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'fps_id': fpsId,
+        'order_id': orderId,
+        'latitude': latitude,
+        'longitude': longitude,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to verify FPS arrival: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Field Food Inspector: Run live e-PoS terminal & biometric diagnostic ping
+  Future<Map<String, dynamic>> checkEposDeviceDiagnostic(String fpsId) async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/epos/diagnostic?fps_id=$fpsId'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'e-PoS diagnostic ping failed: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Field Food Inspector: List Fair Price Shops under inspector jurisdiction
+  Future<List<dynamic>> fetchAssignedFps() async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/assigned-fps'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      return data['assigned_fps'] as List<dynamic>? ?? [];
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to load assigned FPS: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Field Food Inspector: Retrieve authoritative summary inspection statistics
+  Future<Map<String, dynamic>> fetchInspectorReports() async {
+    final response = await client.get(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/reports'),
+      headers: {'Accept': 'application/json'},
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to fetch inspector reports: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
+  /// Field Food Inspector: Submit and cryptographically seal 6-point inspection report
+  Future<Map<String, dynamic>> submitFpsInspectionReport({
+    required String fpsId,
+    String? orderId,
+    bool scaleCertified = true,
+    bool displayBoardUpdated = true,
+    bool stockMatchesRegister = true,
+    bool cctvFunctional = true,
+    bool eposOnline = true,
+    bool hygieneCompliant = true,
+    double complianceScore = 100.0,
+    String remarks = '',
+    double? observedRiceKg,
+    double? observedWheatKg,
+    double? moisturePercentage,
+    double? scaleErrorGrams,
+    bool issueSeizureNotice = false,
+    String? seizureReason,
+    List<String> evidenceUrls = const [],
+  }) async {
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/officer/inspection/submit'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({
+        'fps_id': fpsId,
+        'order_id': orderId,
+        'scale_certified': scaleCertified,
+        'display_board_updated': displayBoardUpdated,
+        'stock_matches_register': stockMatchesRegister,
+        'cctv_functional': cctvFunctional,
+        'epos_online': eposOnline,
+        'hygiene_compliant': hygieneCompliant,
+        'compliance_score': complianceScore,
+        'remarks': remarks,
+        'observed_rice_kg': observedRiceKg,
+        'observed_wheat_kg': observedWheatKg,
+        'moisture_percentage': moisturePercentage,
+        'scale_error_grams': scaleErrorGrams,
+        'issue_seizure_notice': issueSeizureNotice,
+        'seizure_reason': seizureReason,
+        'evidence_urls': evidenceUrls,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      final err = json.decode(response.body);
+      throw parseError(response, 'Failed to submit inspection report: ${err['detail'] ?? response.statusCode}');
+    }
+  }
+
   /// FPS Owner: Check authoritative e-PoS entitlement and collection status
+
   Future<Map<String, dynamic>> checkEposEligibility({
     required String fpsId,
     required String beneficiaryId,

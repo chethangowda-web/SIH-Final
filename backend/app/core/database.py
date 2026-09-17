@@ -1364,6 +1364,8 @@ def _migration_012_inspector_workflow(cursor: sqlite3.Cursor) -> None:
         ("gatepass_id", "TEXT"),
         ("manifest_id", "TEXT"),
         ("target_confirmed", "INTEGER DEFAULT 0"),
+        ("evidence_urls_json", "TEXT DEFAULT '[]'"),
+        ("arrival_verified_at", "TEXT"),
     ]
     for col_name, col_type in new_cols:
         try:
@@ -1386,6 +1388,20 @@ def _migration_012_inspector_workflow(cursor: sqlite3.Cursor) -> None:
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_insp_evidence_fps ON inspection_evidence (fps_id);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_insp_evidence_insp ON inspection_evidence (inspection_id);")
+
+    # Seed baseline DSO surprise inspection orders if none exist
+    try:
+        cursor.execute("SELECT COUNT(*) FROM surprise_inspection_orders;")
+        if int(cursor.fetchone()[0]) == 0:
+            cursor.execute("""
+            INSERT INTO surprise_inspection_orders (order_id, fps_id, dso_id, reason, priority, status, created_at) VALUES
+            ('ORD-INSP-202609-01', 'FPS-KA-BLR-001', 'dso_user', 'DSO surprise directive: Discrepancy detected in physical sack register vs e-PoS volume', 'HIGH', 'PENDING', datetime('now')),
+            ('ORD-INSP-202609-02', 'FPS-KA-BLR-002', 'dso_user', 'Beneficiary grievance: Weighing scale tolerance complaint reported during distribution', 'URGENT', 'PENDING', datetime('now')),
+            ('ORD-INSP-202609-03', 'FPS-KA-BLR-003', 'dso_user', 'Routine statutory compliance review: NFSA entitlement display and grain storage hygiene', 'ROUTINE', 'COMPLETED', datetime('now'));
+            """)
+    except Exception:
+        pass
+
 
 
 def _migration_013_escalation_system(cursor: sqlite3.Cursor) -> None:
@@ -1488,6 +1504,59 @@ def get_schema_version(conn: Optional[sqlite3.Connection] = None) -> int:
     return version
 
 
+def ensure_fps_inspections_schema(cursor: sqlite3.Cursor) -> None:
+    """Ensure all required columns and indexes exist on fps_inspections unconditionally."""
+    cols = [
+        ("checklist_json", "TEXT DEFAULT '{}'"),
+        ("evidence_urls_json", "TEXT DEFAULT '[]'"),
+        ("arrival_verified_at", "TEXT"),
+        ("order_id", "TEXT"),
+        ("expected_rice_kg", "REAL DEFAULT 0.0"),
+        ("observed_rice_kg", "REAL"),
+        ("rice_diff_kg", "REAL"),
+        ("expected_wheat_kg", "REAL DEFAULT 0.0"),
+        ("observed_wheat_kg", "REAL"),
+        ("wheat_diff_kg", "REAL"),
+        ("moisture_pct", "REAL"),
+        ("moisture_result", "TEXT"),
+        ("moisture_percentage", "REAL"),
+        ("scale_error_g", "REAL"),
+        ("scale_error_grams", "REAL"),
+        ("scale_result", "TEXT"),
+        ("seizure_issued", "INTEGER DEFAULT 0"),
+        ("issue_seizure_notice", "INTEGER DEFAULT 0"),
+        ("seizure_reason", "TEXT"),
+        ("evidence_json", "TEXT DEFAULT '[]'"),
+        ("sealed_hash", "TEXT"),
+        ("sealed_at", "TIMESTAMP"),
+        ("cycle_id", "TEXT DEFAULT '2026-09'"),
+        ("geofence_verified", "INTEGER DEFAULT 0"),
+        ("geofence_distance_m", "REAL"),
+        ("truck_id", "TEXT"),
+        ("gatepass_id", "TEXT"),
+        ("manifest_id", "TEXT"),
+        ("target_confirmed", "INTEGER DEFAULT 0"),
+    ]
+    for col_name, col_type in cols:
+        try:
+            cursor.execute(f"ALTER TABLE fps_inspections ADD COLUMN {col_name} {col_type};")
+        except Exception:
+            pass
+
+    # Ensure baseline DSO surprise orders
+    try:
+        cursor.execute("SELECT COUNT(*) FROM surprise_inspection_orders;")
+        if int(cursor.fetchone()[0]) == 0:
+            cursor.execute("""
+            INSERT INTO surprise_inspection_orders (order_id, fps_id, dso_id, reason, priority, status, created_at) VALUES
+            ('ORD-INSP-202609-01', 'FPS-KA-BLR-001', 'dso_user', 'DSO surprise directive: Discrepancy detected in physical sack register vs e-PoS volume', 'HIGH', 'PENDING', datetime('now')),
+            ('ORD-INSP-202609-02', 'FPS-KA-BLR-002', 'dso_user', 'Beneficiary grievance: Weighing scale tolerance complaint reported during distribution', 'URGENT', 'PENDING', datetime('now')),
+            ('ORD-INSP-202609-03', 'FPS-KA-BLR-003', 'dso_user', 'Routine statutory compliance review: NFSA entitlement display and grain storage hygiene', 'ROUTINE', 'COMPLETED', datetime('now'));
+            """)
+    except Exception:
+        pass
+
+
 def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
     """Initialize database schemas via deterministic idempotent migration pipeline."""
     should_close = False
@@ -1497,8 +1566,10 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
 
     run_migrations(conn)
     cursor = conn.cursor()
+    ensure_fps_inspections_schema(cursor)
     _migration_008_sih_v2_features(cursor)
     conn.commit()
+
 
     # Automatically populate full imported CSV master datasets (FPS, Beneficiaries, Historical Demand, Intents, Depots, Fleet)
     try:

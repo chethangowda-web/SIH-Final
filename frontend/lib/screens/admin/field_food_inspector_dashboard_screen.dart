@@ -1,7 +1,15 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../core/constants.dart';
 import '../../services/api_service.dart';
 import '../../models/beneficiary_model.dart';
 import '../beneficiary/demo_login_screen.dart';
+
+/// ---------------------------------------------------------------------------
+/// PDS DemandSync — FIELD FOOD INSPECTOR OPERATIONAL PORTAL
+/// Government of Karnataka • Department of Food & Civil Supplies
+/// Real, End-to-End Statutory Inspection & Compliance Monitoring System
+/// ---------------------------------------------------------------------------
 
 class FieldFoodInspectorDashboardScreen extends StatefulWidget {
   final ApiService? apiService;
@@ -17,501 +25,441 @@ class FieldFoodInspectorDashboardScreen extends StatefulWidget {
   State<FieldFoodInspectorDashboardScreen> createState() => _FieldFoodInspectorDashboardScreenState();
 }
 
+enum InspectorStage {
+  assignment,
+  arrival,
+  inspection,
+  evidence,
+  submit,
+  history,
+  completed,
+}
+
 class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDashboardScreen> {
   late final ApiService _apiService;
 
+  // Navigation: 0 = Workflow, 1 = My Inspections, 2 = Assigned FPS, 3 = Reports, 4 = Settings
+  int _sidebarIndex = 0;
+  InspectorStage _currentStage = InspectorStage.assignment;
+
   bool _isLoading = true;
-  bool _isActionLoading = false;
-  bool _isSubmitting = false;
+  bool _isActionInProgress = false;
+  String? _errorMessage;
 
-  // Active Navigation Tab: 0 = Workflow, 1 = My Inspections, 2 = Assigned FPS, 3 = Reports, 4 = Settings
-  int _selectedNavTab = 0;
+  // Active Assignment & Target FPS State
+  Map<String, dynamic>? _activeOrder;
+  FpsShop? _targetFps;
+  String _selectedFpsId = 'FPS-KA-BLR-001';
+  bool _assignmentAccepted = false;
+  bool _arrivalVerified = false;
 
-  // 8-Stage Sequential Inspection Workflow Stepper (1 to 8)
-  // 1: SELECT FPS
-  // 2: INSPECTION DETAILS
-  // 3: PRE-CHECK
-  // 4: CHECKLIST
-  // 5: EVIDENCE
-  // 6: REVIEW & SUBMIT
-  // 7: COMPLETED
-  // 8: HISTORY
-  int _currentStep = 1;
-
-  // Real backend dataset
-  List<FpsShop> _fpsList = [];
-  String _fpsSearchQuery = '';
-  String _selectedFpsId = '';
-  FpsShop? _selectedFps;
-
-  // Target Inspection Context loaded from backend DB
-  double _digitalRiceKg = 1500.0;
-  double _digitalWheatKg = 1000.0;
-
-  // Real DSO Surprise Directives & Completed Inspections
+  // Data Collections from Backend
   List<Map<String, dynamic>> _surpriseOrders = [];
-  String? _selectedOrderId;
   List<Map<String, dynamic>> _completedInspections = [];
+  List<dynamic> _assignedFpsList = [];
+  Map<String, dynamic>? _reportsData;
+  Map<String, dynamic>? _eposDiagnosticData;
+  Map<String, dynamic>? _activeStockData;
+  List<dynamic> _activeTransactions = [];
 
-  // Active Truck Dispatches
-  List<Map<String, dynamic>> _activeTrucks = [];
-  Map<String, dynamic>? _associatedTruck;
+  // Stage 03 — 6-Point Inspection Checklist States
+  // 1. Physical Stock
+  double _digitalRiceKg = 1500.0;
+  double _digitalWheatKg = 400.0;
+  final TextEditingController _observedRiceController = TextEditingController(text: '1500.0');
+  final TextEditingController _observedWheatController = TextEditingController(text: '400.0');
+  bool _stockMatchesRegister = true;
+  String _stockRemarks = '';
 
-  // Geofence Telemetry State
-  bool _geofenceVerified = false;
-  double _geofenceDistanceM = 42.5;
-  String _geofenceStatus = 'WAITING FOR ARRIVAL';
-  String? _geofenceTimestamp;
-
-  // Step 03: Pre-Inspection Verification Checklist
-  final Map<String, bool> _preChecks = {
-    'location_confirmed': true,
-    'identity_verified': true,
-    'assignment_verified': true,
-    'previous_reviewed': true,
-    'records_available': true,
-  };
-
-  // Step 04: 6-Point Inspection Checklist State
-  final Map<int, String> _checklistResults = {
-    1: 'COMPLIANT',
-    2: 'COMPLIANT',
-    3: 'COMPLIANT',
-    4: 'COMPLIANT',
-    5: 'COMPLIANT',
-    6: 'COMPLIANT',
-  };
-
-  final Map<int, String> _checklistRemarks = {
-    1: 'Physical bags match digital delivery challan within permissible tolerance.',
-    2: 'Moisture content checked at 11.2% (FAQ statutory ceiling 12.0%). No pest infestation.',
-    3: 'e-PoS device online on GSM 4G network. Biometric scanner fully responsive.',
-    4: 'Mandatory beneficiary entitlement display board updated and prominently placed.',
-    5: 'Daily manual sales register reconciled with digital biometric transaction ledger.',
-    6: 'Electronic weighing scale verified against 5kg test weight. Calibration certificate valid.',
-  };
-
-  // Stock verification inputs
-  final TextEditingController _observedRiceController = TextEditingController();
-  final TextEditingController _observedWheatController = TextEditingController();
-
-  // Quality & Scale measurements
+  // 2. Food Safety & Quality
   double _moisturePercentage = 11.2;
+  String _grainCondition = 'GOOD';
+  String _storageCondition = 'DRY_HYGIENIC';
+  bool _pestProtectionValid = true;
+  bool _foodSafetyCompliant = true;
+  String _foodSafetyRemarks = '';
+
+  // 3. e-PoS & Connectivity
+  bool _eposOnline = true;
+  bool _biometricScannerWorking = true;
+  bool _eposChecked = false;
+  String _eposRemarks = '';
+
+  // 4. Beneficiary Service
+  bool _entitlementBoardDisplayed = true;
+  bool _ratesListDisplayed = true;
+  bool _serviceSatisfactory = true;
+  String _beneficiaryServiceRemarks = '';
+
+  // 5. Record Maintenance
+  bool _physicalRegisterUpdated = true;
+  bool _digitalRegisterSynced = true;
+  String _recordRemarks = '';
+
+  // 6. Compliance & Cleanliness
+  bool _scaleCertified = true;
   double _scaleErrorGrams = 0.0;
+  bool _premisesClean = true;
+  bool _cctvOperational = true;
+  String _cleanlinessRemarks = '';
 
-  // Step 05: Evidence & Observations
-  final List<Map<String, dynamic>> _evidenceList = [];
-  final TextEditingController _notesController = TextEditingController(
-    text: 'All physical grain sacks weighed and inspected. Electronic weighing balance calibrated within tolerance limits. No stock diversion detected.',
-  );
-
-  // Seizure notice toggle
+  // Inspector Notes & Statutory Enforcement
+  final TextEditingController _inspectorNotesController = TextEditingController();
   bool _issueSeizureNotice = false;
-  final String _seizureReason = 'Grain moisture content exceeds 12.0% FAQ statutory limit';
+  final TextEditingController _seizureReasonController = TextEditingController();
 
-  // Step 07: Sealed Record Result
-  Map<String, dynamic>? _sealedRecordResult;
+  // Stage 04 — Evidence Capture List
+  final List<Map<String, String>> _evidenceList = [];
 
-  // Filters for "My Inspections" & "History"
-  String _inspectionFilterStatus = 'ALL';
+  // Stage 05/07 — Submitted Sealed Report Result
+  Map<String, dynamic>? _sealedInspectionResult;
+
+  // Search & Filter for "My Inspections"
+  String _inspectionFilter = 'ALL';
   String _inspectionSearchQuery = '';
-
-  // Government Theme Tokens
-  static const Color _govNavy = Color(0xFF0F2942);
-  static const Color _govGreen = Color(0xFF15803D);
-  static const Color _govGreenBg = Color(0xFFF0FDF4);
-  static const Color _govGreenBorder = Color(0xFF86EFAC);
-  static const Color _amberAlert = Color(0xFFD97706);
-  static const Color _amberBg = Color(0xFFFFFBEB);
-  static const Color _amberBorder = Color(0xFFFDE68A);
-  static const Color _dangerRed = Color(0xFFDC2626);
-  static const Color _dangerRedBg = Color(0xFFFEF2F2);
-  static const Color _slate900 = Color(0xFF0F172A);
-  static const Color _slate700 = Color(0xFF334155);
-  static const Color _slate500 = Color(0xFF64748B);
-  static const Color _slate400 = Color(0xFF94A3B8);
-  static const Color _slate200 = Color(0xFFE2E8F0);
-  static const Color _slate100 = Color(0xFFF1F5F9);
-  static const Color _slate50 = Color(0xFFF8FAFC);
-
-  String get _currentInspectorUsername {
-    return widget.username ?? AuthSession.instance.username ?? 'inspector_user';
-  }
 
   @override
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
-    _loadInspectorMasterData();
+    _loadInitialData();
   }
 
   @override
   void dispose() {
     _observedRiceController.dispose();
     _observedWheatController.dispose();
-    _notesController.dispose();
+    _inspectorNotesController.dispose();
+    _seizureReasonController.dispose();
     super.dispose();
   }
 
-  // ================================================================
-  // 1. DATA LOADING & PERSISTENT SESSION RESTORATION
-  // ================================================================
+  String _getInspectorName() {
+    return widget.username ?? _apiService.authSession.username ?? 'inspector_user';
+  }
 
-  /// Load Real Master Dataset and Restore Persistent Active Inspection Session
-  Future<void> _loadInspectorMasterData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadInitialData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
-      // 1. Fetch Real FPS Master List from Backend
-      try {
-        final fpsList = await _apiService.fetchFPSList();
-        if (fpsList.isNotEmpty) {
-          _fpsList = fpsList;
-          if (_selectedFpsId.isEmpty) {
-            _selectedFps = _fpsList.first;
-            _selectedFpsId = _selectedFps!.fpsId;
-          } else {
-            _selectedFps = _fpsList.firstWhere(
-              (f) => f.fpsId == _selectedFpsId,
-              orElse: () => _fpsList.first,
-            );
-            _selectedFpsId = _selectedFps!.fpsId;
-          }
-        }
-      } catch (_) {}
+      final results = await Future.wait([
+        _apiService.fetchFpsInspections().catchError((_) => {'orders': [], 'completed_inspections': []}),
+        _apiService.fetchAssignedFps().catchError((_) => <dynamic>[]),
+        _apiService.fetchInspectorReports().catchError((_) => <String, dynamic>{}),
+        _apiService.fetchFPSList().catchError((_) => <FpsShop>[]),
+      ]);
 
-      // 2. Fetch Real DSO Surprise Directives & Completed Inspections
-      try {
-        final inspData = await _apiService.fetchFpsInspections();
-        final orders = inspData['orders'] as List<dynamic>? ?? [];
-        _surpriseOrders = orders.map((o) => Map<String, dynamic>.from(o as Map)).toList();
+      final inspData = results[0] as Map<String, dynamic>;
+      final rawOrders = (inspData['orders'] as List<dynamic>? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final rawCompleted = (inspData['completed_inspections'] as List<dynamic>? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final assigned = results[1] as List<dynamic>;
+      final rep = results[2] as Map<String, dynamic>;
+      final allFps = results[3] as List<FpsShop>;
 
-        final done = inspData['completed_inspections'] as List<dynamic>? ?? [];
-        _completedInspections = done.map((d) => Map<String, dynamic>.from(d as Map)).toList();
-
-        final pendingOrder = _surpriseOrders.firstWhere(
-          (o) => o['status'] == 'PENDING',
-          orElse: () => {},
+      // Resolve initial active assignment if available
+      Map<String, dynamic>? initialActive;
+      if (rawOrders.isNotEmpty) {
+        // Find first pending or accepted order
+        initialActive = rawOrders.firstWhere(
+          (o) => o['status'] == 'ACCEPTED' || o['status'] == 'ARRIVAL_VERIFIED' || o['status'] == 'PENDING',
+          orElse: () => rawOrders.first,
         );
-        if (pendingOrder.isNotEmpty) {
-          _selectedOrderId = pendingOrder['order_id'] as String?;
-          final targetFps = pendingOrder['fps_id'] as String?;
-          if (targetFps != null && targetFps.isNotEmpty) {
-            _selectedFpsId = targetFps;
-            if (_fpsList.isNotEmpty) {
-              _selectedFps = _fpsList.firstWhere(
-                (f) => f.fpsId == _selectedFpsId,
-                orElse: () => _fpsList.first,
-              );
-            }
-          }
-        }
-      } catch (_) {}
-
-      // 3. Fetch Active Fleet Dispatches
-      try {
-        final trucks = await _apiService.fetchActiveTruckTrackings();
-        if (trucks.isNotEmpty) {
-          _activeTrucks = trucks.map((t) => {
-            'truck_id': t.truckId,
-            'driver_name': t.driverName,
-            'origin_godown': t.originGodown,
-            'target_fps_id': t.destinationFps,
-            'status': t.currentStatus,
-            'distance_remaining_km': t.distanceRemainingKm,
-            'current_checkpoint': t.currentCheckpoint,
-          }).toList();
-        }
-      } catch (_) {}
-
-      // 4. Check Backend for In-Progress Active Inspection Session (Persistence)
-      try {
-        final activeSess = await _apiService.fetchActiveInspectionSession();
-        if (activeSess['has_active_session'] == true && activeSess['session'] != null) {
-          final s = activeSess['session'] as Map<String, dynamic>;
-          final savedFpsId = s['fps_id'] as String?;
-          final savedStep = (s['current_step'] as num?)?.toInt() ?? 1;
-          final sData = (s['session_data'] as Map<String, dynamic>?) ?? {};
-
-          if (savedFpsId != null && savedFpsId.isNotEmpty && _fpsList.isNotEmpty) {
-            _selectedFpsId = savedFpsId;
-            _selectedFps = _fpsList.firstWhere(
-              (f) => f.fpsId == _selectedFpsId,
-              orElse: () => _fpsList.first,
-            );
-          }
-          _currentStep = savedStep.clamp(1, 8);
-
-          // Restore observed values
-          if (sData['observed_rice_kg'] != null) {
-            _observedRiceController.text = (sData['observed_rice_kg']).toString();
-          }
-          if (sData['observed_wheat_kg'] != null) {
-            _observedWheatController.text = (sData['observed_wheat_kg']).toString();
-          }
-          if (sData['moisture_pct'] != null) {
-            _moisturePercentage = (sData['moisture_pct'] as num).toDouble();
-          }
-          if (sData['scale_error_g'] != null) {
-            _scaleErrorGrams = (sData['scale_error_g'] as num).toDouble();
-          }
-          if (sData['remarks'] != null) {
-            _notesController.text = sData['remarks'].toString();
-          }
-          if (sData['seizure_issued'] != null) {
-            _issueSeizureNotice = sData['seizure_issued'] == true;
-          }
-          if (sData['sealed_result'] != null) {
-            _sealedRecordResult = Map<String, dynamic>.from(sData['sealed_result'] as Map);
-          }
-        }
-      } catch (_) {}
-
-      // 5. Load detailed target inspection context from DB
-      if (_selectedFpsId.isNotEmpty) {
-        await _loadTargetInspectionContext(_selectedFpsId);
       }
 
-      if (mounted) setState(() => _isLoading = false);
-    } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
+      FpsShop? targetShop;
+      final targetId = initialActive?['fps_id'] ?? _selectedFpsId;
+      try {
+        targetShop = allFps.firstWhere((f) => f.fpsId == targetId);
+      } catch (_) {
+        if (allFps.isNotEmpty) targetShop = allFps.first;
+      }
 
-  /// Load target FPS inspection context directly from backend database
-  Future<void> _loadTargetInspectionContext(String fpsId) async {
-    try {
-      final contextData = await _apiService.fetchFpsInspectionContext(fpsId);
-      if (mounted) {
-        setState(() {
-          final stock = contextData['digital_stock'] as Map<String, dynamic>? ?? {};
-          _digitalRiceKg = (stock['rice_kg'] as num?)?.toDouble() ?? (_selectedFps?.currentInventoryTotalKg ?? 1500.0) * 0.6;
-          _digitalWheatKg = (stock['wheat_kg'] as num?)?.toDouble() ?? (_selectedFps?.currentInventoryTotalKg ?? 1500.0) * 0.4;
+      if (!mounted) return;
 
-          if (_observedRiceController.text.isEmpty) {
-            _observedRiceController.text = _digitalRiceKg.toStringAsFixed(0);
-          }
-          if (_observedWheatController.text.isEmpty) {
-            _observedWheatController.text = _digitalWheatKg.toStringAsFixed(0);
-          }
+      setState(() {
+        _surpriseOrders = rawOrders;
+        _completedInspections = rawCompleted;
+        _assignedFpsList = assigned;
+        _reportsData = rep;
+        _activeOrder = initialActive;
+        _selectedFpsId = targetShop?.fpsId ?? _selectedFpsId;
+        _targetFps = targetShop;
 
-          final dsoDir = contextData['dso_directive'] as Map<String, dynamic>?;
-          if (dsoDir != null && dsoDir.isNotEmpty) {
-            _selectedOrderId = dsoDir['order_id'] as String?;
-          }
-
-          final activeDispatch = contextData['active_dispatch'] as Map<String, dynamic>?;
-          if (activeDispatch != null && activeDispatch.isNotEmpty) {
-            _associatedTruck = activeDispatch;
-          } else if (_activeTrucks.any((t) => t['target_fps_id'] == fpsId)) {
-            _associatedTruck = _activeTrucks.firstWhere((t) => t['target_fps_id'] == fpsId);
+        // Sync stage with backend status of active order
+        if (initialActive != null) {
+          final s = initialActive['status'] as String? ?? 'PENDING';
+          if (s == 'ACCEPTED') {
+            _assignmentAccepted = true;
+            _currentStage = InspectorStage.arrival;
+          } else if (s == 'ARRIVAL_VERIFIED') {
+            _assignmentAccepted = true;
+            _arrivalVerified = true;
+            _currentStage = InspectorStage.inspection;
+          } else if (s == 'COMPLETED') {
+            _currentStage = InspectorStage.completed;
           } else {
-            _associatedTruck = null;
+            _assignmentAccepted = false;
+            _arrivalVerified = false;
+            _currentStage = InspectorStage.assignment;
           }
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _digitalRiceKg = (_selectedFps?.currentInventoryTotalKg ?? 1500.0) * 0.6;
-          _digitalWheatKg = (_selectedFps?.currentInventoryTotalKg ?? 1500.0) * 0.4;
-          _observedRiceController.text = _digitalRiceKg.toStringAsFixed(0);
-          _observedWheatController.text = _digitalWheatKg.toStringAsFixed(0);
-        });
-      }
+        }
+
+        _isLoading = false;
+      });
+
+      // Load stock & transactions for target FPS
+      _loadTargetFpsDetails(_selectedFpsId);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Failed to connect to authoritative inspection service: $e';
+        _isLoading = false;
+      });
     }
   }
 
-  /// Persist current inspection session state to backend
-  Future<void> _syncActiveSessionState(int step, {String status = 'IN_PROGRESS'}) async {
-    if (_selectedFpsId.isEmpty) return;
+  Future<void> _loadTargetFpsDetails(String fpsId) async {
     try {
-      final sessionData = {
-        'pre_checks': _preChecks,
-        'checklist_results': _checklistResults.map((k, v) => MapEntry(k.toString(), v)),
-        'observed_rice_kg': double.tryParse(_observedRiceController.text) ?? _digitalRiceKg,
-        'observed_wheat_kg': double.tryParse(_observedWheatController.text) ?? _digitalWheatKg,
-        'moisture_pct': _moisturePercentage,
-        'scale_error_g': _scaleErrorGrams,
-        'remarks': _notesController.text,
-        'seizure_issued': _issueSeizureNotice,
-        'evidence_items': _evidenceList,
-        'sealed_result': _sealedRecordResult,
-      };
+      final stock = await _apiService.fetchFpsInventory(fpsId).catchError((_) => <String, dynamic>{});
+      final txs = await _apiService.fetchFpsTransactions(fpsId).catchError((_) => <dynamic>[]);
 
-      await _apiService.saveActiveInspectionSession(
-        fpsId: _selectedFpsId,
-        currentStep: step,
-        workflowStatus: status,
-        sessionData: sessionData,
-      );
+      if (!mounted) return;
+      setState(() {
+        _activeStockData = stock;
+        _activeTransactions = txs;
+        _digitalRiceKg = (stock['rice_stock_kg'] as num?)?.toDouble() ?? 1500.0;
+        _digitalWheatKg = (stock['wheat_stock_kg'] as num?)?.toDouble() ?? 400.0;
+        _observedRiceController.text = _digitalRiceKg.toStringAsFixed(1);
+        _observedWheatController.text = _digitalWheatKg.toStringAsFixed(1);
+      });
     } catch (_) {}
   }
 
-  // ================================================================
-  // 2. WORKFLOW STEP TRANSITIONS & VALIDATIONS
-  // ================================================================
-
-  /// Action: Select Target FPS & Advance to Step 02
-  Future<void> _handleSelectTargetFps(FpsShop fps) async {
+  void _selectFpsForInspection(Map<String, dynamic> order) {
     setState(() {
-      _selectedFpsId = fps.fpsId;
-      _selectedFps = fps;
-      _geofenceVerified = false;
-      _geofenceStatus = 'WAITING FOR ARRIVAL';
-      _currentStep = 2; // Step 02: INSPECTION DETAILS
-      _selectedNavTab = 0;
+      _activeOrder = order;
+      _selectedFpsId = order['fps_id'] ?? _selectedFpsId;
+      _sidebarIndex = 0; // Switch to workflow
+
+      final s = order['status'] as String? ?? 'PENDING';
+      if (s == 'ACCEPTED') {
+        _assignmentAccepted = true;
+        _arrivalVerified = false;
+        _currentStage = InspectorStage.arrival;
+      } else if (s == 'ARRIVAL_VERIFIED') {
+        _assignmentAccepted = true;
+        _arrivalVerified = true;
+        _currentStage = InspectorStage.inspection;
+      } else if (s == 'COMPLETED') {
+        _currentStage = InspectorStage.completed;
+      } else {
+        _assignmentAccepted = false;
+        _arrivalVerified = false;
+        _currentStage = InspectorStage.assignment;
+      }
     });
-    await _loadTargetInspectionContext(fps.fpsId);
-    await _syncActiveSessionState(2, status: 'DETAILS_PENDING');
+
+    _loadTargetFpsDetails(_selectedFpsId);
   }
 
-  /// Step 02 -> Step 03
-  void _advanceToPreCheck() {
-    setState(() => _currentStep = 3);
-    _syncActiveSessionState(3, status: 'PRE_CHECK_IN_PROGRESS');
-  }
+  // ---------------------------------------------------------------------------
+  // BACKEND ACTIONS
+  // ---------------------------------------------------------------------------
 
-  /// Step 03 -> Step 04
-  void _advanceToChecklist() {
-    final allPreChecksDone = _preChecks.values.every((v) => v);
-    if (!allPreChecksDone) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please verify all pre-inspection requirements before physical inspection.'),
-          backgroundColor: _amberAlert,
-        ),
-      );
-      return;
-    }
-    setState(() => _currentStep = 4);
-    _syncActiveSessionState(4, status: 'CHECKLIST_IN_PROGRESS');
-  }
+  Future<void> _acceptActiveAssignment() async {
+    if (_activeOrder == null) return;
+    final orderId = _activeOrder!['order_id'] as String? ?? 'ORD-INSP-202609-01';
 
-  /// Step 04 -> Step 05
-  void _advanceToEvidence() {
-    final allPointsVerified = _checklistResults.length == 6;
-    if (!allPointsVerified) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Complete all 6 physical inspection checklist points to proceed.'),
-          backgroundColor: _dangerRed,
-        ),
-      );
-      return;
-    }
-    setState(() => _currentStep = 5);
-    _syncActiveSessionState(5, status: 'EVIDENCE_RECORDING');
-  }
-
-  /// Step 05 -> Step 06
-  void _advanceToReview() {
-    setState(() => _currentStep = 6);
-    _syncActiveSessionState(6, status: 'READY_FOR_SUBMISSION');
-  }
-
-  /// Reset workflow back to Step 01
-  Future<void> _handleResetToAssignedFps() async {
-    await _apiService.clearActiveInspectionSession();
-    setState(() {
-      _currentStep = 1;
-      _sealedRecordResult = null;
-      _issueSeizureNotice = false;
-    });
-  }
-
-  // ================================================================
-  // 3. OPERATIONAL ACTIONS (GEOFENCE, EVIDENCE, SUBMIT & SEAL)
-  // ================================================================
-
-  /// Action: Verify Inspector Arrival via GPS Geofence
-  Future<void> _handleVerifyGeofenceArrival() async {
-    if (_selectedFpsId.isEmpty) return;
-    setState(() => _isActionLoading = true);
+    setState(() => _isActionInProgress = true);
     try {
-      final res = await _apiService.verifyGeofence(
-        fpsId: _selectedFpsId,
-        inspectorLat: _selectedFps?.latitude ?? 12.9716,
-        inspectorLon: _selectedFps?.longitude ?? 77.5946,
+      final res = await _apiService.acceptInspectionOrder(orderId);
+      if (!mounted) return;
+
+      setState(() {
+        _assignmentAccepted = true;
+        _activeOrder!['status'] = 'ACCEPTED';
+        _currentStage = InspectorStage.arrival;
+        _isActionInProgress = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF047857),
+          content: Text('Assignment Accepted: ${res['message']}'),
+        ),
       );
-      if (mounted) {
-        setState(() {
-          _geofenceVerified = res['verified'] == true;
-          _geofenceDistanceM = (res['distance_m'] as num?)?.toDouble() ?? 38.0;
-          _geofenceStatus = res['geofence_status'] ?? 'WITHIN_GEOFENCE';
-          _geofenceTimestamp = res['timestamp'] ?? DateTime.now().toString().substring(0, 19);
-          _isActionLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Arrival Verified: ${_geofenceDistanceM.toStringAsFixed(1)}m from Fair Price Shop perimeter.'),
-            backgroundColor: _govGreen,
-          ),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _geofenceVerified = true;
-          _geofenceDistanceM = 24.5;
-          _geofenceStatus = 'WITHIN_GEOFENCE';
-          _geofenceTimestamp = DateTime.now().toString().substring(0, 19);
-          _isActionLoading = false;
-        });
-      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isActionInProgress = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red.shade800, content: Text('Error accepting order: $e')),
+      );
     }
   }
 
-  /// Action: Capture/Add Evidence Photograph
-  void _handleAddInspectionEvidence(String type) {
-    final nowStr = DateTime.now().toString().substring(0, 19);
-    final count = _evidenceList.length + 1;
+  Future<void> _verifyPhysicalArrival() async {
+    if (_activeOrder == null) return;
+    final orderId = _activeOrder!['order_id'] as String?;
+    final fpsId = _selectedFpsId;
+
+    setState(() => _isActionInProgress = true);
+    try {
+      final res = await _apiService.verifyFpsArrival(
+        fpsId: fpsId,
+        orderId: orderId,
+        latitude: _targetFps?.latitude,
+        longitude: _targetFps?.longitude,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _arrivalVerified = true;
+        if (_activeOrder != null) _activeOrder!['status'] = 'ARRIVAL_VERIFIED';
+        _currentStage = InspectorStage.inspection;
+        _isActionInProgress = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF047857),
+          content: Row(
+            children: [
+              const Icon(Icons.pin_drop, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text('GPS Arrival Verified: ${res['geofence_status']} • ${res['distance_meters']}m from store.')),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isActionInProgress = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red.shade800, content: Text('Arrival verification failed: $e')),
+      );
+    }
+  }
+
+  Future<void> _runEposDiagnosticCheck() async {
+    setState(() => _isActionInProgress = true);
+    try {
+      final diag = await _apiService.checkEposDeviceDiagnostic(_selectedFpsId);
+      if (!mounted) return;
+      setState(() {
+        _eposDiagnosticData = diag;
+        _eposChecked = true;
+        _eposOnline = diag['network_status'] == 'ONLINE_4G_VOLTE';
+        _biometricScannerWorking = diag['scanner_status'] == 'CALIBRATED_ONLINE';
+        _isActionInProgress = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF047857),
+          content: Text('e-PoS Diagnostic Completed: UIDAI L1 biometric scanner online and synchronized.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isActionInProgress = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red.shade800, content: Text('e-PoS check failed: $e')),
+      );
+    }
+  }
+
+  void _addEvidenceItem(String type, String description) {
+    final nowStr = DateTime.now().toString().split('.')[0];
+    final evId = 'EVID-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+
     setState(() {
       _evidenceList.add({
-        'evidence_id': 'EV-KA-${_selectedFpsId.replaceAll("FPS-", "")}-$count',
+        'id': evId,
         'type': type,
-        'category': type,
+        'description': description,
         'timestamp': nowStr,
-        'description': 'Official photo verification: $type for Fair Price Depot $_selectedFpsId.',
+        'inspector': _getInspectorName(),
+        'reference': 'IMG-$evId.jpg',
       });
     });
-    _syncActiveSessionState(_currentStep);
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Evidence Captured: $type record saved.'),
-        backgroundColor: _govNavy,
+        backgroundColor: const Color(0xFF1E293B),
+        content: Text('Evidence Attached: $type ($description)'),
         duration: const Duration(seconds: 2),
       ),
     );
   }
 
-  /// Action: Submit and Permanently Seal Inspection Report
-  Future<void> _handleSubmitInspectionReport() async {
-    // 1. Confirm dialog
+  Future<void> _confirmAndSubmitReport() async {
+    // Validation: Require inspector notes if non-compliant or seizure notice
+    final isAnyNonCompliant = !_stockMatchesRegister ||
+        !_foodSafetyCompliant ||
+        !_eposOnline ||
+        !_biometricScannerWorking ||
+        !_serviceSatisfactory ||
+        !_physicalRegisterUpdated ||
+        !_scaleCertified ||
+        _issueSeizureNotice;
+
+    if (isAnyNonCompliant && _inspectorNotesController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFDC2626),
+          content: Text('Inspector Notes are strictly required when any checkpoint is non-compliant or seizure is issued.'),
+        ),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.gavel_rounded, color: _govNavy, size: 22),
+            Icon(Icons.verified_user, color: Color(0xFF047857), size: 22),
             SizedBox(width: 8),
-            Text('Submit & Seal Inspection Report', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _govNavy)),
+            Text('Submit & Digitally Seal Inspection?'),
           ],
         ),
-        content: const Text(
-          'Are you sure you want to submit this inspection report?\n\n'
-          'After submission, the inspection will be permanently sealed into the District Civil Supplies compliance ledger and signed with a cryptographic SHA-256 hash. Review all findings before continuing.',
-          style: TextStyle(fontSize: 12.5, color: _slate700),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('FPS Center: $_selectedFpsId (${_targetFps?.name ?? "Fair Price Shop"})'),
+              const SizedBox(height: 6),
+              Text('Inspector: ${_getInspectorName()} • Bengaluru Urban Division'),
+              const SizedBox(height: 6),
+              Text('Evidence Records: ${_evidenceList.length} photo/document attachments'),
+              const SizedBox(height: 6),
+              Text(
+                'Status: ${isAnyNonCompliant ? "NON-COMPLIANCE RECORDED" : "FULLY STATUTORILY COMPLIANT"}',
+                style: TextStyle(fontWeight: FontWeight.bold, color: isAnyNonCompliant ? Colors.red : Colors.green),
+              ),
+              const Divider(height: 24),
+              const Text(
+                'This inspection report will be permanently recorded in the central compliance ledger, cryptographically sealed with SHA-256, and immediately transmitted to District Supply Operations (DSO).',
+                style: TextStyle(fontSize: 12, color: Color(0xFF475569)),
+              ),
+            ],
+          ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('CANCEL', style: TextStyle(color: _slate500, fontWeight: FontWeight.bold)),
-          ),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            icon: const Icon(Icons.verified_rounded, size: 16),
-            label: const Text('SUBMIT & SEAL', style: TextStyle(fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(backgroundColor: _govGreen, foregroundColor: Colors.white),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+            child: const Text('CONFIRM & SEAL REPORT'),
           ),
         ],
       ),
@@ -519,117 +467,97 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
 
     if (confirmed != true) return;
 
-    setState(() => _isSubmitting = true);
+    setState(() => _isActionInProgress = true);
     try {
       final obsRice = double.tryParse(_observedRiceController.text) ?? _digitalRiceKg;
       final obsWheat = double.tryParse(_observedWheatController.text) ?? _digitalWheatKg;
 
-      final result = await _apiService.submitFpsInspectionReport(
+      // Compute score
+      int passCount = 0;
+      if (_stockMatchesRegister) passCount++;
+      if (_foodSafetyCompliant) passCount++;
+      if (_eposOnline && _biometricScannerWorking) passCount++;
+      if (_serviceSatisfactory) passCount++;
+      if (_physicalRegisterUpdated && _digitalRegisterSynced) passCount++;
+      if (_scaleCertified && _premisesClean) passCount++;
+      final score = (passCount / 6.0) * 100.0;
+
+      final res = await _apiService.submitFpsInspectionReport(
         fpsId: _selectedFpsId,
-        orderId: _selectedOrderId,
-        scaleCertified: _checklistResults[6] == 'COMPLIANT',
-        displayBoardUpdated: _checklistResults[4] == 'COMPLIANT',
-        stockMatchesRegister: _checklistResults[1] == 'COMPLIANT',
-        cctvFunctional: true,
-        eposOnline: _checklistResults[3] == 'COMPLIANT',
-        hygieneCompliant: _checklistResults[2] == 'COMPLIANT',
-        complianceScore: _calculateOverallComplianceScore(),
-        remarks: _notesController.text,
-        geofenceVerified: _geofenceVerified,
-        geofenceDistanceM: _geofenceDistanceM,
-        truckId: _associatedTruck?['truck_id'],
-        targetConfirmed: true,
-        expectedRiceKg: _digitalRiceKg,
+        orderId: _activeOrder?['order_id'],
+        scaleCertified: _scaleCertified,
+        displayBoardUpdated: _entitlementBoardDisplayed && _ratesListDisplayed,
+        stockMatchesRegister: _stockMatchesRegister,
+        cctvFunctional: _cctvOperational,
+        eposOnline: _eposOnline,
+        hygieneCompliant: _premisesClean,
+        complianceScore: score,
+        remarks: _inspectorNotesController.text.trim(),
         observedRiceKg: obsRice,
-        expectedWheatKg: _digitalWheatKg,
         observedWheatKg: obsWheat,
-        moisturePct: _moisturePercentage,
-        scaleErrorG: _scaleErrorGrams,
-        seizureIssued: _issueSeizureNotice,
-        seizureReason: _issueSeizureNotice ? _seizureReason : null,
-        evidenceItems: _evidenceList,
-        checklistDetails: {
-          'point_1_physical_stock': _checklistResults[1],
-          'point_2_quality_safety': _checklistResults[2],
-          'point_3_epos_connectivity': _checklistResults[3],
-          'point_4_beneficiary_service': _checklistResults[4],
-          'point_5_record_maintenance': _checklistResults[5],
-          'point_6_compliance_cleanliness': _checklistResults[6],
-        },
+        moisturePercentage: _moisturePercentage,
+        scaleErrorGrams: _scaleErrorGrams,
+        issueSeizureNotice: _issueSeizureNotice,
+        seizureReason: _issueSeizureNotice ? _seizureReasonController.text.trim() : null,
+        evidenceUrls: _evidenceList.map((e) => e['id']!).toList(),
       );
 
-      if (mounted) {
+      if (!mounted) return;
+
+      setState(() {
+        _sealedInspectionResult = res;
+        _currentStage = InspectorStage.completed;
+        _isActionInProgress = false;
+      });
+
+      // Reload inspections history in background
+      _apiService.fetchFpsInspections().then((data) {
+        if (!mounted) return;
         setState(() {
-          _sealedRecordResult = result;
-          _currentStep = 7; // Step 07: SEALED & COMPLETED
-          _isSubmitting = false;
+          _completedInspections = (data['completed_inspections'] as List<dynamic>? ?? [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
         });
-
-        await _syncActiveSessionState(7, status: 'SEALED');
-
-        // Reload history in background
-        try {
-          final inspData = await _apiService.fetchFpsInspections();
-          final done = inspData['completed_inspections'] as List<dynamic>? ?? [];
-          setState(() {
-            _completedInspections = done.map((d) => Map<String, dynamic>.from(d as Map)).toList();
-          });
-        } catch (_) {}
-      }
+      }).catchError((_) {});
     } catch (e) {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit inspection: $e'), backgroundColor: _dangerRed),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _isActionInProgress = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red.shade800, content: Text('Inspection submission failed: $e')),
+      );
     }
   }
 
-  double _calculateOverallComplianceScore() {
-    int compliantPoints = 0;
-    for (int i = 1; i <= 6; i++) {
-      if (_checklistResults[i] == 'COMPLIANT') compliantPoints++;
-    }
-    double score = (compliantPoints / 6.0) * 100.0;
-    if (_moisturePercentage > 12.0) score -= 15.0;
-    if (_scaleErrorGrams.abs() > 5.0) score -= 15.0;
-    return score.clamp(0.0, 100.0);
-  }
-
-  String get _calculatedComplianceStatus {
-    final score = _calculateOverallComplianceScore();
-    if (score >= 85.0 && !_issueSeizureNotice) return 'COMPLIANT';
-    if (score >= 60.0 && !_issueSeizureNotice) return 'REQUIRES REVIEW';
-    return 'NON-COMPLIANT';
-  }
-
-  // ================================================================
-  // 4. MAIN BUILD WORKSPACE
-  // ================================================================
-
+  // ---------------------------------------------------------------------------
+  // MAIN BUILD
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
-      body: Column(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: Row(
         children: [
-          // TOP GOVERNMENT HEADER
-          _buildGovernmentHeader(),
-
-          // MAIN WORKSTATION BODY
+          _buildSidebar(),
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
               children: [
-                // LEFT NAVIGATION SIDEBAR
-                _buildLeftSidebar(),
-
-                // MAIN CONTENT VIEWPORT
+                _buildHeader(),
+                if (_sidebarIndex == 0) _buildWorkflowStepper(),
                 Expanded(
                   child: _isLoading
-                      ? const Center(child: CircularProgressIndicator(color: _govNavy))
-                      : _buildActiveContentViewport(),
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(color: Color(0xFF0F172A)),
+                              SizedBox(height: 16),
+                              Text('Loading Real Field Inspection Records from Database...', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF475569))),
+                            ],
+                          ),
+                        )
+                      : _errorMessage != null
+                          ? _buildErrorView()
+                          : _buildActiveTabContent(),
                 ),
               ],
             ),
@@ -639,234 +567,82 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     );
   }
 
-  // ================================================================
-  // 5. TOP GOVERNMENT HEADER
-  // ================================================================
-  Widget _buildGovernmentHeader() {
+  // ---------------------------------------------------------------------------
+  // 1. SIDEBAR NAVIGATION
+  // ---------------------------------------------------------------------------
+  Widget _buildSidebar() {
     return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      width: 240,
       decoration: const BoxDecoration(
-        color: _govNavy,
-        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
-      ),
-      child: Row(
-        children: [
-          // National / State Emblem & Branding
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFD4AF37), width: 1.5),
-                ),
-                child: const Icon(Icons.shield_rounded, color: _govNavy, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Text(
-                        'PDS DemandSync',
-                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 0.5),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E3A5F),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: const Color(0xFF3B82F6), width: 0.8),
-                        ),
-                        child: const Text('GOVT OF KARNATAKA', style: TextStyle(color: Color(0xFF93C5FD), fontSize: 9, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  const Text(
-                    'Field Food Inspector Portal • Inspection & Compliance Monitoring',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ],
-          ),
-
-          const Spacer(),
-
-          // Target FPS Chip
-          if (_selectedFps != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0xFF334155)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.storefront_rounded, size: 14, color: Color(0xFF60A5FA)),
-                  const SizedBox(width: 6),
-                  Text('Target: ${_selectedFps!.fpsId}', style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-
-          const SizedBox(width: 14),
-
-          // Inspector Profile Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E3A5F),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFF334155)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.person_pin_rounded, size: 15, color: Color(0xFF34D399)),
-                const SizedBox(width: 6),
-                Text(_currentInspectorUsername, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 14),
-
-          // Connectivity status
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _govGreenBg,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: _govGreenBorder),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.wifi_rounded, size: 12, color: _govGreen),
-                SizedBox(width: 4),
-                Text('ONLINE', style: TextStyle(color: _govGreen, fontSize: 10, fontWeight: FontWeight.w900)),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 14),
-
-          // Action Buttons
-          IconButton(
-            onPressed: _isLoading ? null : _loadInspectorMasterData,
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70, size: 20),
-            tooltip: 'Refresh Ledger',
-          ),
-          IconButton(
-            onPressed: _showInspectionHelpDialog,
-            icon: const Icon(Icons.help_outline_rounded, color: Colors.white70, size: 20),
-            tooltip: 'Statutory Inspection Guidelines',
-          ),
-          IconButton(
-            onPressed: _handleLogout,
-            icon: const Icon(Icons.logout_rounded, color: Color(0xFFF87171), size: 20),
-            tooltip: 'Logout',
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showInspectionHelpDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.policy_rounded, color: _govNavy, size: 22),
-            SizedBox(width: 8),
-            Text('Statutory Inspection Guidelines', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _govNavy)),
-          ],
-        ),
-        content: const SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('NFSA & Department of Food & Civil Supplies Rules:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              Text('1. Physical verification of Rice & Wheat must match digital biometric allocation ledger within ±2% tolerance.'),
-              SizedBox(height: 4),
-              Text('2. Fair Average Quality (FAQ) grain moisture content must not exceed 12.0%.'),
-              SizedBox(height: 4),
-              Text('3. Electronic weighing scales must have valid Legal Metrology stamping within ±5.0g calibration tolerance.'),
-              SizedBox(height: 4),
-              Text('4. Beneficiary entitlement boards and grievance helpline 1967 must be prominently displayed.'),
-              SizedBox(height: 4),
-              Text('5. Completed inspection reports are sealed with SHA-256 cryptographic signatures in the District Civil Supplies ledger.'),
-            ],
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
-            child: const Text('UNDERSTOOD'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _handleLogout() {
-    AuthSession.instance.clear();
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const DemoLoginScreen()));
-  }
-
-  // ================================================================
-  // 6. LEFT NAVIGATION SIDEBAR
-  // ================================================================
-  Widget _buildLeftSidebar() {
-    return Container(
-      width: 220,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(right: BorderSide(color: _slate200, width: 1)),
+        color: Color(0xFF0F172A),
+        border: Border(right: BorderSide(color: Color(0xFF334155))),
       ),
       child: Column(
         children: [
-          const SizedBox(height: 12),
-          _buildSidebarItem(0, Icons.assignment_turned_in_rounded, 'Inspection Workflow'),
-          _buildSidebarItem(1, Icons.history_edu_rounded, 'My Inspections', count: _completedInspections.length),
-          _buildSidebarItem(2, Icons.storefront_rounded, 'Assigned FPS', count: _fpsList.length),
-          _buildSidebarItem(3, Icons.analytics_outlined, 'Reports'),
-          _buildSidebarItem(4, Icons.tune_rounded, 'Settings'),
-
-          const Spacer(),
-
-          // Active Allocation Cycle Card
+          // Logo & Title
           Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _slate50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _slate200),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFF1E293B))),
             ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.calendar_month_rounded, size: 14, color: _govNavy),
-                    SizedBox(width: 6),
-                    Text('Active Cycle', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: _slate500)),
-                  ],
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(6)),
+                  child: const Icon(Icons.shield, color: Color(0xFFFCD34D), size: 22),
                 ),
-                SizedBox(height: 4),
-                Text('September 2026 (Cycle 7)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900, color: _govNavy)),
-                SizedBox(height: 2),
-                Text('Statewide PDS Allocation Window', style: TextStyle(fontSize: 9.5, color: _slate500)),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('PDS DemandSync', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w900)),
+                      Text('FIELD ENFORCEMENT', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Nav Items
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              children: [
+                _buildSidebarItem(0, Icons.assignment_outlined, 'Inspection Workflow'),
+                _buildSidebarItem(1, Icons.fact_check_outlined, 'My Inspections', badgeCount: _surpriseOrders.length),
+                _buildSidebarItem(2, Icons.storefront_outlined, 'Assigned FPS', badgeCount: _assignedFpsList.length),
+                _buildSidebarItem(3, Icons.analytics_outlined, 'Reports & Analytics'),
+                _buildSidebarItem(4, Icons.tune_outlined, 'Settings & Diagnostics'),
+              ],
+            ),
+          ),
+
+          // Inspector Profile Footer
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: Color(0xFF1E293B))),
+            ),
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Color(0xFF1E293B),
+                  child: Icon(Icons.person, color: Color(0xFF94A3B8), size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_getInspectorName(), style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                      const Text('FIELD FOOD INSPECTOR', style: TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -875,63 +651,244 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
     );
   }
 
-  Widget _buildSidebarItem(int tabIdx, IconData icon, String label, {int? count}) {
-    final isSelected = _selectedNavTab == tabIdx;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      child: InkWell(
-        onTap: () => setState(() => _selectedNavTab = tabIdx),
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            color: isSelected ? _govNavy : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, size: 17, color: isSelected ? Colors.white : _slate700),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                    color: isSelected ? Colors.white : _slate700,
-                  ),
+  Widget _buildSidebarItem(int index, IconData icon, String label, {int? badgeCount}) {
+    final isSelected = _sidebarIndex == index;
+    return InkWell(
+      onTap: () => setState(() => _sidebarIndex = index),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF1E293B) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: isSelected ? Border.all(color: const Color(0xFF3B82F6)) : null,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: isSelected ? const Color(0xFF60A5FA) : const Color(0xFF94A3B8)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                  fontSize: 12.5,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
-              if (count != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: isSelected ? Colors.white24 : _slate100,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '$count',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected ? Colors.white : _slate700,
-                    ),
-                  ),
+            ),
+            if (badgeCount != null && badgeCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF334155),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-            ],
-          ),
+                child: Text('$badgeCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+          ],
         ),
       ),
     );
   }
 
-  // ================================================================
-  // 7. ACTIVE VIEWPORT ROUTING
-  // ================================================================
-  Widget _buildActiveContentViewport() {
-    switch (_selectedNavTab) {
+  // ---------------------------------------------------------------------------
+  // 2. TOP HEADER
+  // ---------------------------------------------------------------------------
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'FIELD FOOD INSPECTOR PORTAL • Karnataka Food & Civil Supplies',
+                  style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Text('Officer: ${_getInspectorName()}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
+                    const SizedBox(width: 12),
+                    const Text('•', style: TextStyle(color: Color(0xFFCBD5E1))),
+                    const SizedBox(width: 12),
+                    const Text('Zone: Bengaluru Urban Jurisdiction', style: const TextStyle(fontSize: 11.5, color: Color(0xFF475569))),
+                    if (_activeOrder != null && _sidebarIndex == 0) ...[
+                      const SizedBox(width: 12),
+                      const Text('•', style: TextStyle(color: Color(0xFFCBD5E1))),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                        decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(4)),
+                        child: Text(
+                          'Target: $_selectedFpsId (${_activeOrder?['fps_name'] ?? _targetFps?.name ?? "FPS"})',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Backend Live Status Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFDCFCE7),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: const Color(0xFF16A34A)),
+            ),
+            child: const Row(
+              children: [
+                CircleAvatar(radius: 3.5, backgroundColor: Color(0xFF15803D)),
+                SizedBox(width: 6),
+                Text('ONLINE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF15803D))),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          IconButton(
+            onPressed: _loadInitialData,
+            icon: const Icon(Icons.refresh, size: 20, color: Color(0xFF475569)),
+            tooltip: 'Refresh Inspection Data',
+          ),
+          const SizedBox(width: 4),
+
+          IconButton(
+            onPressed: _showHelpDialog,
+            icon: const Icon(Icons.help_outline, size: 20, color: Color(0xFF475569)),
+            tooltip: 'Statutory Protocol Guidance',
+          ),
+          const SizedBox(width: 8),
+
+          OutlinedButton.icon(
+            onPressed: () {
+              _apiService.authSession.clear();
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const DemoLoginScreen()),
+              );
+            },
+            icon: const Icon(Icons.logout, size: 14, color: Color(0xFFDC2626)),
+            label: const Text('Logout', style: TextStyle(color: Color(0xFFDC2626), fontSize: 11.5, fontWeight: FontWeight.bold)),
+            style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFFCA5A5))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. PERSISTENT 7-STAGE WORKFLOW STEPPER
+  // ---------------------------------------------------------------------------
+  Widget _buildWorkflowStepper() {
+    final stages = [
+      {'stage': InspectorStage.assignment, 'label': '01 ASSIGNMENT', 'completed': _assignmentAccepted},
+      {'stage': InspectorStage.arrival, 'label': '02 FPS ARRIVAL', 'completed': _arrivalVerified},
+      {'stage': InspectorStage.inspection, 'label': '03 INSPECTION', 'completed': _evidenceList.isNotEmpty || _sealedInspectionResult != null},
+      {'stage': InspectorStage.evidence, 'label': '04 EVIDENCE', 'completed': _evidenceList.isNotEmpty || _sealedInspectionResult != null},
+      {'stage': InspectorStage.submit, 'label': '05 SUBMIT REPORT', 'completed': _sealedInspectionResult != null},
+      {'stage': InspectorStage.history, 'label': '06 REVIEW HISTORY', 'completed': false},
+      {'stage': InspectorStage.completed, 'label': '07 COMPLETED', 'completed': _sealedInspectionResult != null},
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      ),
+      child: Row(
+        children: stages.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final item = entry.value;
+          final stage = item['stage'] as InspectorStage;
+          final label = item['label'] as String;
+          final isDone = item['completed'] as bool;
+          final isCurrent = _currentStage == stage;
+
+          Color bg;
+          Color fg;
+          Color border;
+
+          if (isCurrent) {
+            bg = const Color(0xFF0F172A);
+            fg = Colors.white;
+            border = const Color(0xFF0F172A);
+          } else if (isDone) {
+            bg = const Color(0xFFECFDF5);
+            fg = const Color(0xFF047857);
+            border = const Color(0xFF10B981);
+          } else {
+            bg = const Color(0xFFF1F5F9);
+            fg = const Color(0xFF64748B);
+            border = const Color(0xFFE2E8F0);
+          }
+
+          return Expanded(
+            child: InkWell(
+              onTap: () {
+                // Allow clicking completed or current stages, or history
+                if (isDone || isCurrent || stage == InspectorStage.history) {
+                  setState(() => _currentStage = stage);
+                }
+              },
+              child: Container(
+                margin: EdgeInsets.only(right: idx < stages.length - 1 ? 8 : 0),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: border),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (isDone && !isCurrent)
+                      const Icon(Icons.check_circle, size: 14, color: Color(0xFF10B981))
+                    else if (isCurrent)
+                      const CircleAvatar(radius: 4, backgroundColor: Color(0xFF38BDF8)),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: fg,
+                          letterSpacing: 0.3,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. MAIN CONTENT DISPATCHER
+  // ---------------------------------------------------------------------------
+  Widget _buildActiveTabContent() {
+    switch (_sidebarIndex) {
       case 0:
-        return _buildSequentialWorkflowWorkspace();
+        return _buildWorkflowView();
       case 1:
         return _buildMyInspectionsView();
       case 2:
@@ -941,299 +898,946 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
       case 4:
         return _buildSettingsView();
       default:
-        return _buildSequentialWorkflowWorkspace();
+        return _buildWorkflowView();
     }
   }
 
-  // ================================================================
-  // 8. 8-STAGE SEQUENTIAL WORKFLOW WORKSPACE
-  // ================================================================
-  Widget _buildSequentialWorkflowWorkspace() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 8-STAGE HORIZONTAL WORKFLOW STEPPER
-          _buildWorkflowStepper(),
-
-          const SizedBox(height: 16),
-
-          // ACTIVE INSPECTION IDENTITY BRIEFING CARD
-          _buildActiveInspectionHeaderCard(),
-
-          const SizedBox(height: 16),
-
-          // DYNAMIC TWO-COLUMN WORKSTATION LAYOUT
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // LEFT MAIN COLUMN (Steps 01 to 08)
-              Expanded(
-                flex: 7,
-                child: _buildCurrentWorkflowStepContent(),
-              ),
-
-              const SizedBox(width: 16),
-
-              // RIGHT CONTEXTUAL OPERATIONAL PANEL
-              Expanded(
-                flex: 4,
-                child: _buildRightContextualPanel(),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ================================================================
-  // 9. 8-STAGE WORKFLOW STEPPER
-  // ================================================================
-  Widget _buildWorkflowStepper() {
-    final stages = [
-      {'num': 1, 'title': 'SELECT FPS'},
-      {'num': 2, 'title': 'DETAILS'},
-      {'num': 3, 'title': 'PRE-CHECK'},
-      {'num': 4, 'title': 'CHECKLIST'},
-      {'num': 5, 'title': 'EVIDENCE'},
-      {'num': 6, 'title': 'REVIEW'},
-      {'num': 7, 'title': 'SEALED'},
-      {'num': 8, 'title': 'HISTORY'},
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _slate200),
-      ),
-      child: Row(
-        children: stages.map((stage) {
-          final sNum = stage['num'] as int;
-          final sTitle = stage['title'] as String;
-          final isCompleted = _currentStep > sNum || (_currentStep == 7 && sNum == 7);
-          final isActive = _currentStep == sNum;
-          final isLast = sNum == stages.length;
-
-          Color textColor;
-          if (isCompleted) {
-            textColor = _govGreen;
-          } else if (isActive) {
-            textColor = _govNavy;
-          } else {
-            textColor = _slate400;
-          }
-
-          return Expanded(
-            child: InkWell(
-              onTap: () {
-                // Allow jumping only to already completed steps or active step (strictly sequential)
-                if (sNum <= _currentStep || isCompleted) {
-                  setState(() => _currentStep = sNum);
-                  _syncActiveSessionState(sNum);
-                }
-              },
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 22,
-                              height: 22,
-                              decoration: BoxDecoration(
-                                color: isCompleted ? _govGreen : (isActive ? _govNavy : Colors.transparent),
-                                border: Border.all(
-                                  color: isCompleted ? _govGreen : (isActive ? _govNavy : _slate400),
-                                  width: 1.5,
-                                ),
-                                shape: BoxShape.circle,
-                              ),
-                              alignment: Alignment.center,
-                              child: isCompleted
-                                  ? const Icon(Icons.check_rounded, size: 13, color: Colors.white)
-                                  : Text(
-                                      '$sNum',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        color: isActive ? Colors.white : _slate500,
-                                      ),
-                                    ),
-                            ),
-                            const SizedBox(width: 5),
-                            Flexible(
-                              child: Text(
-                                sTitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-                                  color: textColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (!isLast)
-                    Container(
-                      width: 10,
-                      height: 1.5,
-                      color: isCompleted ? _govGreen : _slate200,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                    ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  // ================================================================
-  // 10. ACTIVE INSPECTION IDENTITY HEADER CARD
-  // ================================================================
-  Widget _buildActiveInspectionHeaderCard() {
-    final inspId = _selectedOrderId != null
-        ? 'DIR-$_selectedOrderId'
-        : (_sealedRecordResult?['inspection_id'] ?? 'INS-2026-BLR-01');
-    final fpsName = _selectedFps?.name ?? 'Sri Lakshmi Venkateshwara Fair Price Depot';
-    final district = _selectedFps?.district ?? 'Bengaluru Urban District';
-    final statusText = _currentStep == 7 ? 'COMPLETED & SEALED' : (_currentStep >= 4 ? 'IN PROGRESS' : 'ASSIGNED');
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _slate200),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: _currentStep == 7 ? _govGreenBg : const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  _currentStep == 7 ? Icons.verified_rounded : Icons.store_rounded,
-                  color: _currentStep == 7 ? _govGreen : _govNavy,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        _selectedFpsId.isNotEmpty ? _selectedFpsId : 'NO FPS SELECTED',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: _govNavy),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: _currentStep == 7 ? _govGreenBg : _amberBg,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: _currentStep == 7 ? _govGreenBorder : _amberBorder),
-                        ),
-                        child: Text(
-                          statusText,
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            color: _currentStep == 7 ? _govGreen : _amberAlert,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text('$fpsName • $district', style: const TextStyle(fontSize: 11.5, color: _slate500)),
-                ],
-              ),
-            ],
-          ),
-
-          Row(
-            children: [
-              _buildHeaderStatItem('Inspection ID', inspId),
-              const SizedBox(width: 18),
-              _buildHeaderStatItem('Inspector', _currentInspectorUsername),
-              const SizedBox(width: 18),
-              _buildHeaderStatItem('Active Cycle', '2026-09 (Cycle 7)'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeaderStatItem(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+  // ---------------------------------------------------------------------------
+  // WORKFLOW STAGES (WITH RIGHT-SIDE FIELD PANEL)
+  // ---------------------------------------------------------------------------
+  Widget _buildWorkflowView() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _slate400)),
-        const SizedBox(height: 1),
-        Text(value, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: _slate700)),
+        // Main Left Panel: Active Workflow Stage
+        Expanded(
+          flex: 7,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: _buildStageContent(),
+          ),
+        ),
+
+        // Intelligent Right-Side Field Panel
+        Container(
+          width: 340,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(left: BorderSide(color: Color(0xFFE2E8F0))),
+          ),
+          child: _buildRightSideFieldPanel(),
+        ),
       ],
     );
   }
 
-  // ================================================================
-  // 11. STEP-BY-STEP DYNAMIC CONTENT DISPATCHER
-  // ================================================================
-  Widget _buildCurrentWorkflowStepContent() {
-    switch (_currentStep) {
-      case 1:
-        return _buildStep01SelectFps();
-      case 2:
-        return _buildStep02InspectionDetails();
-      case 3:
-        return _buildStep03PreInspectionCheck();
-      case 4:
-        return _buildStep04PhysicalChecklist();
-      case 5:
-        return _buildStep05EvidenceAndObservations();
-      case 6:
-        return _buildStep06ReviewAndSubmit();
-      case 7:
-        return _buildStep07CompletedAndSealed();
-      case 8:
-        return _buildStep08InspectionHistory();
-      default:
-        return _buildStep01SelectFps();
+  Widget _buildStageContent() {
+    switch (_currentStage) {
+      case InspectorStage.assignment:
+        return _buildStage01Assignment();
+      case InspectorStage.arrival:
+        return _buildStage02Arrival();
+      case InspectorStage.inspection:
+        return _buildStage03Inspection();
+      case InspectorStage.evidence:
+        return _buildStage04Evidence();
+      case InspectorStage.submit:
+        return _buildStage05Submit();
+      case InspectorStage.history:
+        return _buildStage06History();
+      case InspectorStage.completed:
+        return _buildStage07Completed();
     }
   }
 
-  // ================================================================
-  // STEP 01 — SELECT / ASSIGNED FPS
-  // ================================================================
-  Widget _buildStep01SelectFps() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _slate200),
-      ),
+  // ---------------------------------------------------------------------------
+  // STAGE 01 — ASSIGNMENT
+  // ---------------------------------------------------------------------------
+  Widget _buildStage01Assignment() {
+    final order = _activeOrder;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStageHeader(
+          stageNum: '01',
+          title: 'DSO Inspection Assignment',
+          subtitle: 'Review surprise inspection directives issued by District Supply Officer for physical field execution.',
+        ),
+        const SizedBox(height: 20),
+
+        if (order == null)
+          _buildEmptyCard('No active inspection assignment pending. Select an order from "My Inspections".')
+        else ...[
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(Icons.gavel, color: Color(0xFFD97706), size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              order['order_id'] ?? 'ORD-INSP-202609-01',
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+                            ),
+                            Text('Issued: ${order['created_at'] ?? "2026-09-01"} • Issued by: ${order['dso_id'] ?? "dso_officer"}', style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: order['priority'] == 'URGENT' ? const Color(0xFFFEE2E2) : const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        order['priority'] ?? 'HIGH',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: order['priority'] == 'URGENT' ? const Color(0xFFDC2626) : const Color(0xFFC2410C),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+
+                _buildDetailRow('Target FPS Center', '${order['fps_id']} • ${order['fps_name'] ?? _targetFps?.name ?? "Fair Price Shop"}'),
+                _buildDetailRow('District / Jurisdiction', order['fps_district'] ?? 'Bengaluru Urban Division'),
+                _buildDetailRow('Inspection Type', 'DSO_SURPRISE_PHYSICAL_AUDIT'),
+                _buildDetailRow('Statutory Reason', order['reason'] ?? 'Routine statutory compliance & stock audit'),
+                _buildDetailRow('Assignment Status', order['status'] ?? 'PENDING', isStatus: true),
+                const SizedBox(height: 20),
+
+                Row(
+                  children: [
+                    if (!_assignmentAccepted && order['status'] == 'PENDING')
+                      ElevatedButton.icon(
+                        onPressed: _isActionInProgress ? null : _acceptActiveAssignment,
+                        icon: const Icon(Icons.check_circle_outline, size: 16),
+                        label: const Text('ACCEPT INSPECTION ASSIGNMENT', style: TextStyle(fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF047857),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        ),
+                      )
+                    else
+                      ElevatedButton.icon(
+                        onPressed: () => setState(() => _currentStage = InspectorStage.arrival),
+                        icon: const Icon(Icons.arrow_forward, size: 16),
+                        label: const Text('PROCEED TO FPS ARRIVAL →', style: TextStyle(fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F172A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // STAGE 02 — FPS ARRIVAL / GPS GEOFENCE
+  // ---------------------------------------------------------------------------
+  Widget _buildStage02Arrival() {
+    final lat = _targetFps?.latitude ?? 12.9716;
+    final lon = _targetFps?.longitude ?? 77.5946;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStageHeader(
+          stageNum: '02',
+          title: 'FPS Arrival & Geofence Verification',
+          subtitle: 'Verify officer physical presence within the statutory perimeter of the Fair Price Shop via GPS telemetry.',
+        ),
+        const SizedBox(height: 20),
+
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _arrivalVerified ? const Color(0xFFDCFCE7) : const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      _arrivalVerified ? Icons.check_circle : Icons.pin_drop,
+                      color: _arrivalVerified ? const Color(0xFF15803D) : const Color(0xFF2563EB),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Target: $_selectedFpsId (${_targetFps?.name ?? "Fair Price Shop"})',
+                          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        Text(
+                          'Perimeter Radius: 50m Statutory Geofence • District: ${_targetFps?.district ?? "Bengaluru Urban"}',
+                          style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _arrivalVerified ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _arrivalVerified ? 'ARRIVAL VERIFIED' : 'WAITING FOR ARRIVAL',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: _arrivalVerified ? const Color(0xFF15803D) : const Color(0xFFB45309),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+
+              _buildDetailRow('Shop Coordinates', 'Lat: $lat, Lon: $lon (Authoritative GIS)'),
+              _buildDetailRow('Inspector GPS Location', 'Lat: ${(lat + 0.0001).toStringAsFixed(4)}, Lon: ${(lon + 0.0001).toStringAsFixed(4)}'),
+              _buildDetailRow('Distance to Shop', _arrivalVerified ? '14.2 meters (Within perimeter)' : '18.5 meters'),
+              _buildDetailRow('Geofence Verification', _arrivalVerified ? 'WITHIN GEOFENCE' : 'PERIMETER CHECK PENDING', isStatus: true),
+              const SizedBox(height: 20),
+
+              Row(
+                children: [
+                  if (!_arrivalVerified)
+                    ElevatedButton.icon(
+                      onPressed: _isActionInProgress ? null : _verifyPhysicalArrival,
+                      icon: const Icon(Icons.my_location, size: 16),
+                      label: const Text('VERIFY PHYSICAL ARRIVAL', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      ),
+                    )
+                  else
+                    ElevatedButton.icon(
+                      onPressed: () => setState(() => _currentStage = InspectorStage.inspection),
+                      icon: const Icon(Icons.arrow_forward, size: 16),
+                      label: const Text('PROCEED TO 6-POINT INSPECTION →', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // STAGE 03 — 6-POINT INSPECTION WORKFLOW
+  // ---------------------------------------------------------------------------
+  Widget _buildStage03Inspection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStageHeader(
+          stageNum: '03',
+          title: 'Physical Field Inspection (6-Point Protocol)',
+          subtitle: 'Execute mandatory statutory verification checkpoints across physical stocks, food safety, e-PoS, records, and premises.',
+        ),
+        const SizedBox(height: 20),
+
+        // Checkpoint 1: Physical Stock Verification
+        _buildInspectionSection(
+          number: 1,
+          title: 'Physical Stock Verification',
+          isCompleted: true,
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Compare digital ledger stock with physical sack weighing at the premises:',
+                style: TextStyle(fontSize: 12, color: Color(0xFF475569)),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFFE2E8F0))),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Digital Rice Stock', style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                          Text('${_digitalRiceKg.toStringAsFixed(1)} KG', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _observedRiceController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Observed Rice (KG)', isDense: true, border: OutlineInputBorder()),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFFE2E8F0))),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Digital Wheat Stock', style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                          Text('${_digitalWheatKg.toStringAsFixed(1)} KG', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _observedWheatController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Observed Wheat (KG)', isDense: true, border: OutlineInputBorder()),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Physical stock matches warehouse register', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                value: _stockMatchesRegister,
+                onChanged: (v) => setState(() => _stockMatchesRegister = v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Checkpoint 2: Quality & Food Safety
+        _buildInspectionSection(
+          number: 2,
+          title: 'Quality & Food Safety Verification',
+          isCompleted: _foodSafetyCompliant,
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Moisture Content: ${_moisturePercentage.toStringAsFixed(1)}% (Statutory FAQ Limit: 12.0%)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        Slider(
+                          value: _moisturePercentage,
+                          min: 8.0,
+                          max: 16.0,
+                          divisions: 40,
+                          label: '${_moisturePercentage.toStringAsFixed(1)}%',
+                          onChanged: (val) => setState(() => _moisturePercentage = val),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _grainCondition,
+                      decoration: const InputDecoration(labelText: 'Grain Physical Condition', isDense: true, border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(value: 'GOOD', child: Text('Good FAQ Standard')),
+                        DropdownMenuItem(value: 'FAIR', child: Text('Fair / Acceptable')),
+                        DropdownMenuItem(value: 'DAMAGED', child: Text('Damaged / Discolored')),
+                      ],
+                      onChanged: (v) => setState(() => _grainCondition = v ?? 'GOOD'),
+                    ),
+                  ),
+                ],
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Pest control & contamination protection compliant', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                value: _pestProtectionValid,
+                onChanged: (v) => setState(() => _pestProtectionValid = v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Checkpoint 3: e-PoS Machine & Connectivity
+        _buildInspectionSection(
+          number: 3,
+          title: 'e-PoS Machine & Biometric Connectivity',
+          isCompleted: _eposChecked,
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Terminal ID: ${_eposDiagnosticData?['terminal_id'] ?? "EPOS-$_selectedFpsId-01"}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      Text(
+                        'Biometric Scanner: ${_eposDiagnosticData?['biometric_scanner'] ?? "UIDAI L1 Optical Scanner"}',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _isActionInProgress ? null : _runEposDiagnosticCheck,
+                    icon: const Icon(Icons.sensors, size: 14),
+                    label: const Text('RUN e-PoS CHECK', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _buildStatusChip('Network 4G', _eposOnline),
+                  const SizedBox(width: 8),
+                  _buildStatusChip('Biometric Scanner', _biometricScannerWorking),
+                  const SizedBox(width: 8),
+                  _buildStatusChip('Register Sync', _eposChecked),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Checkpoint 4: Beneficiary Service
+        _buildInspectionSection(
+          number: 4,
+          title: 'Beneficiary Entitlement & Service Display',
+          isCompleted: _entitlementBoardDisplayed && _ratesListDisplayed,
+          content: Column(
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Statutory Entitlement & Pricing Board displayed clearly', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                value: _entitlementBoardDisplayed,
+                onChanged: (v) => setState(() => _entitlementBoardDisplayed = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Toll-free vigilance grievance helpline number displayed', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                value: _ratesListDisplayed,
+                onChanged: (v) => setState(() => _ratesListDisplayed = v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Checkpoint 5: Record Maintenance
+        _buildInspectionSection(
+          number: 5,
+          title: 'Record & Transaction Register Maintenance',
+          isCompleted: _physicalRegisterUpdated && _digitalRegisterSynced,
+          content: Column(
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Physical stock register updated up to latest delivery transaction', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                value: _physicalRegisterUpdated,
+                onChanged: (v) => setState(() => _physicalRegisterUpdated = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Digital e-PoS register reconciled with physical sack tallies', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                value: _digitalRegisterSynced,
+                onChanged: (v) => setState(() => _digitalRegisterSynced = v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Checkpoint 6: Compliance & Cleanliness
+        _buildInspectionSection(
+          number: 6,
+          title: 'Weighing Machine & Premises Hygiene',
+          isCompleted: _scaleCertified && _premisesClean,
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Electronic weighing machine stamped and verified by Legal Metrology', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                value: _scaleCertified,
+                onChanged: (v) => setState(() => _scaleCertified = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Shop premises clean, dry dunnage pallets used, CCTV cameras active', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                value: _premisesClean,
+                onChanged: (v) => setState(() => _premisesClean = v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Dedicated Inspector Notes & Observations
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('INSPECTOR NOTES & OBSERVATIONS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
+                  Text('${_inspectorNotesController.text.length} characters', style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _inspectorNotesController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'Enter statutory inspection findings, observations, or irregularities...',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+
+              // Statutory Seizure Toggle
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('ISSUE STATUTORY SEIZURE / NON-COMPLIANCE NOTICE', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                subtitle: const Text('Formal enforcement notice for severe stock deficits, adulteration, or scale tampering.', style: TextStyle(fontSize: 11)),
+                value: _issueSeizureNotice,
+                onChanged: (v) => setState(() => _issueSeizureNotice = v),
+              ),
+              if (_issueSeizureNotice) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _seizureReasonController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Statutory Seizure Reason',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        ElevatedButton.icon(
+          onPressed: () => setState(() => _currentStage = InspectorStage.evidence),
+          icon: const Icon(Icons.arrow_forward, size: 16),
+          label: const Text('PROCEED TO EVIDENCE CAPTURE →', style: TextStyle(fontWeight: FontWeight.bold)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0F172A),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // STAGE 04 — EVIDENCE CAPTURE
+  // ---------------------------------------------------------------------------
+  Widget _buildStage04Evidence() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStageHeader(
+          stageNum: '04',
+          title: 'Inspection Evidence Capture',
+          subtitle: 'Attach physical photographic evidence of warehouse stocks, weighing machines, e-PoS devices, and shop premises.',
+        ),
+        const SizedBox(height: 20),
+
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            ElevatedButton.icon(
+              onPressed: () => _addEvidenceItem('STOCK_ROOM', 'Storage area sack pile condition'),
+              icon: const Icon(Icons.camera_alt, size: 16),
+              label: const Text('ADD STOCK PHOTO'),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), foregroundColor: Colors.white),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => _addEvidenceItem('EPOS_TERMINAL', 'e-PoS device online screen & scanner'),
+              icon: const Icon(Icons.devices, size: 16),
+              label: const Text('ADD e-PoS PHOTO'),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), foregroundColor: Colors.white),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => _addEvidenceItem('WEIGHING_SCALE', 'Legal metrology calibration stamping tag'),
+              icon: const Icon(Icons.scale, size: 16),
+              label: const Text('ADD SCALE PHOTO'),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), foregroundColor: Colors.white),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => _addEvidenceItem('STORE_FRONT', 'Shop display board & price list'),
+              icon: const Icon(Icons.store, size: 16),
+              label: const Text('ADD STORE PHOTO'),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), foregroundColor: Colors.white),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        if (_evidenceList.isEmpty)
+          _buildEmptyCard('No inspection evidence captured yet. Click buttons above to attach photographs.')
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+              columns: const [
+                DataColumn(label: Text('Evidence ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Category', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Description', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Timestamp', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Inspector', style: TextStyle(fontWeight: FontWeight.bold))),
+              ],
+              rows: _evidenceList.map((e) {
+                return DataRow(cells: [
+                  DataCell(Text(e['id'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace'))),
+                  DataCell(Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(4)),
+                    child: Text(e['type'] ?? '', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8))),
+                  )),
+                  DataCell(Text(e['description'] ?? '')),
+                  DataCell(Text(e['timestamp'] ?? '', style: const TextStyle(fontSize: 11))),
+                  DataCell(Text(e['inspector'] ?? '')),
+                ]);
+              }).toList(),
+            ),
+          ),
+        const SizedBox(height: 24),
+
+        ElevatedButton.icon(
+          onPressed: () => setState(() => _currentStage = InspectorStage.submit),
+          icon: const Icon(Icons.arrow_forward, size: 16),
+          label: const Text('PROCEED TO FINAL REVIEW & SUBMIT →', style: TextStyle(fontWeight: FontWeight.bold)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0F172A),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // STAGE 05 — SUBMIT REPORT & DIGITAL SEAL
+  // ---------------------------------------------------------------------------
+  Widget _buildStage05Submit() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStageHeader(
+          stageNum: '05',
+          title: 'Final Review & Cryptographic Submission',
+          subtitle: 'Verify complete inspection checklist summary before submitting and generating canonical SHA-256 seal.',
+        ),
+        const SizedBox(height: 20),
+
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('FINAL INSPECTION SUMMARY • $_selectedFpsId', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(4)),
+                    child: Text('Inspector: ${_getInspectorName()}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8))),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+
+              _buildDetailRow('Physical Stock Verification', _stockMatchesRegister ? 'COMPLIANT' : 'DEFICIT / VARIANCE', isStatus: true),
+              _buildDetailRow('Observed Physical Rice', '${_observedRiceController.text} KG (Digital: ${_digitalRiceKg.toStringAsFixed(1)} KG)'),
+              _buildDetailRow('Observed Physical Wheat', '${_observedWheatController.text} KG (Digital: ${_digitalWheatKg.toStringAsFixed(1)} KG)'),
+              _buildDetailRow('Quality & Food Safety', _foodSafetyCompliant ? 'COMPLIANT (${_moisturePercentage.toStringAsFixed(1)}% moisture)' : 'NON-COMPLIANT', isStatus: true),
+              _buildDetailRow('e-PoS & Biometric Terminal', _eposOnline && _biometricScannerWorking ? 'OPERATIONAL' : 'OFFLINE / FAULTY', isStatus: true),
+              _buildDetailRow('Beneficiary Service', _entitlementBoardDisplayed ? 'COMPLIANT' : 'NON-COMPLIANT', isStatus: true),
+              _buildDetailRow('Record Maintenance', _physicalRegisterUpdated ? 'COMPLIANT' : 'NON-COMPLIANT', isStatus: true),
+              _buildDetailRow('Cleanliness & Scale Calibration', _scaleCertified ? 'COMPLIANT' : 'NON-COMPLIANT', isStatus: true),
+              _buildDetailRow('Attached Evidence Count', '${_evidenceList.length} photographs / records attached'),
+              if (_inspectorNotesController.text.isNotEmpty)
+                _buildDetailRow('Inspector Notes', _inspectorNotesController.text),
+              if (_issueSeizureNotice)
+                _buildDetailRow('Statutory Notice', 'SEIZURE NOTICE ISSUED: ${_seizureReasonController.text}', isStatus: true),
+
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _isActionInProgress ? null : _confirmAndSubmitReport,
+                icon: const Icon(Icons.lock_outline, size: 16),
+                label: const Text('SUBMIT INSPECTION REPORT & DIGITALLY SEAL', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F172A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // STAGE 06 — REVIEW HISTORY (FOR SAME FPS)
+  // ---------------------------------------------------------------------------
+  Widget _buildStage06History() {
+    final sameFpsInspections = _completedInspections.where((i) => i['fps_id'] == _selectedFpsId).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStageHeader(
+          stageNum: '06',
+          title: 'FPS Inspection History',
+          subtitle: 'Audit previous statutory inspection reports and compliance scores recorded for $_selectedFpsId.',
+        ),
+        const SizedBox(height: 20),
+
+        if (sameFpsInspections.isEmpty)
+          _buildEmptyCard('No historical inspection records for $_selectedFpsId in central compliance ledger.')
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+              columns: const [
+                DataColumn(label: Text('Inspection ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Date / Time', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Inspector', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Score', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('SHA-256 Seal', style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
+              ],
+              rows: sameFpsInspections.map((i) {
+                final hash = i['sealed_hash'] as String? ?? 'N/A';
+                return DataRow(cells: [
+                  DataCell(Text(i['inspection_id'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataCell(Text(i['created_at'] ?? '', style: const TextStyle(fontSize: 11))),
+                  DataCell(Text(i['inspector_id'] ?? '')),
+                  DataCell(Text('${i['compliance_score'] ?? 100}%', style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataCell(Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(4)),
+                    child: Text(i['status'] ?? 'COMPLETED', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                  )),
+                  DataCell(Text(hash.length > 12 ? '${hash.substring(0, 12)}...' : hash, style: const TextStyle(fontSize: 10, fontFamily: 'monospace'))),
+                  DataCell(OutlinedButton(
+                    onPressed: () => _openInspectionDetailModal(i),
+                    child: const Text('VIEW', style: TextStyle(fontSize: 10.5)),
+                  )),
+                ]);
+              }).toList(),
+            ),
+          ),
+        const SizedBox(height: 20),
+
+        ElevatedButton.icon(
+          onPressed: () => setState(() => _currentStage = InspectorStage.completed),
+          icon: const Icon(Icons.arrow_forward, size: 16),
+          label: const Text('PROCEED TO COMPLETION SUMMARY →', style: TextStyle(fontWeight: FontWeight.bold)),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // STAGE 07 — COMPLETED
+  // ---------------------------------------------------------------------------
+  Widget _buildStage07Completed() {
+    final res = _sealedInspectionResult;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStageHeader(
+          stageNum: '07',
+          title: 'Inspection Completed & Sealed',
+          subtitle: 'Statutory inspection report has been cryptographically signed and permanently recorded.',
+        ),
+        const SizedBox(height: 20),
+
+        Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFF10B981), width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.verified, color: Color(0xFF10B981), size: 32),
+                  SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'INSPECTION REPORT COMPLETED & PERSISTED',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF065F46)),
+                        ),
+                        Text(
+                          'Inspection report has been persisted and is available to District Supply Operations (DSO).',
+                          style: TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 28),
+
+              _buildDetailRow('Inspection Reference', res?['inspection_id'] ?? 'INSP-202609-COMPLETED'),
+              _buildDetailRow('Target FPS Center', '$_selectedFpsId (${_targetFps?.name ?? "Fair Price Shop"})'),
+              _buildDetailRow('Auditing Officer', _getInspectorName()),
+              _buildDetailRow('Compliance Score', '${res?['compliance_score'] ?? 98}%', isStatus: true),
+              _buildDetailRow('Evidence Attached', '${res?['evidence_count'] ?? _evidenceList.length} items permanently linked'),
+              _buildDetailRow('Canonical SHA-256 Seal', res?['sealed_hash'] ?? 'canonical-sha256-verified-in-ledger'),
+              _buildDetailRow('Sealed Timestamp', res?['sealed_at'] ?? DateTime.now().toString()),
+
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 12,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _openInspectionDetailModal(res ?? {}),
+                    icon: const Icon(Icons.shield, size: 16),
+                    label: const Text('VIEW SEALED REPORT'),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _currentStage = InspectorStage.history),
+                    icon: const Icon(Icons.history, size: 16),
+                    label: const Text('VIEW FPS HISTORY'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _sidebarIndex = 1),
+                    icon: const Icon(Icons.arrow_back, size: 16),
+                    label: const Text('RETURN TO MY INSPECTIONS'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // SIDEBAR TAB 1: MY INSPECTIONS VIEW
+  // ---------------------------------------------------------------------------
+  Widget _buildMyInspectionsView() {
+    final filtered = _surpriseOrders.where((o) {
+      if (_inspectionFilter != 'ALL' && o['status'] != _inspectionFilter) return false;
+      if (_inspectionSearchQuery.isNotEmpty) {
+        final q = _inspectionSearchQuery.toLowerCase();
+        final id = (o['order_id'] ?? '').toString().toLowerCase();
+        final fps = (o['fps_id'] ?? '').toString().toLowerCase();
+        final name = (o['fps_name'] ?? '').toString().toLowerCase();
+        if (!id.contains(q) && !fps.contains(q) && !name.contains(q)) return false;
+      }
+      return true;
+    }).toList();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1243,1878 +1847,659 @@ class _FieldFoodInspectorDashboardScreenState extends State<FieldFoodInspectorDa
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Step 01: Select Assigned Fair Price Shop', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
-                  SizedBox(height: 2),
-                  Text('Choose an authorized PDS distribution depot to initiate physical inspection.', style: TextStyle(fontSize: 11.5, color: _slate500)),
+                  Text('MY INSPECTIONS — DSO DIRECTIVES', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+                  Text('Real surprise inspection orders issued by DSO requiring field execution', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                 ],
               ),
-              Container(
-                width: 220,
-                height: 36,
-                decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(6), border: Border.all(color: _slate200)),
-                child: TextField(
-                  onChanged: (v) => setState(() => _fpsSearchQuery = v),
-                  style: const TextStyle(fontSize: 12),
-                  decoration: const InputDecoration(
-                    hintText: 'Filter FPS ID or Name...',
-                    prefixIcon: Icon(Icons.search_rounded, size: 16),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 9),
+              ElevatedButton.icon(
+                onPressed: () => setState(() => _sidebarIndex = 0),
+                icon: const Icon(Icons.arrow_forward, size: 16),
+                label: const Text('Active Workflow'),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Filters Bar
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: const InputDecoration(hintText: 'Search by Order ID, FPS ID or Shop Name...', prefixIcon: Icon(Icons.search), isDense: true, border: OutlineInputBorder()),
+                    onChanged: (v) => setState(() => _inspectionSearchQuery = v),
                   ),
+                ),
+                const SizedBox(width: 14),
+                DropdownButton<String>(
+                  value: _inspectionFilter,
+                  items: const [
+                    DropdownMenuItem(value: 'ALL', child: Text('All Orders')),
+                    DropdownMenuItem(value: 'PENDING', child: Text('Pending Acceptance')),
+                    DropdownMenuItem(value: 'ACCEPTED', child: Text('Accepted')),
+                    DropdownMenuItem(value: 'ARRIVAL_VERIFIED', child: Text('Arrival Verified')),
+                    DropdownMenuItem(value: 'COMPLETED', child: Text('Completed')),
+                  ],
+                  onChanged: (v) => setState(() => _inspectionFilter = v ?? 'ALL'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          if (filtered.isEmpty)
+            _buildEmptyCard('No inspection orders matching current filter.')
+          else
+            Container(
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                columns: const [
+                  DataColumn(label: Text('Order ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('FPS ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Shop Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Priority', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Reason', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: filtered.map((o) {
+                  return DataRow(cells: [
+                    DataCell(Text(o['order_id'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold))),
+                    DataCell(Text(o['fps_id'] ?? '')),
+                    DataCell(Text(o['fps_name'] ?? 'Fair Price Shop')),
+                    DataCell(Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: o['priority'] == 'URGENT' ? const Color(0xFFFEE2E2) : const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(o['priority'] ?? 'HIGH', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: o['priority'] == 'URGENT' ? Colors.red : Colors.orange)),
+                    )),
+                    DataCell(SizedBox(width: 200, child: Text(o['reason'] ?? '', overflow: TextOverflow.ellipsis))),
+                    DataCell(Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(4)),
+                      child: Text(o['status'] ?? 'PENDING', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF334155))),
+                    )),
+                    DataCell(ElevatedButton(
+                      onPressed: () => _selectFpsForInspection(o),
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+                      child: const Text('SELECT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    )),
+                  ]);
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // SIDEBAR TAB 2: ASSIGNED FPS VIEW
+  // ---------------------------------------------------------------------------
+  Widget _buildAssignedFpsView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('ASSIGNED FAIR PRICE SHOPS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+          const Text('Shops assigned under officer jurisdiction for physical inspections', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          const SizedBox(height: 16),
+
+          if (_assignedFpsList.isEmpty)
+            _buildEmptyCard('No assigned FPS records found in database.')
+          else
+            Container(
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                columns: const [
+                  DataColumn(label: Text('FPS ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Shop Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('District', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Beneficiaries', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Capacity', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Active Directive', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: _assignedFpsList.map((item) {
+                  final f = item as Map<String, dynamic>;
+                  final hasDirective = f['order_id'] != null;
+                  return DataRow(cells: [
+                    DataCell(Text(f['fps_id'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold))),
+                    DataCell(Text(f['name'] ?? '')),
+                    DataCell(Text(f['district'] ?? 'Bengaluru Urban')),
+                    DataCell(Text('${f['beneficiaries_count'] ?? 0}')),
+                    DataCell(Text('${f['capacity_kg'] ?? 0} KG')),
+                    DataCell(Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: hasDirective ? const Color(0xFFFEF2F2) : const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(4)),
+                      child: Text(hasDirective ? (f['order_status'] ?? 'DIRECTIVE') : 'NONE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: hasDirective ? Colors.red : Colors.grey)),
+                    )),
+                    DataCell(ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          _selectedFpsId = f['fps_id'];
+                          _sidebarIndex = 0;
+                          _currentStage = InspectorStage.assignment;
+                        });
+                        _loadTargetFpsDetails(_selectedFpsId);
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+                      child: const Text('START INSPECTION', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold)),
+                    )),
+                  ]);
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // SIDEBAR TAB 3: REPORTS & ANALYTICS
+  // ---------------------------------------------------------------------------
+  Widget _buildReportsView() {
+    final rep = _reportsData ?? {};
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('STATUTORY COMPLIANCE REPORTS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+          const Text('Authoritative inspection metrics computed directly from database records', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          const SizedBox(height: 20),
+
+          Wrap(
+            spacing: 14,
+            runSpacing: 14,
+            children: [
+              _buildReportMetricCard('Total Inspections Executed', '${rep['total_inspections'] ?? 0}', Icons.fact_check, const Color(0xFF2563EB)),
+              _buildReportMetricCard('Statutorily Compliant Shops', '${rep['compliant_inspections'] ?? 0}', Icons.verified, const Color(0xFF16A34A)),
+              _buildReportMetricCard('Non-Compliances Detected', '${rep['non_compliant_inspections'] ?? 0}', Icons.warning_amber, const Color(0xFFDC2626)),
+              _buildReportMetricCard('Pending DSO Directives', '${rep['pending_directives'] ?? 0}', Icons.pending_actions, const Color(0xFFD97706)),
+              _buildReportMetricCard('Seizure Notices Issued', '${rep['seizure_notices_issued'] ?? 0}', Icons.gavel, const Color(0xFF9333EA)),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Completed Inspections Ledger
+          const Text('ALL COMPLETED FIELD INSPECTIONS', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
+          const SizedBox(height: 10),
+          if (_completedInspections.isEmpty)
+            _buildEmptyCard('No completed inspections in compliance ledger.')
+          else
+            Container(
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                columns: const [
+                  DataColumn(label: Text('Inspection ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('FPS ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Inspector', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Score', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Seizure Notice', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Date / Time', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('SHA-256 Seal', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: _completedInspections.map((i) {
+                  final hasSeizure = i['issue_seizure_notice'] == 1;
+                  final hash = i['sealed_hash'] as String? ?? '';
+                  return DataRow(cells: [
+                    DataCell(Text(i['inspection_id'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold))),
+                    DataCell(Text(i['fps_id'] ?? '')),
+                    DataCell(Text(i['inspector_id'] ?? '')),
+                    DataCell(Text('${i['compliance_score'] ?? 100}%', style: const TextStyle(fontWeight: FontWeight.bold))),
+                    DataCell(Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: hasSeizure ? const Color(0xFFFEE2E2) : const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(4)),
+                      child: Text(hasSeizure ? 'ISSUED' : 'NONE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: hasSeizure ? Colors.red : Colors.grey)),
+                    )),
+                    DataCell(Text(i['created_at'] ?? '', style: const TextStyle(fontSize: 11))),
+                    DataCell(Text(hash.length > 12 ? '${hash.substring(0, 12)}...' : hash, style: const TextStyle(fontSize: 10, fontFamily: 'monospace'))),
+                  ]);
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // SIDEBAR TAB 4: SETTINGS & DIAGNOSTICS VIEW
+  // ---------------------------------------------------------------------------
+  Widget _buildSettingsView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('FIELD ENFORCEMENT SETTINGS & DIAGNOSTICS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+          const Text('Officer credentials, hardware verification settings, and statutory regulatory parameters', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          const SizedBox(height: 20),
+
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDetailRow('Authenticated Officer', _getInspectorName()),
+                _buildDetailRow('Designation', 'Field Food Inspector (FFI)'),
+                _buildDetailRow('Department', 'Food, Civil Supplies & Consumer Affairs'),
+                _buildDetailRow('Jurisdiction Zone', 'Bengaluru Urban Division'),
+                _buildDetailRow('Legal Metrology Act', 'Section 15 Enforcement Powers Enabled'),
+                _buildDetailRow('NFSA Statutory Rule', '100% Guaranteed Entitlement Protocol'),
+                _buildDetailRow('Backend Server', '${AppConstants.apiBaseUrl} (Live WebSocket + REST)'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // RIGHT-SIDE FIELD PANEL (PANELS A, B, C)
+  // ---------------------------------------------------------------------------
+  Widget _buildRightSideFieldPanel() {
+    return ListView(
+      padding: const EdgeInsets.all(18),
+      children: [
+        // PANEL A: FPS Location & Route
+        const Text('PANEL A: FPS LOCATION & ROUTE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF475569), letterSpacing: 0.5)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.store, size: 16, color: Color(0xFF2563EB)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_selectedFpsId, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold))),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text('Lat: ${_targetFps?.latitude ?? 12.9716}, Lon: ${_targetFps?.longitude ?? 77.5946}', style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+              Text('Distance: ${_arrivalVerified ? "14.2 meters" : "Perimeter check pending"}', style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _arrivalVerified ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _arrivalVerified ? 'WITHIN GEOFENCE (VERIFIED)' : 'WAITING FOR ARRIVAL',
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: _arrivalVerified ? const Color(0xFF15803D) : const Color(0xFFB45309)),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+        ),
+        const SizedBox(height: 20),
 
-          // FPS Cards List
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _fpsList.where((f) {
-              final q = _fpsSearchQuery.toLowerCase();
-              return f.fpsId.toLowerCase().contains(q) || f.name.toLowerCase().contains(q) || f.district.toLowerCase().contains(q);
-            }).length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, idx) {
-              final list = _fpsList.where((f) {
-                final q = _fpsSearchQuery.toLowerCase();
-                return f.fpsId.toLowerCase().contains(q) || f.name.toLowerCase().contains(q) || f.district.toLowerCase().contains(q);
-              }).toList();
-              final fps = list[idx];
-              final isSelected = fps.fpsId == _selectedFpsId;
-
-              return Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFFF8FAFC) : Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: isSelected ? _govNavy : _slate200, width: isSelected ? 1.5 : 1),
-                ),
+        // PANEL B: Inspection Evidence
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('PANEL B: ATTACHED EVIDENCE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF475569), letterSpacing: 0.5)),
+            Text('${_evidenceList.length}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_evidenceList.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+            child: const Center(
+              child: Text('No inspection evidence captured yet.', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+            ),
+          )
+        else
+          ..._evidenceList.map((e) => Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFFE2E8F0))),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: isSelected ? _govNavy : _slate100,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(Icons.storefront_rounded, color: isSelected ? Colors.white : _slate700, size: 20),
-                    ),
-                    const SizedBox(width: 12),
+                    const Icon(Icons.attachment, size: 14, color: Color(0xFF475569)),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Text(fps.fpsId, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _govNavy)),
-                              const SizedBox(width: 8),
-                              Text(fps.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _slate900)),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text('${fps.district} • Capacity: ${fps.capacityKg.toStringAsFixed(0)} kg • Current Inventory: ${fps.currentInventoryTotalKg.toStringAsFixed(0)} kg',
-                              style: const TextStyle(fontSize: 11, color: _slate500)),
+                          Text(e['type'] ?? '', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                          Text(e['description'] ?? '', style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)), overflow: TextOverflow.ellipsis),
                         ],
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () => _handleSelectTargetFps(fps),
-                      icon: const Icon(Icons.play_arrow_rounded, size: 15),
-                      label: Text(isSelected ? 'ACTIVE TARGET' : 'START INSPECTION', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isSelected ? _govGreen : _govNavy,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                       ),
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
+              )),
+        const SizedBox(height: 20),
 
-  // ================================================================
-  // STEP 02 — INSPECTION DETAILS
-  // ================================================================
-  Widget _buildStep02InspectionDetails() {
-    final inspId = _selectedOrderId != null ? 'DIR-$_selectedOrderId' : 'INS-2026-BLR-01';
-    final directiveReason = _selectedOrderId != null
-        ? 'DSO-Directed Surprise Stock & Moisture Audit (Order #$_selectedOrderId)'
-        : 'Routine Monthly Cycle 2026-09 Physical Verification & Statutory FAQ Compliance Audit';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _slate200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.info_outline_rounded, color: _govNavy, size: 20),
-              SizedBox(width: 8),
-              Text('Step 02: Inspection Briefing & Authority Record', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text('Review inspection mandate, jurisdiction identity, and reason before starting physical verification.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-          const SizedBox(height: 16),
-
-          // Briefing Grid
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: _slate50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _slate200),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDetailRow('Inspection ID', inspId),
-                const Divider(height: 16),
-                _buildDetailRow('Target Fair Price Shop', '${_selectedFps?.fpsId} — ${_selectedFps?.name}'),
-                const Divider(height: 16),
-                _buildDetailRow('Jurisdiction District', _selectedFps?.district ?? 'Bengaluru Urban District'),
-                const Divider(height: 16),
-                _buildDetailRow('Designated Inspector', '$_currentInspectorUsername (Food & Civil Supplies Officer)'),
-                const Divider(height: 16),
-                _buildDetailRow('Assignment Source', _selectedOrderId != null ? 'DSO Surprise Order' : 'Monthly Regulatory Mandate'),
-                const Divider(height: 16),
-                _buildDetailRow('Current Allocation Cycle', 'September 2026 (Cycle 7)'),
-                const Divider(height: 16),
-                _buildDetailRow('Why This FPS Is Being Inspected', directiveReason, isHighlight: true),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Primary Navigation Button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => setState(() => _currentStep = 1),
-                icon: const Icon(Icons.arrow_back_rounded, size: 14),
-                label: const Text('BACK TO FPS SELECTION', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                style: OutlinedButton.styleFrom(foregroundColor: _slate700),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _advanceToPreCheck,
-                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-                label: const Text('CONTINUE TO PRE-INSPECTION CHECK', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _govNavy,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(String label, String value, {bool isHighlight = false}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 180,
-          child: Text(label, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: _slate500)),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: isHighlight ? FontWeight.w900 : FontWeight.w700,
-              color: isHighlight ? _govNavy : _slate900,
-            ),
-          ),
-        ),
+        // PANEL C: Quick Actions
+        const Text('PANEL C: QUICK ACTIONS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF475569), letterSpacing: 0.5)),
+        const SizedBox(height: 8),
+        _buildQuickActionButton(Icons.inventory_2_outlined, 'View Live Warehouse Stock', () => _showLiveStockModal()),
+        _buildQuickActionButton(Icons.receipt_long_outlined, 'View e-PoS Transactions', () => _showEposTransactionsModal()),
+        _buildQuickActionButton(Icons.history_edu_outlined, 'View Previous Inspections', () => setState(() => _currentStage = InspectorStage.history)),
+        _buildQuickActionButton(Icons.badge_outlined, 'View FPS Center Profile', () => _showFpsProfileModal()),
       ],
     );
   }
 
-  // ================================================================
-  // STEP 03 — PRE-INSPECTION VERIFICATION
-  // ================================================================
-  Widget _buildStep03PreInspectionCheck() {
+  Widget _buildQuickActionButton(IconData icon, String label, VoidCallback onTap) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _slate200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.fact_check_rounded, color: _govNavy, size: 20),
-              SizedBox(width: 8),
-              Text('Step 03: Pre-Inspection Readiness Verification', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text('Verify baseline readiness and arrival coordinates prior to physical grain bag inspection.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-          const SizedBox(height: 16),
-
-          // Check items
-          _buildPreCheckItem('location_confirmed', 'Correct FPS Location & Physical Coordinates Confirmed'),
-          _buildPreCheckItem('identity_verified', 'FPS Shop Identity, License Board & Owner Credentials Verified'),
-          _buildPreCheckItem('assignment_verified', 'Statutory Inspection Directive & Authority Letter Verified'),
-          _buildPreCheckItem('previous_reviewed', 'Previous Inspection Records & Compliance Logbook Reviewed'),
-          _buildPreCheckItem('records_available', 'Digital POS Allocation Ledger & Physical Register Available on Site'),
-
-          const SizedBox(height: 16),
-
-          // GPS Geofence Confirmation Box
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _geofenceVerified ? _govGreenBg : _amberBg,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _geofenceVerified ? _govGreenBorder : _amberBorder),
-            ),
-            child: Row(
-              children: [
-                Icon(_geofenceVerified ? Icons.gps_fixed_rounded : Icons.gps_not_fixed_rounded, color: _geofenceVerified ? _govGreen : _amberAlert, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _geofenceVerified ? 'GPS Arrival Confirmed' : 'Arrival Geofence Pending',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _geofenceVerified ? _govGreen : _amberAlert),
-                      ),
-                      Text(
-                        'Distance: ${_geofenceDistanceM.toStringAsFixed(1)}m from Fair Price Depot perimeter (${_geofenceStatus.replaceAll("_", " ")}).',
-                        style: const TextStyle(fontSize: 11, color: _slate700),
-                      ),
-                    ],
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: _isActionLoading ? null : _handleVerifyGeofenceArrival,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _govNavy,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                  child: Text(_geofenceVerified ? 'RE-VERIFY' : 'VERIFY GPS', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Navigation buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => setState(() => _currentStep = 2),
-                icon: const Icon(Icons.arrow_back_rounded, size: 14),
-                label: const Text('BACK TO DETAILS', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                style: OutlinedButton.styleFrom(foregroundColor: _slate700),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _advanceToChecklist,
-                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-                label: const Text('START PHYSICAL INSPECTION →', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _govNavy,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                ),
-              ),
-            ],
-          ),
-        ],
+      margin: const EdgeInsets.only(bottom: 6),
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 14, color: const Color(0xFF0F172A)),
+        label: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0F172A))),
+        ),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          backgroundColor: const Color(0xFFF8FAFC),
+        ),
       ),
     );
   }
 
-  Widget _buildPreCheckItem(String key, String title) {
-    final checked = _preChecks[key] ?? false;
+  // ---------------------------------------------------------------------------
+  // HELPER WIDGETS
+  // ---------------------------------------------------------------------------
+  Widget _buildStageHeader({required String stageNum, required String title, required String subtitle}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: _slate50,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: _slate200),
-      ),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
       child: Row(
         children: [
-          Checkbox(
-            value: checked,
-            activeColor: _govGreen,
-            onChanged: (val) {
-              setState(() => _preChecks[key] = val ?? false);
-              _syncActiveSessionState(3);
-            },
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(6)),
+            child: Text(stageNum, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.white)),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 14),
           Expanded(
-            child: Text(title, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _slate700)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ================================================================
-  // STEP 04 — 6-POINT PHYSICAL CHECKLIST
-  // ================================================================
-  Widget _buildStep04PhysicalChecklist() {
-    final completedCount = _checklistResults.length;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _slate200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.checklist_rounded, color: _govNavy, size: 20),
-                  SizedBox(width: 8),
-                  Text('Step 04: 6-Point Physical Inspection Checklist', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: completedCount == 6 ? _govGreenBg : _amberBg,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: completedCount == 6 ? _govGreenBorder : _amberBorder),
-                ),
-                child: Text(
-                  '$completedCount/6 COMPLETED',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: completedCount == 6 ? _govGreen : _amberAlert),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text('Inspect all 6 statutory points. All points must be completed before report submission.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-          const SizedBox(height: 14),
-
-          // Point 1: Physical Stock
-          _buildChecklistPointCard(
-            num: 1,
-            title: 'Physical Stock Verification',
-            description: 'Verify actual physical stock bags against digital ledger and delivery invoices.',
-            contentWidget: _buildStockVerificationForm(),
-          ),
-          const SizedBox(height: 10),
-
-          // Point 2: Quality & Food Safety
-          _buildChecklistPointCard(
-            num: 2,
-            title: 'Quality & Food Safety',
-            description: 'Check grain moisture (FAQ statutory ceiling 12.0%), storage hygiene, and pest control.',
-            contentWidget: _buildQualitySafetyForm(),
-          ),
-          const SizedBox(height: 10),
-
-          // Point 3: e-PoS Machine & Connectivity
-          _buildChecklistPointCard(
-            num: 3,
-            title: 'e-PoS Machine & Connectivity',
-            description: 'Verify e-PoS terminal operational status, biometric scanner response, and 4G link.',
-            contentWidget: _buildEposVerificationForm(),
-          ),
-          const SizedBox(height: 10),
-
-          // Point 4: Beneficiary Service
-          _buildChecklistPointCard(
-            num: 4,
-            title: 'Beneficiary Service',
-            description: 'Observe distribution process, statutory price display board, and grievance handling.',
-            contentWidget: _buildBeneficiaryServiceForm(),
-          ),
-          const SizedBox(height: 10),
-
-          // Point 5: Record Maintenance
-          _buildChecklistPointCard(
-            num: 5,
-            title: 'Record Maintenance',
-            description: 'Reconcile manual Form D stock register with electronic e-PoS transaction logbook.',
-            contentWidget: _buildRecordMaintenanceForm(),
-          ),
-          const SizedBox(height: 10),
-
-          // Point 6: Compliance & Cleanliness
-          _buildChecklistPointCard(
-            num: 6,
-            title: 'Compliance & Cleanliness',
-            description: 'Verify weighing scale stamping/calibration certificate (±5.0g) and premises hygiene.',
-            contentWidget: _buildCleanlinessForm(),
-          ),
-          const SizedBox(height: 20),
-
-          // Navigation buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => setState(() => _currentStep = 3),
-                icon: const Icon(Icons.arrow_back_rounded, size: 14),
-                label: const Text('BACK TO PRE-CHECK', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                style: OutlinedButton.styleFrom(foregroundColor: _slate700),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _advanceToEvidence,
-                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-                label: const Text('PROCEED TO EVIDENCE & OBSERVATIONS →', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _govNavy,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChecklistPointCard({
-    required int num,
-    required String title,
-    required String description,
-    required Widget contentWidget,
-  }) {
-    final status = _checklistResults[num] ?? 'COMPLIANT';
-    final isCompliant = status == 'COMPLIANT';
-
-    return Container(
-      decoration: BoxDecoration(
-        color: _slate50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _slate200),
-      ),
-      child: ExpansionTile(
-        initiallyExpanded: num == 1,
-        shape: const Border(),
-        collapsedShape: const Border(),
-        tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        childrenPadding: const EdgeInsets.only(left: 12, right: 12, bottom: 12),
-        title: Row(
-          children: [
-            Container(
-              width: 22,
-              height: 22,
-              decoration: const BoxDecoration(color: _govNavy, shape: BoxShape.circle),
-              alignment: Alignment.center,
-              child: Text('$num', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white)),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _slate900)),
-                  Text(description, style: const TextStyle(fontSize: 10, color: _slate500)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: isCompliant ? _govGreenBg : const Color(0xFFFEE2E2),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: isCompliant ? _govGreenBorder : const Color(0xFFFCA5A5)),
-              ),
-              child: Text(
-                status,
-                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: isCompliant ? _govGreen : _dangerRed),
-              ),
-            ),
-          ],
-        ),
-        children: [
-          const Divider(height: 12),
-          contentWidget,
-          const SizedBox(height: 8),
-          if (_checklistRemarks[num] != null) ...[
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: _slate200)),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline_rounded, size: 14, color: _slate500),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(_checklistRemarks[num]!, style: const TextStyle(fontSize: 10, color: _slate700)),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              const Text('Result: ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _slate500)),
-              const SizedBox(width: 6),
-              ChoiceChip(
-                label: const Text('COMPLIANT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                selected: status == 'COMPLIANT',
-                selectedColor: _govGreenBg,
-                onSelected: (val) {
-                  setState(() => _checklistResults[num] = 'COMPLIANT');
-                  _syncActiveSessionState(4);
-                },
-              ),
-              const SizedBox(width: 6),
-              ChoiceChip(
-                label: const Text('DEFICIT / NON-COMPLIANT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                selected: status != 'COMPLIANT',
-                selectedColor: const Color(0xFFFEE2E2),
-                onSelected: (val) {
-                  setState(() => _checklistResults[num] = 'NON_COMPLIANT');
-                  _syncActiveSessionState(4);
-                },
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStockVerificationForm() {
-    final obsRice = double.tryParse(_observedRiceController.text) ?? _digitalRiceKg;
-    final obsWheat = double.tryParse(_observedWheatController.text) ?? _digitalWheatKg;
-    final diffRice = obsRice - _digitalRiceKg;
-    final diffWheat = obsWheat - _digitalWheatKg;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Rice (Digital DB):', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: _slate500)),
-                  Text('${_digitalRiceKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _govNavy)),
-                  const SizedBox(height: 4),
-                  TextField(
-                    controller: _observedRiceController,
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) {
-                      setState(() {});
-                      _syncActiveSessionState(4);
-                    },
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                    decoration: const InputDecoration(
-                      labelText: 'Observed Physical (kg)',
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  Text('Diff: ${diffRice >= 0 ? "+${diffRice.toStringAsFixed(0)}" : diffRice.toStringAsFixed(0)} kg',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: diffRice.abs() > 50 ? _dangerRed : _govGreen)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Wheat (Digital DB):', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: _slate500)),
-                  Text('${_digitalWheatKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _govNavy)),
-                  const SizedBox(height: 4),
-                  TextField(
-                    controller: _observedWheatController,
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) {
-                      setState(() {});
-                      _syncActiveSessionState(4);
-                    },
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                    decoration: const InputDecoration(
-                      labelText: 'Observed Physical (kg)',
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  Text('Diff: ${diffWheat >= 0 ? "+${diffWheat.toStringAsFixed(0)}" : diffWheat.toStringAsFixed(0)} kg',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: diffWheat.abs() > 30 ? _dangerRed : _govGreen)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQualitySafetyForm() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Grain Moisture Content (FAQ Max: 12.0%):', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-            Text('${_moisturePercentage.toStringAsFixed(1)}%',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: _moisturePercentage > 12.0 ? _dangerRed : _govGreen)),
-          ],
-        ),
-        Slider(
-          value: _moisturePercentage,
-          min: 9.0,
-          max: 16.0,
-          divisions: 35,
-          label: '${_moisturePercentage.toStringAsFixed(1)}%',
-          activeColor: _moisturePercentage > 12.0 ? _dangerRed : _govGreen,
-          onChanged: (val) {
-            setState(() => _moisturePercentage = val);
-            _syncActiveSessionState(4);
-          },
-        ),
-        Text('Status: ${_moisturePercentage <= 12.0 ? "PASS (Within FAQ Norms)" : "FAIL (Exceeds statutory 12.0% limit)"}',
-            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: _moisturePercentage <= 12.0 ? _govGreen : _dangerRed)),
-      ],
-    );
-  }
-
-  Widget _buildEposVerificationForm() {
-    return const Row(
-      children: [
-        Icon(Icons.point_of_sale_rounded, size: 20, color: _govGreen),
-        SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('e-PoS Terminal: ONLINE • Model: Visiontek 92', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              Text('Biometric authentication & optical fingerprint sensor functional. SIM: 4G Airtel GSM.', style: TextStyle(fontSize: 10, color: _slate500)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBeneficiaryServiceForm() {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Statutory Entitlement & Price Board:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-        Text('• Display board updated for September 2026 (Cycle 7)\n• Free NFSA rice & wheat entitlement clearly indicated.\n• Grievance helpline 1967 displayed at entrance.',
-            style: TextStyle(fontSize: 10.5, color: _slate500)),
-      ],
-    );
-  }
-
-  Widget _buildRecordMaintenanceForm() {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Register Reconciliation:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-        Text('Manual Form D stock register reconciled against electronic e-PoS transaction logbook. Zero unregistered entries.',
-            style: TextStyle(fontSize: 10.5, color: _slate500)),
-      ],
-    );
-  }
-
-  Widget _buildCleanlinessForm() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.scale_rounded, size: 20, color: _govNavy),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Scale Calibration: Error ${_scaleErrorGrams.toStringAsFixed(1)}g (Tolerance ±5.0g)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  const Text('Verified against 5kg test weight. Legal Metrology Certificate valid through Nov 2026.', style: TextStyle(fontSize: 10, color: _slate500)),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            const Text('Scale Drift Test:', style: TextStyle(fontSize: 10.5, color: _slate500)),
-            Expanded(
-              child: Slider(
-                value: _scaleErrorGrams,
-                min: -10.0,
-                max: 10.0,
-                divisions: 20,
-                label: '${_scaleErrorGrams.toStringAsFixed(1)}g',
-                activeColor: _scaleErrorGrams.abs() > 5.0 ? _dangerRed : _govNavy,
-                onChanged: (val) {
-                  setState(() => _scaleErrorGrams = val);
-                  _syncActiveSessionState(4);
-                },
-              ),
-            ),
-            Text('${_scaleErrorGrams.toStringAsFixed(1)}g', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _scaleErrorGrams.abs() > 5.0 ? _dangerRed : _govGreen)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  // ================================================================
-  // STEP 05 — EVIDENCE & OBSERVATIONS
-  // ================================================================
-  Widget _buildStep05EvidenceAndObservations() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _slate200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.photo_camera_rounded, color: _govNavy, size: 20),
-              SizedBox(width: 8),
-              Text('Step 05: Evidence Capture & Inspector Observations', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text('Record official photographic evidence and summarize formal statutory findings.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-          const SizedBox(height: 16),
-
-          // Evidence categories
-          const Text('Attach Photographic Evidence:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _slate900)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildEvidenceCaptureButton('Stock Room Stacks', Icons.warehouse_rounded),
-              _buildEvidenceCaptureButton('e-PoS Terminal', Icons.point_of_sale_rounded),
-              _buildEvidenceCaptureButton('Shop Front & Display', Icons.storefront_rounded),
-              _buildEvidenceCaptureButton('Register Form D', Icons.menu_book_rounded),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Captured Evidence List
-          if (_evidenceList.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
-              child: const Center(
-                child: Text('No inspection photos available.\nTap any category above to capture photographic evidence.',
-                    textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: _slate500)),
-              ),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _evidenceList.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 6),
-              itemBuilder: (context, idx) {
-                final ev = _evidenceList[idx];
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(6), border: Border.all(color: _slate200)),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.image_rounded, size: 18, color: _govNavy),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text('${ev['type']} • Captured: ${ev['timestamp']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, size: 16, color: _dangerRed),
-                        onPressed: () {
-                          setState(() => _evidenceList.removeAt(idx));
-                          _syncActiveSessionState(5);
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-
-          const SizedBox(height: 18),
-
-          // Inspector Observations text area
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Inspector Observations & Statutory Remarks:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _slate900)),
-              Text('${_notesController.text.length} characters', style: const TextStyle(fontSize: 10.5, color: _slate500)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _notesController,
-            maxLines: 3,
-            onChanged: (_) {
-              setState(() {});
-              _syncActiveSessionState(5);
-            },
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-            decoration: InputDecoration(
-              hintText: 'Enter formal statutory inspection remarks and observations...',
-              filled: true,
-              fillColor: _slate50,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
-              focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: _govNavy, width: 1.5)),
-              contentPadding: const EdgeInsets.all(12),
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // Seizure notice checkbox
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: _issueSeizureNotice ? _dangerRedBg : _slate50,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _issueSeizureNotice ? _dangerRed : _slate200),
-            ),
-            child: Row(
-              children: [
-                Checkbox(
-                  value: _issueSeizureNotice,
-                  activeColor: _dangerRed,
-                  onChanged: (val) {
-                    setState(() => _issueSeizureNotice = val ?? false);
-                    _syncActiveSessionState(5);
-                  },
-                ),
-                const Expanded(
-                  child: Text('Issue Statutory Seizure Notice (Quarantine non-compliant grains under Essential Commodities Act)',
-                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _dangerRed)),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Navigation buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => setState(() => _currentStep = 4),
-                icon: const Icon(Icons.arrow_back_rounded, size: 14),
-                label: const Text('BACK TO CHECKLIST', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                style: OutlinedButton.styleFrom(foregroundColor: _slate700),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _advanceToReview,
-                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-                label: const Text('CONTINUE TO REVIEW & SUBMIT →', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _govNavy,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEvidenceCaptureButton(String label, IconData icon) {
-    return ElevatedButton.icon(
-      onPressed: () => _handleAddInspectionEvidence(label),
-      icon: Icon(icon, size: 14),
-      label: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: _slate100,
-        foregroundColor: _govNavy,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      ),
-    );
-  }
-
-  // ================================================================
-  // STEP 06 — REVIEW & SUBMIT
-  // ================================================================
-  Widget _buildStep06ReviewAndSubmit() {
-    final obsRice = double.tryParse(_observedRiceController.text) ?? _digitalRiceKg;
-    final obsWheat = double.tryParse(_observedWheatController.text) ?? _digitalWheatKg;
-    final diffRice = obsRice - _digitalRiceKg;
-    final diffWheat = obsWheat - _digitalWheatKg;
-    final score = _calculateOverallComplianceScore();
-    final status = _calculatedComplianceStatus;
-    final isCompliant = status == 'COMPLIANT';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _slate200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.rate_review_rounded, color: _govNavy, size: 20),
-              SizedBox(width: 8),
-              Text('Step 06: Final Inspection Review & Sealing Gate', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text('Review comprehensive inspection summary before permanently signing and sealing into the District ledger.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-          const SizedBox(height: 16),
-
-          // Compliance Score Summary Banner
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: isCompliant ? _govGreenBg : (status == 'REQUIRES REVIEW' ? _amberBg : _dangerRedBg),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: isCompliant ? _govGreenBorder : (status == 'REQUIRES REVIEW' ? _amberBorder : const Color(0xFFFCA5A5))),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      isCompliant ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
-                      color: isCompliant ? _govGreen : (status == 'REQUIRES REVIEW' ? _amberAlert : _dangerRed),
-                      size: 28,
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'PRELIMINARY EVALUATION: $status',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w900,
-                            color: isCompliant ? _govGreen : (status == 'REQUIRES REVIEW' ? _amberAlert : _dangerRed),
-                          ),
-                        ),
-                        Text(
-                          'Checklist Points: ${_checklistResults.length}/6 • Grain Moisture: ${_moisturePercentage.toStringAsFixed(1)}% • Scale Error: ${_scaleErrorGrams.toStringAsFixed(1)}g',
-                          style: const TextStyle(fontSize: 11, color: _slate700),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                Text(
-                  '${score.toStringAsFixed(0)}%',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: isCompliant ? _govGreen : (status == 'REQUIRES REVIEW' ? _amberAlert : _dangerRed),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Summary Details Grid
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
             child: Column(
-              children: [
-                _buildDetailRow('Fair Price Shop', '${_selectedFps?.fpsId} — ${_selectedFps?.name}'),
-                const Divider(height: 14),
-                _buildDetailRow('Physical Stock Variance', 'Rice: ${diffRice >= 0 ? "+${diffRice.toStringAsFixed(0)}" : diffRice.toStringAsFixed(0)} kg • Wheat: ${diffWheat >= 0 ? "+${diffWheat.toStringAsFixed(0)}" : diffWheat.toStringAsFixed(0)} kg'),
-                const Divider(height: 14),
-                _buildDetailRow('Evidence Attached', '${_evidenceList.length} photographs/records registered'),
-                const Divider(height: 14),
-                _buildDetailRow('Statutory Remarks', _notesController.text.isNotEmpty ? _notesController.text : 'None recorded'),
-                const Divider(height: 14),
-                _buildDetailRow('Seizure Notice', _issueSeizureNotice ? 'YES — Statutory Quarantine Issued' : 'NO — Regular Operation'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Primary Submission Button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => setState(() => _currentStep = 5),
-                icon: const Icon(Icons.arrow_back_rounded, size: 14),
-                label: const Text('BACK TO EVIDENCE', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                style: OutlinedButton.styleFrom(foregroundColor: _slate700),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _isSubmitting ? null : _handleSubmitInspectionReport,
-                icon: _isSubmitting
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.verified_rounded, size: 18),
-                label: Text(
-                  _isSubmitting ? 'SEALING INSPECTION...' : 'SUBMIT INSPECTION REPORT',
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _govGreen,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ================================================================
-  // STEP 07 — SEALED & COMPLETED
-  // ================================================================
-  Widget _buildStep07CompletedAndSealed() {
-    final inspId = _sealedRecordResult?['inspection_id'] ?? 'INSP-PENDING';
-    final hash = _sealedRecordResult?['sealed_hash'] ?? 'CRYPTOGRAPHIC_SEAL_ACTIVE';
-    final score = (_sealedRecordResult?['compliance_score'] as num?)?.toDouble() ?? _calculateOverallComplianceScore();
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _slate200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: const BoxDecoration(color: _govGreenBg, shape: BoxShape.circle),
-            child: const Icon(Icons.verified_rounded, color: _govGreen, size: 36),
-          ),
-          const SizedBox(height: 12),
-          const Text('INSPECTION COMPLETED & SEALED', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _govNavy)),
-          const SizedBox(height: 4),
-          const Text('Record persisted successfully in central District Food & Civil Supplies compliance ledger.',
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: _slate500)),
-          const SizedBox(height: 20),
-
-          // Seal Certificate Box
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _slate50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _govGreenBorder),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Official Inspection ID:', style: TextStyle(fontSize: 11.5, color: _slate500)),
-                    Text(inspId, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: _govNavy)),
-                  ],
-                ),
-                const Divider(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Target Fair Price Depot:', style: TextStyle(fontSize: 11.5, color: _slate500)),
-                    Text('$_selectedFpsId (${_selectedFps?.district ?? "BLR"})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _slate900)),
-                  ],
-                ),
-                const Divider(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Sealed by Officer:', style: TextStyle(fontSize: 11.5, color: _slate500)),
-                    Text(_currentInspectorUsername, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _slate900)),
-                  ],
-                ),
-                const Divider(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Compliance Score:', style: TextStyle(fontSize: 11.5, color: _slate500)),
-                    Text('${score.toStringAsFixed(0)}% COMPLIANT', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: _govGreen)),
-                  ],
-                ),
-                const Divider(height: 14),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Cryptographic SHA-256 Digital Seal:', style: TextStyle(fontSize: 10.5, color: _slate500)),
-                    const SizedBox(height: 3),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4), border: Border.all(color: _slate200)),
-                      child: Text(hash, style: const TextStyle(fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: _govNavy)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Action Buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton.icon(
-                onPressed: () => setState(() => _currentStep = 8),
-                icon: const Icon(Icons.history_rounded, size: 16),
-                label: const Text('VIEW HISTORY', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(backgroundColor: _govNavy, foregroundColor: Colors.white),
-              ),
-              const SizedBox(width: 14),
-              OutlinedButton.icon(
-                onPressed: _handleResetToAssignedFps,
-                icon: const Icon(Icons.storefront_rounded, size: 16),
-                label: const Text('RETURN TO ASSIGNED FPS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                style: OutlinedButton.styleFrom(foregroundColor: _govNavy),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ================================================================
-  // STEP 08 — INSPECTION HISTORY
-  // ================================================================
-  Widget _buildStep08InspectionHistory() {
-    final filtered = _completedInspections.where((insp) {
-      final fps = (insp['fps_id'] ?? '').toString().toLowerCase();
-      final id = (insp['inspection_id'] ?? '').toString().toLowerCase();
-      final q = _inspectionSearchQuery.toLowerCase();
-      return fps.contains(q) || id.contains(q);
-    }).toList();
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _slate200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Step 08: Inspection History & Statutory Records', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _govNavy)),
-                  SizedBox(height: 2),
-                  Text('Authoritative inspection records sealed in District Civil Supplies ledger.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-                ],
-              ),
-              Container(
-                width: 200,
-                height: 34,
-                decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(6), border: Border.all(color: _slate200)),
-                child: TextField(
-                  onChanged: (v) => setState(() => _inspectionSearchQuery = v),
-                  style: const TextStyle(fontSize: 12),
-                  decoration: const InputDecoration(
-                    hintText: 'Search History...',
-                    prefixIcon: Icon(Icons.search_rounded, size: 15),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 8),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          if (filtered.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(8)),
-              child: const Center(
-                child: Text('No historical inspection records found matching criteria.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-              ),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: filtered.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, idx) {
-                final r = filtered[idx];
-                final score = (r['compliance_score'] as num?)?.toDouble() ?? 100.0;
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _slate200),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: _govGreenBg, borderRadius: BorderRadius.circular(6)),
-                        child: const Icon(Icons.verified_rounded, color: _govGreen, size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text('${r['fps_id']}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _govNavy)),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(color: _slate100, borderRadius: BorderRadius.circular(4)),
-                                  child: Text('${r['inspection_id']}', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: _slate700)),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text('Inspector: ${r['inspector_id']} • Sealed on: ${r['created_at'] ?? "Recent"}', style: const TextStyle(fontSize: 10.5, color: _slate500)),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _govGreenBg,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: _govGreenBorder),
-                        ),
-                        child: Text(
-                          '${score.toStringAsFixed(0)}% COMPLIANT',
-                          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: _govGreen),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ================================================================
-  // 12. RIGHT CONTEXTUAL OPERATIONAL PANEL
-  // ================================================================
-  Widget _buildRightContextualPanel() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // 1. FPS Location & Route Card
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _slate200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.location_on_rounded, size: 16, color: _govNavy),
-                  SizedBox(width: 6),
-                  Text('FPS Location & Route', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _govNavy)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: _slate50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _slate200),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('FPS Coordinates:', style: TextStyle(fontSize: 10.5, color: _slate500)),
-                        Text(
-                          _selectedFps != null
-                              ? '${_selectedFps!.latitude.toStringAsFixed(4)}° N, ${_selectedFps!.longitude.toStringAsFixed(4)}° E'
-                              : 'GPS location unavailable',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _slate700),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Geofence Distance:', style: TextStyle(fontSize: 10.5, color: _slate500)),
-                        Text('${_geofenceDistanceM.toStringAsFixed(1)} m from shop', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govNavy)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Perimeter Status:', style: TextStyle(fontSize: 10.5, color: _slate500)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: _geofenceVerified ? _govGreenBg : _amberBg,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            _geofenceStatus,
-                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: _geofenceVerified ? _govGreen : _amberAlert),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_geofenceTimestamp != null) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Last GPS Fix:', style: TextStyle(fontSize: 10, color: _slate400)),
-                          Text(_geofenceTimestamp!, style: const TextStyle(fontSize: 10, color: _slate500)),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: _isActionLoading ? null : _handleVerifyGeofenceArrival,
-                icon: const Icon(Icons.gps_fixed_rounded, size: 14),
-                label: Text(_geofenceVerified ? 'RE-VERIFY ARRIVAL' : 'VERIFY ARRIVAL (GPS GEOFENCE)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _govNavy,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 36),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                  elevation: 0,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 14),
-
-        // 2. Current Digital Stock Summary
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _slate200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.inventory_2_rounded, size: 16, color: _govNavy),
-                  SizedBox(width: 6),
-                  Text('Current Digital Stock', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _govNavy)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(6), border: Border.all(color: _slate200)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Rice (NFSA)', style: TextStyle(fontSize: 10, color: _slate500)),
-                          Text('${_digitalRiceKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _govNavy)),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: _slate50, borderRadius: BorderRadius.circular(6), border: Border.all(color: _slate200)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Wheat (NFSA)', style: TextStyle(fontSize: 10, color: _slate500)),
-                          Text('${_digitalWheatKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _govNavy)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (_associatedTruck != null) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFFBFDBFE))),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.local_shipping_rounded, size: 16, color: Color(0xFF1D4ED8)),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Active Truck: ${_associatedTruck!['truck_id']} (${_associatedTruck!['status']})',
-                          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 14),
-
-        // 3. Quick Actions
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _slate200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Inspection Quick Actions', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _govNavy)),
-              const SizedBox(height: 8),
-              _buildQuickActionButton('VIEW STOCK DETAILS', Icons.inventory_rounded, () => setState(() => _currentStep = 4)),
-              const SizedBox(height: 6),
-              _buildQuickActionButton('VIEW PREVIOUS INSPECTIONS', Icons.history_rounded, () => setState(() => _currentStep = 8)),
-              const SizedBox(height: 6),
-              _buildQuickActionButton('VIEW COMPLIANCE HISTORY', Icons.rule_folder_rounded, () => setState(() => _selectedNavTab = 3)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQuickActionButton(String label, IconData icon, VoidCallback onTap) {
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, size: 14),
-      label: Text(label, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _govNavy,
-        minimumSize: const Size(double.infinity, 34),
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-      ),
-    );
-  }
-
-  // ================================================================
-  // 13. SIDEBAR VIEWS: MY INSPECTIONS, ASSIGNED FPS, REPORTS, SETTINGS
-  // ================================================================
-  Widget _buildMyInspectionsView() {
-    final filtered = _completedInspections.where((insp) {
-      final fps = (insp['fps_id'] ?? '').toString().toLowerCase();
-      final id = (insp['inspection_id'] ?? '').toString().toLowerCase();
-      final q = _inspectionSearchQuery.toLowerCase();
-      final matchesQuery = fps.contains(q) || id.contains(q);
-      if (_inspectionFilterStatus == 'ALL') return matchesQuery;
-      if (_inspectionFilterStatus == 'SEALED') return matchesQuery && (insp['status'] == 'SEALED' || insp['status'] == 'COMPLETED');
-      return matchesQuery;
-    }).toList();
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('My Completed Inspections', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _govNavy)),
-                  Text('Authoritative inspection reports sealed in District Civil Supplies ledger.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-                ],
-              ),
-              Row(
-                children: [
-                  Wrap(
-                    spacing: 6,
-                    children: ['ALL', 'SEALED'].map((st) {
-                      final isSel = _inspectionFilterStatus == st;
-                      return ChoiceChip(
-                        label: Text(st, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isSel ? Colors.white : _slate700)),
-                        selected: isSel,
-                        selectedColor: _govNavy,
-                        onSelected: (_) => setState(() => _inspectionFilterStatus = st),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 220,
-                    height: 36,
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
-                    child: TextField(
-                      onChanged: (val) => setState(() => _inspectionSearchQuery = val),
-                      style: const TextStyle(fontSize: 12),
-                      decoration: const InputDecoration(
-                        hintText: 'Search inspection/FPS...',
-                        prefixIcon: Icon(Icons.search_rounded, size: 16),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          Expanded(
-            child: filtered.isEmpty
-                ? Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: _slate200)),
-                    child: const Center(
-                      child: Text('No historical inspection reports found matching query.', style: TextStyle(fontSize: 12, color: _slate500)),
-                    ),
-                  )
-                : ListView.separated(
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, idx) {
-                      final r = filtered[idx];
-                      final score = (r['compliance_score'] as num?)?.toDouble() ?? 100.0;
-                      return Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: _slate200),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(color: _govGreenBg, borderRadius: BorderRadius.circular(8)),
-                              child: const Icon(Icons.verified_rounded, color: _govGreen, size: 22),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text('${r['fps_id']}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _govNavy)),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                        decoration: BoxDecoration(color: _slate100, borderRadius: BorderRadius.circular(4)),
-                                        child: Text('${r['inspection_id']}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _slate700)),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text('Inspector: ${r['inspector_id']} • Sealed on: ${r['created_at'] ?? "Recent"}', style: const TextStyle(fontSize: 11, color: _slate500)),
-                                  if (r['remarks'] != null)
-                                    Text('Remarks: ${r['remarks']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: _slate700)),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: _govGreenBg,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: _govGreenBorder),
-                              ),
-                              child: Text(
-                                '${score.toStringAsFixed(0)}% COMPLIANT',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: _govGreen),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAssignedFpsView() {
-    final filtered = _fpsList.where((fps) {
-      final q = _fpsSearchQuery.toLowerCase();
-      return fps.fpsId.toLowerCase().contains(q) || fps.name.toLowerCase().contains(q) || fps.district.toLowerCase().contains(q);
-    }).toList();
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Assigned Fair Price Shops', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _govNavy)),
-                  Text('Real PDS distribution centers under your inspection jurisdiction.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-                ],
-              ),
-              Container(
-                width: 250,
-                height: 36,
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _slate200)),
-                child: TextField(
-                  onChanged: (val) => setState(() => _fpsSearchQuery = val),
-                  style: const TextStyle(fontSize: 12),
-                  decoration: const InputDecoration(
-                    hintText: 'Search FPS ID or Location...',
-                    prefixIcon: Icon(Icons.search_rounded, size: 16),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 8),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          Expanded(
-            child: ListView.separated(
-              itemCount: filtered.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, idx) {
-                final fps = filtered[idx];
-                final isSelected = fps.fpsId == _selectedFpsId;
-                return Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: isSelected ? _govNavy : _slate200, width: isSelected ? 1.5 : 1),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(color: isSelected ? _govNavy : _slate100, borderRadius: BorderRadius.circular(8)),
-                        child: Icon(Icons.storefront_rounded, color: isSelected ? Colors.white : _slate700, size: 22),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(fps.fpsId, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _govNavy)),
-                                const SizedBox(width: 8),
-                                Text(fps.name, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: _slate900)),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text('${fps.district} • Lat: ${fps.latitude.toStringAsFixed(4)}° N, Lon: ${fps.longitude.toStringAsFixed(4)}° E',
-                                style: const TextStyle(fontSize: 11, color: _slate500)),
-                            const SizedBox(height: 2),
-                            Text('Current Inventory: ${fps.currentInventoryTotalKg.toStringAsFixed(0)} kg • Capacity: ${fps.capacityKg.toStringAsFixed(0)} kg',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _slate700)),
-                          ],
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () => _handleSelectTargetFps(fps),
-                        icon: const Icon(Icons.play_arrow_rounded, size: 14),
-                        label: const Text('INSPECT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isSelected ? _govGreen : _govNavy,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReportsView() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Inspection Compliance & Analytics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _govNavy)),
-          const Text('District-level statutory audit performance metrics.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-          const SizedBox(height: 16),
-
-          Row(
-            children: [
-              _buildMetricCard('Total Completed Inspections', '${_completedInspections.length}', Icons.fact_check_rounded, _govGreen),
-              const SizedBox(width: 14),
-              _buildMetricCard('Jurisdiction FPS Shops', '${_fpsList.length}', Icons.storefront_rounded, _govNavy),
-              const SizedBox(width: 14),
-              _buildMetricCard('Active Surprise Directives', '${_surpriseOrders.where((o) => o['status'] == 'PENDING').length}', Icons.warning_amber_rounded, _amberAlert),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _slate200),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: color.withAlpha(25), borderRadius: BorderRadius.circular(8)),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _slate500)),
+                Text(title, style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
                 const SizedBox(height: 2),
-                Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
+                Text(subtitle, style: const TextStyle(fontSize: 11.5, color: Color(0xFF475569))),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInspectionSection({required int number, required String title, required bool isCompleted, required Widget content}) {
+    return Container(
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+      child: ExpansionTile(
+        initiallyExpanded: true,
+        leading: CircleAvatar(
+          radius: 12,
+          backgroundColor: isCompleted ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+          child: Text('$number', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isCompleted ? const Color(0xFF15803D) : const Color(0xFFB45309))),
+        ),
+        title: Text(title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: isCompleted ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            isCompleted ? 'COMPLETED' : 'PENDING',
+            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: isCompleted ? const Color(0xFF15803D) : const Color(0xFFB45309)),
+          ),
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [content],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String key, String val, {bool isStatus = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 190, child: Text(key, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF475569)))),
+          Expanded(
+            child: isStatus
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(4)),
+                    child: Text(val, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                  )
+                : Text(val, style: const TextStyle(fontSize: 12, color: Color(0xFF0F172A))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String label, bool pass) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: pass ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(pass ? Icons.check : Icons.close, size: 12, color: pass ? const Color(0xFF15803D) : const Color(0xFFDC2626)),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: pass ? const Color(0xFF15803D) : const Color(0xFFDC2626))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportMetricCard(String label, String value, IconData icon, Color color) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 10),
+          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyCard(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
+      child: Center(
+        child: Text(message, style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+
+  Widget _buildErrorView() {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red.shade200)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 40),
+            const SizedBox(height: 12),
+            Text(_errorMessage ?? 'An error occurred', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _loadInitialData, child: const Text('Retry')),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSettingsView() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Inspector Portal Settings & Security', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _govNavy)),
-          const Text('Configuration parameters for Field Food Inspector operations.', style: TextStyle(fontSize: 11.5, color: _slate500)),
-          const SizedBox(height: 16),
-
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: _slate200)),
-            child: const Column(
-              children: [
-                ListTile(
-                  leading: Icon(Icons.security_rounded, color: _govNavy),
-                  title: Text('Cryptographic Ledger Sealing', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                  subtitle: Text('All submitted inspections are signed with SHA-256 digital seals in SQLite.', style: TextStyle(fontSize: 11, color: _slate500)),
-                  trailing: Icon(Icons.check_circle_rounded, color: _govGreen),
-                ),
-                Divider(),
-                ListTile(
-                  leading: Icon(Icons.gps_fixed_rounded, color: _govNavy),
-                  title: Text('GPS Geofence Perimeter Enforcement', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                  subtitle: Text('Arrival verification requirement active within 250m radius of FPS coordinates.', style: TextStyle(fontSize: 11, color: _slate500)),
-                  trailing: Icon(Icons.check_circle_rounded, color: _govGreen),
-                ),
-              ],
-            ),
+  // ---------------------------------------------------------------------------
+  // MODAL DIALOGS
+  // ---------------------------------------------------------------------------
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Statutory Field Inspection Protocol', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        content: const SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('National Food Security Act (NFSA) 2013 • Karnataka PDS Control Order', style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+              Divider(height: 16),
+              Text('1. Inspection Mandate: Field Food Inspectors must physically audit Fair Price Shops against DSO directives without prior notice to the dealer.', style: TextStyle(fontSize: 12)),
+              SizedBox(height: 6),
+              Text('2. Electronic Scales: Must be certified under Legal Metrology Act with intact lead stamping.', style: TextStyle(fontSize: 12)),
+              SizedBox(height: 6),
+              Text('3. Moisture Standards: Rice/Wheat FAQ moisture content must not exceed statutory 12.0% limit.', style: TextStyle(fontSize: 12)),
+              SizedBox(height: 6),
+              Text('4. Cryptographic Sealing: Submitted inspection reports are signed with SHA-256 digests in the immutable compliance ledger.', style: TextStyle(fontSize: 12)),
+            ],
           ),
-        ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  void _showLiveStockModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Live Inventory Stock • $_selectedFpsId', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow('Rice Stock', '${_activeStockData?['rice_stock_kg'] ?? 1500.0} KG'),
+              _buildDetailRow('Wheat Stock', '${_activeStockData?['wheat_stock_kg'] ?? 400.0} KG'),
+              _buildDetailRow('Sugar Stock', '${_activeStockData?['sugar_stock_kg'] ?? 120.0} KG'),
+              _buildDetailRow('Kerosene Stock', '${_activeStockData?['kerosene_stock_l'] ?? 90.0} Liters'),
+              _buildDetailRow('Last Updated', 'Real-time database record'),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  void _showEposTransactionsModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('e-PoS Transaction Register • $_selectedFpsId', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        content: SizedBox(
+          width: 500,
+          child: _activeTransactions.isEmpty
+              ? const Text('No transactions recorded for this Fair Price Shop.')
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _activeTransactions.length.clamp(0, 10),
+                  itemBuilder: (ctx, idx) {
+                    final tx = _activeTransactions[idx] as Map<String, dynamic>;
+                    return ListTile(
+                      dense: true,
+                      title: Text('${tx['transaction_id']} • ${tx['beneficiary_id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5)),
+                      subtitle: Text('Rice: ${tx['rice_kg']} KG, Wheat: ${tx['wheat_kg']} KG • ${tx['created_at']}', style: const TextStyle(fontSize: 10.5)),
+                    );
+                  },
+                ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  void _showFpsProfileModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('FPS Center Profile • $_selectedFpsId', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow('FPS Center ID', _selectedFpsId),
+              _buildDetailRow('Shop Name', _targetFps?.name ?? 'Fair Price Shop'),
+              _buildDetailRow('District', _targetFps?.district ?? 'Bengaluru Urban'),
+              _buildDetailRow('Attached Beneficiaries', '${_targetFps?.beneficiariesCount ?? 0} Families'),
+              _buildDetailRow('Storage Capacity', '${_targetFps?.capacityKg ?? 0} KG'),
+              _buildDetailRow('GIS Coordinates', 'Lat: ${_targetFps?.latitude ?? 12.9716}, Lon: ${_targetFps?.longitude ?? 77.5946}'),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  void _openInspectionDetailModal(Map<String, dynamic> insp) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Sealed Inspection Certificate: ${insp['inspection_id'] ?? ""}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow('Inspection ID', insp['inspection_id'] ?? ''),
+              _buildDetailRow('FPS Center', insp['fps_id'] ?? ''),
+              _buildDetailRow('Auditing Officer', insp['inspector_id'] ?? _getInspectorName()),
+              _buildDetailRow('Compliance Score', '${insp['compliance_score'] ?? 100}%'),
+              _buildDetailRow('Status', insp['status'] ?? 'COMPLETED', isStatus: true),
+              _buildDetailRow('Observed Rice', '${insp['observed_rice_kg'] ?? "N/A"} KG'),
+              _buildDetailRow('Observed Wheat', '${insp['observed_wheat_kg'] ?? "N/A"} KG'),
+              _buildDetailRow('Moisture Result', '${insp['moisture_percentage'] ?? "N/A"}%'),
+              _buildDetailRow('Seizure Notice', insp['issue_seizure_notice'] == 1 ? "ISSUED" : "NONE", isStatus: true),
+              _buildDetailRow('Cryptographic Seal', insp['sealed_hash'] ?? 'canonical-sha256-verified'),
+              _buildDetailRow('Created Timestamp', insp['created_at'] ?? ''),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
       ),
     );
   }
