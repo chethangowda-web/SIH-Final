@@ -69,7 +69,6 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
 
   // Government Theme Palette
   static const Color _govNavy = Color(0xFF0F2942);
-  static const Color _govNavyLight = Color(0xFF1E3A5F);
   static const Color _govAccent = Color(0xFF2563EB);
   static const Color _govGreen = Color(0xFF15803D);
   static const Color _govGreenBg = Color(0xFFF0FDF4);
@@ -388,6 +387,7 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
         reason: reason,
       );
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('$actionLabel completed successfully.'),
@@ -397,121 +397,12 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
 
       await _loadAllAuthoritativeData();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Action blocked: $e'),
           backgroundColor: _dangerRed,
         ),
-      );
-    } finally {
-      if (mounted) setState(() => _isActionInProgress = false);
-    }
-  }
-
-  // ----------------- CHOICE WINDOW & PLANNING CYCLE ACTIONS ----------------- //
-  Future<void> _simulateAdvancePlanningDay(int day) async {
-    setState(() => _isActionInProgress = true);
-    try {
-      await _apiService.setPlanningCycleDay(day, cycleId: _currentCycle);
-      await _loadAllAuthoritativeData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(day >= 25
-              ? 'Planning cycle advanced to Day $day. Choice window closed, demand baseline locked.'
-              : 'Planning cycle set to Day $day. Choice window open for citizen declarations.'),
-          backgroundColor: day >= 25 ? _govNavy : _amber,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to set planning day: $e'), backgroundColor: _dangerRed),
-      );
-    } finally {
-      if (mounted) setState(() => _isActionInProgress = false);
-    }
-  }
-
-  Future<void> _lockChoiceWindow() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        title: const Row(
-          children: [
-            Icon(Icons.lock_clock_rounded, color: _govNavy, size: 22),
-            SizedBox(width: 8),
-            Text('Lock Beneficiary Demand Snapshot?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _govNavy)),
-          ],
-        ),
-        content: const SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Closing the Choice Window (Day 25) will freeze all beneficiary preference declarations and generate an immutable SHA-256 canonical hash.',
-                style: TextStyle(fontSize: 13, height: 1.4, color: _slate700),
-              ),
-              SizedBox(height: 12),
-              Text(
-                '• Upstream citizen preference modifications will be disabled.\n• Aggregated Demand Baseline (D̂) is passed to allocation and corridor routing engines.\n• Workflow transitions to VALIDATED / FORECAST_LOCKED.',
-                style: TextStyle(fontSize: 12, height: 1.5, color: _slate900),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _govNavy,
-              foregroundColor: Colors.white,
-            ),
-            icon: const Icon(Icons.lock_rounded, size: 16),
-            label: const Text('Confirm Lock'),
-            onPressed: () => Navigator.of(ctx).pop(true),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    setState(() => _isActionInProgress = true);
-    try {
-      final res = await _apiService.closeChoiceWindow(cycleId: _currentCycle);
-      try {
-        await _apiService.triggerLockForecast();
-      } catch (_) {}
-      try {
-        await _apiService.transitionWorkflowState(
-          cycleId: _currentCycle,
-          newState: 'VALIDATED',
-          actorName: widget.username ?? 'District Supply Officer',
-          actorRole: 'DSO',
-          reason: 'Choice window closed and demand snapshot locked on Day 25.',
-        );
-      } catch (_) {}
-      await _loadAllAuthoritativeData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['message'] ?? 'Choice window closed and aggregated demand (D̂) locked with SHA-256 seal!'),
-          backgroundColor: _govGreen,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to close choice window: $e'), backgroundColor: _dangerRed),
       );
     } finally {
       if (mounted) setState(() => _isActionInProgress = false);
@@ -685,30 +576,7 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              if (!isLocked) ...[
-                OutlinedButton.icon(
-                  onPressed: _isActionInProgress ? null : () => _simulateAdvancePlanningDay(25),
-                  icon: const Icon(Icons.fast_forward_rounded, size: 14),
-                  label: const Text('Simulate Day 25', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    side: const BorderSide(color: Color(0xFFF59E0B)),
-                    foregroundColor: const Color(0xFF92400E),
-                    backgroundColor: Colors.white.withOpacity(0.8),
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _isActionInProgress ? null : _lockChoiceWindow,
-                  icon: const Icon(Icons.lock_outline_rounded, size: 14),
-                  label: const Text('Lock Demand', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _govNavy,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                  ),
-                ),
-              ] else ...[
+              if (isLocked) ...[
                 OutlinedButton.icon(
                   onPressed: _viewDemandSnapshotDetails,
                   icon: const Icon(Icons.verified_outlined, size: 14, color: _govGreen),
@@ -718,10 +586,6 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
                     side: const BorderSide(color: Color(0xFF86EFAC)),
                     backgroundColor: Colors.white.withOpacity(0.8),
                   ),
-                ),
-                TextButton(
-                  onPressed: _isActionInProgress ? null : () => _simulateAdvancePlanningDay(22),
-                  child: const Text('Re-open (Demo Day 22)', style: TextStyle(fontSize: 11, color: _slate700, decoration: TextDecoration.underline)),
                 ),
               ],
             ],
@@ -1151,14 +1015,14 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
   // STAGE 01 — MONITOR & TRIAGE
   // =========================================================================
   Widget _buildStage01Monitor() {
-    final histDemand = _adminSummary?.totalHistoricalDemandKg ?? 227495.0;
-    final intentDemand = _adminSummary?.totalDeclaredIntentKg ?? 129880.0;
-    final forecastDemand = _adminSummary?.totalForecastDemandKg ?? 276700.0;
-    final depotStock = (_adminSummary?.depotAvailableStockMt ?? 850.0) * 1000.0;
-    final fpsInventory = _adminSummary?.totalInventoryKg ?? 35850.0;
-    final allocation = _adminSummary?.totalRecommendedDispatchKg ?? 276700.0;
-    final dispatch = _manifestData?.totalDispatchKg ?? 276700.0;
-    final riskCount = _adminSummary?.highRiskFpsCount ?? 1;
+    final histDemand = _adminSummary?.totalHistoricalDemandKg;
+    final intentDemand = _adminSummary?.totalDeclaredIntentKg;
+    final forecastDemand = _adminSummary?.totalForecastDemandKg;
+    final depotStock = _adminSummary != null ? _adminSummary!.depotAvailableStockMt * 1000.0 : null;
+    final fpsInventory = _adminSummary?.totalInventoryKg;
+    final allocation = _adminSummary?.totalRecommendedDispatchKg;
+    final dispatch = _manifestData?.totalDispatchKg ?? _adminSummary?.totalRecommendedDispatchKg;
+    final riskCount = _adminSummary?.highRiskFpsCount;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1173,14 +1037,71 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
               spacing: 14,
               runSpacing: 14,
               children: [
-                _buildMetricCard('Historical Demand', '${(histDemand / 1000).toStringAsFixed(1)} MT', 'historical_demand', 'Cycle 2026-08 baseline', '20 FPS records', cardWidth),
-                _buildMetricCard('Citizen Intent', '${(intentDemand / 1000).toStringAsFixed(1)} MT', 'intent_signals', 'Portability + Home Delivery signals', '${_adminSummary?.activeIntentsCount ?? 0} citizen requests', cardWidth),
-                _buildMetricCard('Forecast Demand', '${(forecastDemand / 1000).toStringAsFixed(1)} MT', 'forecast', 'ML Baseline + Weighted Intent', 'Calibrated Cycle 2026-09', cardWidth),
-                _buildMetricCard('Available Depot Stock', '${(depotStock / 1000).toStringAsFixed(1)} MT', 'godowns_master', 'Central FCI Godown Hebbal (DEPOT-01)', 'Authoritative godown stock', cardWidth),
-                _buildMetricCard('FPS Inventory', '${(fpsInventory / 1000).toStringAsFixed(1)} MT', 'inventory', 'Aggregated store physical balance', 'All 20 FPS tracked', cardWidth),
-                _buildMetricCard('Current Allocation', '${(allocation / 1000).toStringAsFixed(1)} MT', 'scarcity_allocation_plans', 'Calculated district allocation', 'Statutory baseline', cardWidth),
-                _buildMetricCard('Current Dispatch', '${(dispatch / 1000).toStringAsFixed(1)} MT', 'dispatch_manifests', 'Authorized road dispatch release', 'Active carrier fleet', cardWidth),
-                _buildMetricCard('Active Risk / Exceptions', '$riskCount High Risk', 'constraint_logs', 'Headroom & stockout alerts', '${_adminSummary?.exceptionCasesCount ?? 3} exception items', cardWidth, isAlert: riskCount > 0),
+                _buildMetricCard(
+                  'Historical Demand',
+                  histDemand != null ? '${(histDemand / 1000).toStringAsFixed(1)} MT' : 'Data unavailable',
+                  'historical_demand',
+                  'Past 3-cycle baseline average',
+                  '${_fpsList.isNotEmpty ? _fpsList.length : 20} FPS records',
+                  cardWidth,
+                ),
+                _buildMetricCard(
+                  'Citizen Intent',
+                  intentDemand != null ? '${(intentDemand / 1000).toStringAsFixed(1)} MT' : 'Data unavailable',
+                  'intent_signals',
+                  'Portability + Home Delivery signals',
+                  '${_adminSummary?.activeIntentsCount ?? 0} citizen requests',
+                  cardWidth,
+                ),
+                _buildMetricCard(
+                  'Forecast Demand',
+                  forecastDemand != null ? '${(forecastDemand / 1000).toStringAsFixed(1)} MT' : 'Data unavailable',
+                  'forecast',
+                  'ML Baseline + Weighted Intent',
+                  'Planning Cycle $_currentCycle',
+                  cardWidth,
+                ),
+                _buildMetricCard(
+                  'Available Depot Stock',
+                  depotStock != null ? '${(depotStock / 1000).toStringAsFixed(1)} MT' : 'Data unavailable',
+                  'depots',
+                  'Bengaluru Central FCI Godown (DEPOT-01)',
+                  'Authoritative godown ledger',
+                  cardWidth,
+                ),
+                _buildMetricCard(
+                  'FPS Inventory',
+                  fpsInventory != null ? '${(fpsInventory / 1000).toStringAsFixed(1)} MT' : 'Data unavailable',
+                  'inventory',
+                  'Aggregated shop physical balance',
+                  '${_fpsList.isNotEmpty ? _fpsList.length : 20} FPS tracked',
+                  cardWidth,
+                ),
+                _buildMetricCard(
+                  'Current Allocation',
+                  allocation != null ? '${(allocation / 1000).toStringAsFixed(1)} MT' : 'Data unavailable',
+                  'scarcity_allocation_plans',
+                  'Calculated district quota',
+                  'Statutory allocation plan',
+                  cardWidth,
+                ),
+                _buildMetricCard(
+                  'Current Dispatch',
+                  dispatch != null ? '${(dispatch / 1000).toStringAsFixed(1)} MT' : 'Data unavailable',
+                  'manifests',
+                  'Authorized road dispatch release',
+                  'Active carrier fleet',
+                  cardWidth,
+                ),
+                _buildMetricCard(
+                  'Active Risk / Exceptions',
+                  riskCount != null ? '$riskCount High Risk' : 'No active risks',
+                  'constraint_logs',
+                  'Headroom & stockout alerts',
+                  '${_adminSummary?.exceptionCasesCount ?? 0} exception items',
+                  cardWidth,
+                  isAlert: (riskCount ?? 0) > 0,
+                ),
               ],
             );
           },
@@ -2413,10 +2334,10 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
           child: Row(
             children: [
               _buildDispatchSummaryStat('TOTAL QUANTITY', '${(totalDispatched / 1000).toStringAsFixed(1)} MT'),
-              _buildDispatchSummaryStat('MANIFESTS', '4 Digital Manifests'),
-              _buildDispatchSummaryStat('ASSIGNED FLEET', '4 PDS Carrier Trucks'),
-              _buildDispatchSummaryStat('DESTINATIONS', '20 Fair Price Shops'),
-              _buildDispatchSummaryStat('GATEPASS STATUS', 'GP-BLR-0912 Sealed'),
+              _buildDispatchSummaryStat('MANIFESTS', '${_gatepasses.isNotEmpty ? _gatepasses.length : (manifests.isNotEmpty ? manifests.length : 4)} Manifests'),
+              _buildDispatchSummaryStat('ASSIGNED FLEET', '${_gatepasses.isNotEmpty ? _gatepasses.map((e) => e.truckId).toSet().length : (manifests.isNotEmpty ? manifests.length : 4)} Carrier Trucks'),
+              _buildDispatchSummaryStat('DESTINATIONS', '${_fpsList.isNotEmpty ? _fpsList.length : 20} Fair Price Shops'),
+              _buildDispatchSummaryStat('GATEPASS STATUS', _gatepasses.isNotEmpty ? '${_gatepasses.first.gatepassId} Sealed' : 'GP-BLR-0912 Sealed'),
             ],
           ),
         ),
@@ -2564,56 +2485,38 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
   }
 
   Widget _buildManifestTable() {
-    final baselineManifests = [
-      {
-        'manifest': 'MAN-2026-0912',
-        'truck': 'TRK-KA-0031',
-        'driver': 'Ramesh Kumar',
-        'depot': 'Bengaluru Central FCI Godown (Hebbal)',
-        'destination': 'FPS-KA-BLR-015',
-        'commodity': 'Rice',
-        'quantity': '2,850 kg',
-        'gatepass': 'GP-BLR-0912',
-        'route': 'North-West Corridor',
-        'status': 'READY',
-      },
-      {
-        'manifest': 'MAN-2026-0913',
-        'truck': 'TRK-KA-0032',
-        'driver': 'Suresh Gowda',
-        'depot': 'Bengaluru Central FCI Godown (Hebbal)',
-        'destination': 'FPS-KA-BLR-008',
-        'commodity': 'Rice',
-        'quantity': '3,100 kg',
-        'gatepass': 'GP-BLR-0913',
-        'route': 'East Corridor / IT Belt',
-        'status': 'READY',
-      },
-      {
-        'manifest': 'MAN-2026-0914',
-        'truck': 'TRK-KA-0033',
-        'driver': 'Anand Rao',
-        'depot': 'Bengaluru Central FCI Godown (Hebbal)',
-        'destination': 'FPS-001',
-        'commodity': 'Wheat',
-        'quantity': '1,700 kg',
-        'gatepass': 'GP-BLR-0914',
-        'route': 'South Industrial Corridor',
-        'status': 'READY',
-      },
-      {
-        'manifest': 'MAN-2026-0915',
-        'truck': 'TRK-KA-0034',
-        'driver': 'Manjunath B',
-        'depot': 'Bengaluru Central FCI Godown (Hebbal)',
-        'destination': 'FPS-KA-BLR-003',
-        'commodity': 'Rice',
-        'quantity': '2,400 kg',
-        'gatepass': 'GP-BLR-0915',
-        'route': 'Central Heritage Urban Cluster',
-        'status': 'READY',
-      },
-    ];
+    List<Map<String, String>> manifestRecords = [];
+    if (_gatepasses.isNotEmpty) {
+      manifestRecords = _gatepasses.map((gp) {
+        return {
+          'manifest': gp.manifestId.isNotEmpty ? gp.manifestId : 'MAN-2026-${gp.gatepassId.replaceAll(RegExp(r'[^0-9]'), '')}',
+          'truck': gp.truckId,
+          'driver': gp.driverName,
+          'depot': gp.sourceDepotId == 'DEPOT-01' ? 'Bengaluru Central FCI Godown (Hebbal)' : gp.sourceDepotId,
+          'destination': gp.corridor,
+          'commodity': 'Rice: ${gp.totalRiceKg.toStringAsFixed(0)} kg | Wheat: ${gp.totalWheatKg.toStringAsFixed(0)} kg',
+          'quantity': '${gp.totalPayloadKg.toStringAsFixed(0)} kg',
+          'gatepass': gp.gatepassId,
+          'route': gp.corridor,
+          'status': gp.status,
+        };
+      }).toList();
+    } else if (_manifestData?.vehicles != null && _manifestData!.vehicles.isNotEmpty) {
+      manifestRecords = _manifestData!.vehicles.map((v) {
+        return {
+          'manifest': 'MAN-2026-${v.truckId.replaceAll(RegExp(r'[^0-9]'), '')}',
+          'truck': v.truckId,
+          'driver': 'Assigned Fleet Driver',
+          'depot': v.sourceGodown.isNotEmpty ? v.sourceGodown : 'Bengaluru Central FCI Godown (Hebbal)',
+          'destination': v.routeName.isNotEmpty ? v.routeName : 'District Corridor',
+          'commodity': 'Rice / Wheat',
+          'quantity': '${v.totalPayloadKg.toStringAsFixed(0)} kg',
+          'gatepass': 'GP-${v.truckId.replaceAll(RegExp(r'[^0-9]'), '')}',
+          'route': v.routeName.isNotEmpty ? v.routeName : 'Standard Route',
+          'status': 'READY',
+        };
+      }).toList();
+    }
 
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: _slate200)),
@@ -2624,48 +2527,56 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
             padding: EdgeInsets.all(14),
             child: Text('OFFICIAL DISPATCH MANIFEST & GATEPASS RECORDS', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _govNavy)),
           ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: MaterialStateProperty.all(_slate100),
-              columns: const [
-                DataColumn(label: Text('Manifest', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Truck', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Driver', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Depot', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Destination FPS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Commodity', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Quantity', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Gatepass', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Route', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Status', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-              ],
-              rows: baselineManifests.map((m) {
-                return DataRow(
-                  cells: [
-                    DataCell(Text(m['manifest']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _govAccent))),
-                    DataCell(Text(m['truck']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-                    DataCell(Text(m['driver']!, style: const TextStyle(fontSize: 12))),
-                    DataCell(Text(m['depot']!, style: const TextStyle(fontSize: 11.5))),
-                    DataCell(Text(m['destination']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                    DataCell(Text(m['commodity']!, style: const TextStyle(fontSize: 12))),
-                    DataCell(Text(m['quantity']!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _govGreen))),
-                    DataCell(Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: _slate100, borderRadius: BorderRadius.circular(4)),
-                      child: Text(m['gatepass']!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govNavy)),
-                    )),
-                    DataCell(Text(m['route']!, style: const TextStyle(fontSize: 11.5))),
-                    DataCell(Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(color: _govGreenBg, borderRadius: BorderRadius.circular(4)),
-                      child: Text(m['status']!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govGreen)),
-                    )),
-                  ],
-                );
-              }).toList(),
+          if (manifestRecords.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Text('No dispatch manifest records available for this cycle.', style: TextStyle(color: _slate500, fontStyle: FontStyle.italic)),
+              ),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: MaterialStateProperty.all(_slate100),
+                columns: const [
+                  DataColumn(label: Text('Manifest', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Truck', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Driver', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Depot', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Destination FPS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Commodity', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Quantity', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Gatepass', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Route', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Status', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                ],
+                rows: manifestRecords.map((m) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(m['manifest'] ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _govAccent))),
+                      DataCell(Text(m['truck'] ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                      DataCell(Text(m['driver'] ?? '—', style: const TextStyle(fontSize: 12))),
+                      DataCell(Text(m['depot'] ?? '—', style: const TextStyle(fontSize: 11.5))),
+                      DataCell(Text(m['destination'] ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                      DataCell(Text(m['commodity'] ?? '—', style: const TextStyle(fontSize: 12))),
+                      DataCell(Text(m['quantity'] ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _govGreen))),
+                      DataCell(Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: _slate100, borderRadius: BorderRadius.circular(4)),
+                        child: Text(m['gatepass'] ?? '—', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govNavy)),
+                      )),
+                      DataCell(Text(m['route'] ?? '—', style: const TextStyle(fontSize: 11.5))),
+                      DataCell(Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(color: _govGreenBg, borderRadius: BorderRadius.circular(4)),
+                        child: Text(m['status'] ?? '—', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govGreen)),
+                      )),
+                    ],
+                  );
+                }).toList(),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -3047,20 +2958,13 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
     final canClose = _closureChecklist?['can_close'] as bool? ?? false;
     final isAlreadyClosed = _workflowState == 'CYCLE_CLOSED';
 
-    final rec = _dsoReconciliation ?? {
-      'allocated_kg': 276700.0,
-      'dispatched_kg': 276700.0,
-      'received_kg': 276700.0,
-      'distributed_kg': 271400.0,
-      'remaining_kg': 5300.0,
-      'offtake_rate_pct': 98.1,
-    };
-    final allocMt = ((rec['allocated_kg'] as num?)?.toDouble() ?? 276700.0) / 1000.0;
-    final dispMt = ((rec['dispatched_kg'] as num?)?.toDouble() ?? 276700.0) / 1000.0;
-    final recMt = ((rec['received_kg'] as num?)?.toDouble() ?? 276700.0) / 1000.0;
-    final distMt = ((rec['distributed_kg'] as num?)?.toDouble() ?? 271400.0) / 1000.0;
-    final remMt = ((rec['remaining_kg'] as num?)?.toDouble() ?? 5300.0) / 1000.0;
-    final offtake = (rec['offtake_rate_pct'] as num?)?.toDouble() ?? 98.1;
+    final rec = _dsoReconciliation;
+    final allocMt = rec != null && rec['allocated_kg'] != null ? ((rec['allocated_kg'] as num).toDouble() / 1000.0) : null;
+    final dispMt = rec != null && rec['dispatched_kg'] != null ? ((rec['dispatched_kg'] as num).toDouble() / 1000.0) : null;
+    final recMt = rec != null && rec['received_kg'] != null ? ((rec['received_kg'] as num).toDouble() / 1000.0) : null;
+    final distMt = rec != null && rec['distributed_kg'] != null ? ((rec['distributed_kg'] as num).toDouble() / 1000.0) : null;
+    final remMt = rec != null && rec['remaining_fps_buffer_kg'] != null ? ((rec['remaining_fps_buffer_kg'] as num).toDouble() / 1000.0) : (rec != null && rec['remaining_kg'] != null ? ((rec['remaining_kg'] as num).toDouble() / 1000.0) : null);
+    final offtake = rec != null && rec['offtake_rate_pct'] != null ? (rec['offtake_rate_pct'] as num).toDouble() : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3122,15 +3026,15 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
                   children: [
                     const Text('PANEL B — PHYSICAL GRAIN RECONCILIATION', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _slate500, letterSpacing: 0.5)),
                     const SizedBox(height: 12),
-                    _buildReconciliationRow('ALLOCATED', '${allocMt.toStringAsFixed(1)} MT', null),
+                    _buildReconciliationRow('ALLOCATED', allocMt != null ? '${allocMt.toStringAsFixed(1)} MT' : 'Data unavailable', null),
                     _buildReconciliationArrow(),
-                    _buildReconciliationRow('DISPATCHED', '${dispMt.toStringAsFixed(1)} MT', '0.0 MT Variance'),
+                    _buildReconciliationRow('DISPATCHED', dispMt != null ? '${dispMt.toStringAsFixed(1)} MT' : 'Data unavailable', '0.0 MT Variance'),
                     _buildReconciliationArrow(),
-                    _buildReconciliationRow('RECEIVED', '${recMt.toStringAsFixed(1)} MT', '0.0 MT In-Transit Loss'),
+                    _buildReconciliationRow('RECEIVED', recMt != null ? '${recMt.toStringAsFixed(1)} MT' : 'Data unavailable', '0.0 MT In-Transit Loss'),
                     _buildReconciliationArrow(),
-                    _buildReconciliationRow('DISTRIBUTED', '${distMt.toStringAsFixed(1)} MT', '${offtake.toStringAsFixed(1)}% Off-take Rate'),
+                    _buildReconciliationRow('DISTRIBUTED', distMt != null ? '${distMt.toStringAsFixed(1)} MT' : 'Data unavailable', offtake != null ? '${offtake.toStringAsFixed(1)}% Off-take Rate' : null),
                     _buildReconciliationArrow(),
-                    _buildReconciliationRow('REMAINING FPS BUFFER', '${remMt.toStringAsFixed(1)} MT', 'Rolled over to Next Cycle'),
+                    _buildReconciliationRow('REMAINING FPS BUFFER', remMt != null ? '${remMt.toStringAsFixed(1)} MT' : 'Data unavailable', 'Rolled over to Next Cycle'),
                   ],
                 ),
               ),
@@ -3167,14 +3071,14 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
                         );
                       }).toList()
                     : [
-                        _buildStaticCheckItem('Demand validated', true),
-                        _buildStaticCheckItem('Allocation approved', true),
-                        _buildStaticCheckItem('Optimization approved', true),
-                        _buildStaticCheckItem('Dispatch authorized', true),
-                        _buildStaticCheckItem('Deliveries verified', true),
-                        _buildStaticCheckItem('Exceptions reviewed', true),
-                        _buildStaticCheckItem('Inspections processed', true),
-                        _buildStaticCheckItem('Audit records persisted', true),
+                        _buildStaticCheckItem('Demand validated', _demandSnapshot != null || _isDemandLocked),
+                        _buildStaticCheckItem('Allocation approved', _dsoAllocationData != null),
+                        _buildStaticCheckItem('Optimization approved', _dsoRoutes.isNotEmpty),
+                        _buildStaticCheckItem('Dispatch authorized', _gatepasses.isNotEmpty),
+                        _buildStaticCheckItem('Deliveries verified', _truckTrackings.isNotEmpty),
+                        _buildStaticCheckItem('Exceptions reviewed', (_adminSummary?.highRiskFpsCount ?? 0) == 0),
+                        _buildStaticCheckItem('Inspections processed', _completedInspections.isNotEmpty),
+                        _buildStaticCheckItem('Audit records persisted', _governanceEvents.isNotEmpty),
                       ],
               ),
             ],
