@@ -27,14 +27,25 @@ void platformSpeak(String text, String langCode) {
 
           function playAudioStream(lang) {
             try {
-              var audioUrl = '/api/tts/speak?lang=' + lang + '&text=' + encodeURIComponent(cleanText);
-              window._pdsVoiceAudio = new Audio(audioUrl);
+              var baseUrl = (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '';
+              var audioUrl = baseUrl + '/api/tts/speak?lang=' + encodeURIComponent(lang) + '&text=' + encodeURIComponent(cleanText);
+              
+              if (!window._pdsVoiceAudio) {
+                window._pdsVoiceAudio = new Audio();
+              }
+              window._pdsVoiceAudio.src = audioUrl;
               window._pdsVoiceAudio.playbackRate = 1.0;
-              window._pdsVoiceAudio.play().catch(function(err) {
-                console.warn('Audio stream play fallback failed, falling back to speech synthesis:', err);
-                speakWithWebSpeech(null);
-              });
+              window._pdsVoiceAudio.volume = 1.0;
+
+              var playPromise = window._pdsVoiceAudio.play();
+              if (playPromise !== undefined) {
+                playPromise.catch(function(err) {
+                  console.warn('Direct audio stream failed, attempting WebSpeech fallback:', err);
+                  speakWithWebSpeech(null);
+                });
+              }
             } catch(err) {
+              console.warn('playAudioStream exception:', err);
               speakWithWebSpeech(null);
             }
           }
@@ -58,7 +69,6 @@ void platformSpeak(String text, String langCode) {
                 utterance.lang = isKannada ? 'kn-IN' : (isHindi ? 'hi-IN' : 'en-US');
               }
 
-              // Chrome bug workaround: keep synthesis alive
               utterance.onend = function() {
                 if (window.speechSynthesis.paused) window.speechSynthesis.resume();
               };
@@ -77,42 +87,16 @@ void platformSpeak(String text, String langCode) {
             }
           }
 
-          var voices = ('speechSynthesis' in window) ? window.speechSynthesis.getVoices() : [];
-          var chosenVoice = null;
-
           if (isKannada) {
-            // Check for true Kannada voice
-            for (var i = 0; i < voices.length; i++) {
-              var vl = (voices[i].lang || '').toLowerCase().replace('_', '-');
-              var vn = (voices[i].name || '').toLowerCase();
-              if (vl === 'kn-in' || vl === 'kn' || vn.indexOf('kannada') !== -1 || vn.indexOf('ಕನ್ನಡ') !== -1 || vn.indexOf('gagan') !== -1 || vn.indexOf('sapna') !== -1) {
-                chosenVoice = voices[i];
-                break;
-              }
-            }
-            if (chosenVoice) {
-              speakWithWebSpeech(chosenVoice);
-            } else {
-              // No Kannada voice on machine -> Play authentic native Kannada audio!
-              playAudioStream('kn');
-            }
+            // For Kannada, always stream high-quality authentic Kannada voice from /api/tts/speak
+            playAudioStream('kn');
           } else if (isHindi) {
-            // Check for Hindi voice
-            for (var i = 0; i < voices.length; i++) {
-              var vl = (voices[i].lang || '').toLowerCase().replace('_', '-');
-              var vn = (voices[i].name || '').toLowerCase();
-              if (vl === 'hi-in' || vl === 'hi' || vn.indexOf('hindi') !== -1 || vn.indexOf('हिन्दी') !== -1 || vn.indexOf('madhur') !== -1 || vn.indexOf('swara') !== -1 || vn.indexOf('kalpana') !== -1) {
-                chosenVoice = voices[i];
-                break;
-              }
-            }
-            if (chosenVoice) {
-              speakWithWebSpeech(chosenVoice);
-            } else {
-              playAudioStream('hi');
-            }
+            // For Hindi, stream authentic neural Hindi voice from /api/tts/speak
+            playAudioStream('hi');
           } else {
-            // English: Match any English voice
+            // English: Check if local system voice exists or fallback to TTS
+            var voices = ('speechSynthesis' in window) ? window.speechSynthesis.getVoices() : [];
+            var chosenVoice = null;
             for (var i = 0; i < voices.length; i++) {
               var vl = (voices[i].lang || '').toLowerCase().replace('_', '-');
               if (vl === 'en-in') { chosenVoice = voices[i]; break; }
@@ -127,7 +111,11 @@ void platformSpeak(String text, String langCode) {
                 }
               }
             }
-            speakWithWebSpeech(chosenVoice);
+            if (chosenVoice) {
+              speakWithWebSpeech(chosenVoice);
+            } else {
+              playAudioStream('en');
+            }
           }
         } catch(e) {
           console.warn('platformSpeak error:', e);

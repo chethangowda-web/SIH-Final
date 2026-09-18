@@ -468,15 +468,10 @@ def citizen_send_otp(
 
     # Step 4: Strict Household Member Phone Verification
     if not payload.phone_number or not payload.phone_number.strip():
-        if household_phones:
-            input_phone_clean = household_phones[0]
-            phone_matched = True
-            matched_member_name = ben["name_for_demo"]
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Registered mobile number is required to receive OTP."
-            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registered mobile number is required to receive OTP."
+        )
     else:
         input_phone_clean = clean_indian_phone(payload.phone_number)
         phone_matched = False
