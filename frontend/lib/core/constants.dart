@@ -10,9 +10,9 @@ class AppConstants {
   static const String demoNotice =
       'Govt. of Karnataka • Bengaluru Urban PDS Operations';
 
-  // Production Railway cloud backend URL for mobile APKs and remote access
+  // Local network backend URL for mobile testing
   static const String defaultProductionBackendUrl =
-      'https://sih-final-production-d29c.up.railway.app/api';
+      'http://10.20.16.9:8000/api';
 
   static String? customBackendUrl;
 

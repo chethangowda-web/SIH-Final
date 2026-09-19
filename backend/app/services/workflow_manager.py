@@ -135,7 +135,7 @@ class WorkflowStateManager:
         ]
 
         # 5. Required deliveries verified
-        cursor.execute("SELECT COUNT(*) FROM truck_route_tracking WHERE status NOT IN ('DELIVERED', 'COMPLETED', 'VERIFIED');")
+        cursor.execute("SELECT COUNT(*) FROM truck_route_tracking WHERE current_status NOT IN ('DELIVERED', 'COMPLETED', 'VERIFIED');")
         pending_deliveries = cursor.fetchone()[0]
         deliveries_verified = (pending_deliveries == 0) or current_state in [
             WorkflowState.VERIFIED, WorkflowState.EVALUATED, WorkflowState.CYCLE_CLOSED

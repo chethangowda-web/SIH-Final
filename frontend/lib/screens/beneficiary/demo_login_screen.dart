@@ -5,6 +5,7 @@ import '../../services/api_service.dart';
 import '../../services/voice_assistant_service.dart';
 import 'beneficiary_home_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
+import '../admin/dso_dashboard_screen.dart';
 import '../admin/field_food_inspector_dashboard_screen.dart';
 import '../admin/fps_owner_dashboard_screen.dart';
 import '../admin/auditor_dashboard_screen.dart';
@@ -430,7 +431,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       final uName = authRes['username'] as String? ?? username;
 
       Widget targetScreen;
-      if (role == 'FIELD_FOOD_INSPECTOR' || role == 'FIELD_OFFICER' || uName == 'inspector_user' || uName == 'field_officer_user' || uName.startsWith('INSP-')) {
+      if (role == 'DSO' || role == 'DISTRICT_SUPPLY_OFFICER' || uName == 'dso_user') {
+        targetScreen = DsoDashboardScreen(apiService: _apiService, username: uName);
+      } else if (role == 'FIELD_FOOD_INSPECTOR' || role == 'FIELD_OFFICER' || uName == 'inspector_user' || uName == 'field_officer_user' || uName.startsWith('INSP-')) {
         targetScreen = FieldFoodInspectorDashboardScreen(apiService: _apiService, username: uName);
       } else if (role == 'FPS_OWNER' || uName.startsWith('FPS') || uName == 'fps_user') {
         targetScreen = FpsOwnerDashboardScreen(apiService: _apiService, username: uName);
