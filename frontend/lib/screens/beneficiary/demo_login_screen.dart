@@ -431,7 +431,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       final uName = authRes['username'] as String? ?? username;
 
       Widget targetScreen;
-      if (role == 'DSO' || role == 'DISTRICT_SUPPLY_OFFICER' || uName == 'dso_user') {
+      if (role == 'DSO' || role == 'DISTRICT_SUPPLY_OFFICER' || role == 'ADMIN' || uName == 'dso_user' || uName == 'admin_user' || uName == 'admin') {
         targetScreen = DsoDashboardScreen(apiService: _apiService, username: uName);
       } else if (role == 'FIELD_FOOD_INSPECTOR' || role == 'FIELD_OFFICER' || uName == 'inspector_user' || uName == 'field_officer_user' || uName.startsWith('INSP-')) {
         targetScreen = FieldFoodInspectorDashboardScreen(apiService: _apiService, username: uName);

@@ -22,6 +22,7 @@ import 'citizen_request_queue_dialog.dart';
 import 'causal_trace_dialog.dart';
 import 'incident_detail_dialog.dart';
 import '../beneficiary/demo_login_screen.dart';
+import 'dso_dashboard_screen.dart';
 
 class _WorkflowStageMeta {
   final String title;
@@ -1330,6 +1331,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       description =
           'Desk-based command dashboard. Operates the 7-stage workflow stepper (Forecast → Validate → Allocate → Optimize → Dispatch → Verify → Evaluate). Authorized to trigger AI forecasts, lock demand quota baselines, review pre-dispatch incidents, manually override AI quotas, and inspect XAI causal decision traces.';
       actions = [
+        {
+          'label': '🏛️ Launch District Supply Command Workstation',
+          'icon': Icons.account_balance_rounded,
+          'color': const Color(0xFF0F2942),
+          'onTap': () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => DsoDashboardScreen(apiService: _apiService, username: widget.username)),
+            );
+          },
+        },
         {
           'label': '🚨 Issue Surprise Inspection Order',
           'icon': Icons.warning_amber_rounded,
