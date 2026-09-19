@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/constants.dart';
+import '../../core/responsive/responsive_breakpoints.dart';
 import '../../models/admin_model.dart';
 import '../../services/api_service.dart';
 import 'incident_detail_dialog.dart';
@@ -349,17 +350,25 @@ class _DispatchOptimizationDialogState
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.isMobile(context);
+    final isTablet = ResponsiveBreakpoints.isTablet(context);
+    final dialogWidth = ResponsiveBreakpoints.getDialogWidth(context, maxDesktopWidth: 1160);
+    final dialogHeight = ResponsiveBreakpoints.getDialogHeight(context, maxDesktopHeight: 840);
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 8 : 20,
+        vertical: isMobile ? 10 : 16,
+      ),
       child: Container(
-        width: 1160,
-        height: 840,
-        padding: const EdgeInsets.all(22),
+        width: dialogWidth,
+        height: dialogHeight,
+        padding: EdgeInsets.all(isMobile ? 12 : 22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(context),
+            _buildHeader(context, isMobile),
             const SizedBox(height: 12),
             if (_isLoading)
               const Expanded(
@@ -371,6 +380,7 @@ class _DispatchOptimizationDialogState
                       SizedBox(height: 12),
                       Text(
                           'Evaluating Multi-Candidate TSP Routes & Penalty Scores...',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                               color: AppConstants.textSecondary, fontSize: 13)),
                     ],
@@ -387,6 +397,7 @@ class _DispatchOptimizationDialogState
                           color: AppConstants.dangerRed, size: 48),
                       const SizedBox(height: 12),
                       Text(_errorMessage!,
+                          textAlign: TextAlign.center,
                           style: const TextStyle(
                               color: AppConstants.dangerRed,
                               fontWeight: FontWeight.bold)),
@@ -400,16 +411,64 @@ class _DispatchOptimizationDialogState
                 ),
               )
             else
-              Expanded(child: _buildScrollableBody()),
+              Expanded(child: _buildScrollableBody(isMobile, isTablet)),
             const SizedBox(height: 12),
-            _buildFooter(context),
+            _buildFooter(context, isMobile),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, bool isMobile) {
+    if (isMobile) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppConstants.purpleAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.route_rounded,
+                      color: AppConstants.purpleAccent, size: 20),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Dispatch Optimization',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppConstants.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'TSP Tour Sequencing & Multi-Candidate Evaluation',
+                        style: TextStyle(fontSize: 10, color: AppConstants.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close),
+            tooltip: 'Close',
+          ),
+        ],
+      );
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -425,10 +484,10 @@ class _DispatchOptimizationDialogState
                   color: AppConstants.purpleAccent, size: 24),
             ),
             const SizedBox(width: 14),
-            Column(
+            const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Multi-Candidate Dispatch Optimization Engine',
                   style: TextStyle(
                     fontSize: 18,
@@ -456,7 +515,7 @@ class _DispatchOptimizationDialogState
     );
   }
 
-  Widget _buildScrollableBody() {
+  Widget _buildScrollableBody(bool isMobile, bool isTablet) {
     final d = _dossier!;
 
     return SingleChildScrollView(
@@ -468,11 +527,11 @@ class _DispatchOptimizationDialogState
           const SizedBox(height: 14),
 
           // 2. Interactive What-If Scenario Controls
-          _buildWhatIfControlsCard(),
+          _buildWhatIfControlsCard(isMobile),
           const SizedBox(height: 14),
 
           // 3. Multi-Candidate Comparative Grid (Candidate A, B, C)
-          _buildCandidateComparisonSection(d),
+          _buildCandidateComparisonSection(d, isMobile),
           const SizedBox(height: 14),
 
           // 4. "Why this candidate was selected?" Justification Card
@@ -480,15 +539,15 @@ class _DispatchOptimizationDialogState
           const SizedBox(height: 14),
 
           // 5. Pre-Dispatch Operational Incidents & Risk Simulation Panel (3 Live Alerts)
-          _buildPreDispatchIncidentsSection(d),
+          _buildPreDispatchIncidentsSection(d, isMobile),
           const SizedBox(height: 14),
 
           // 6. Interactive Delivery Corridor Map (OpenStreetMap)
-          _buildInteractiveRouteMapSection(d),
+          _buildInteractiveRouteMapSection(d, isMobile),
           const SizedBox(height: 14),
 
           // 7. Optimized Delivery Sequence Timeline (TSP Nearest-Neighbor Tour)
-          _buildDeliverySequenceSection(d),
+          _buildDeliverySequenceSection(d, isMobile),
         ],
       ),
     );
@@ -502,59 +561,194 @@ class _DispatchOptimizationDialogState
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppConstants.cardBorder),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.alt_route_rounded,
-                  color: AppConstants.primaryNavy, size: 18),
-              SizedBox(width: 8),
-              Text(
-                'FLEET CORRIDOR:',
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: AppConstants.textSecondary),
-              ),
-            ],
-          ),
-          Row(
-            children: _corridors.map((c) {
-              final isSelected = c['truck_id'] == _selectedTruckId;
-              return Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: ElevatedButton(
-                  onPressed: () => _loadOptimization(truckId: c['truck_id']),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isSelected
-                        ? AppConstants.primaryNavy
-                        : Colors.grey.shade200,
-                    foregroundColor:
-                        isSelected ? Colors.white : AppConstants.textPrimary,
-                    elevation: isSelected ? 2 : 0,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6)),
-                  ),
-                  child: Text(
-                    c['label']!,
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.w500),
-                  ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.alt_route_rounded,
+                    color: AppConstants.primaryNavy, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'FLEET CORRIDOR:',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppConstants.textSecondary),
                 ),
-              );
-            }).toList(),
-          ),
-        ],
+              ],
+            ),
+            const SizedBox(width: 12),
+            Row(
+              children: _corridors.map((c) {
+                final isSelected = c['truck_id'] == _selectedTruckId;
+                return Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: ElevatedButton(
+                    onPressed: () => _loadOptimization(truckId: c['truck_id']),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSelected
+                          ? AppConstants.primaryNavy
+                          : Colors.grey.shade200,
+                      foregroundColor:
+                          isSelected ? Colors.white : AppConstants.textPrimary,
+                      elevation: isSelected ? 2 : 0,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6)),
+                    ),
+                    child: Text(
+                      c['label']!,
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.w500),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildWhatIfControlsCard() {
+  Widget _buildWhatIfControlsCard(bool isMobile) {
+    final controls = [
+      // 1. Vehicle Capacity Slider
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Vehicle Capacity Rating',
+                  style: TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w600)),
+              Text('${(_vehicleCapacityKg / 1000).toStringAsFixed(1)} MT',
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppConstants.primaryNavy)),
+            ],
+          ),
+          Slider(
+            value: _vehicleCapacityKg.clamp(3000.0, 16000.0),
+            min: 3000.0,
+            max: 16000.0,
+            divisions: 13,
+            activeColor: AppConstants.accentBlue,
+            onChanged: (val) =>
+                setState(() => _vehicleCapacityKg = val),
+          ),
+        ],
+      ),
+      // 2. Fuel Cost per KM Slider
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Operating / Fuel Cost Rate',
+                  style: TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w600)),
+              Text('₹${_fuelCostPerKm.toStringAsFixed(1)} / km',
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppConstants.primaryNavy)),
+            ],
+          ),
+          Slider(
+            value: _fuelCostPerKm.clamp(20.0, 70.0),
+            min: 20.0,
+            max: 70.0,
+            divisions: 10,
+            activeColor: AppConstants.successGreen,
+            onChanged: (val) => setState(() => _fuelCostPerKm = val),
+          ),
+        ],
+      ),
+      // 3. Route Condition Dropdown
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Route Corridor Condition',
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String>(
+            initialValue: _routeCondition,
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 8),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6)),
+            ),
+            items: const [
+              DropdownMenuItem(
+                  value: 'EXPRESSWAY_CORRIDOR',
+                  child: Text('Expressway / Ring Road',
+                      style: TextStyle(fontSize: 11))),
+              DropdownMenuItem(
+                  value: 'URBAN_ARTERIAL',
+                  child: Text('Standard Urban Arterial',
+                      style: TextStyle(fontSize: 11))),
+              DropdownMenuItem(
+                  value: 'CONGESTED_PEAK_CORRIDOR',
+                  child: Text('Congested Core (Peak Delay)',
+                      style: TextStyle(fontSize: 11))),
+            ],
+            onChanged: (val) {
+              if (val != null) setState(() => _routeCondition = val);
+            },
+          ),
+        ],
+      ),
+      // 4. Departure Window Dropdown
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Dispatch Departure Window',
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String>(
+            initialValue: _departureWindow,
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 8),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6)),
+            ),
+            items: const [
+              DropdownMenuItem(
+                  value: '07:30 AM',
+                  child: Text('07:30 AM (Early Priority)',
+                      style: TextStyle(fontSize: 11))),
+              DropdownMenuItem(
+                  value: '08:30 AM',
+                  child: Text('08:30 AM (Standard Morning)',
+                      style: TextStyle(fontSize: 11))),
+              DropdownMenuItem(
+                  value: '09:15 AM',
+                  child: Text('09:15 AM (Mid-Morning Slot)',
+                      style: TextStyle(fontSize: 11))),
+            ],
+            onChanged: (val) {
+              if (val != null) setState(() => _departureWindow = val);
+            },
+          ),
+        ],
+      ),
+    ];
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -565,24 +759,27 @@ class _DispatchOptimizationDialogState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.tune_rounded,
-                      color: AppConstants.purpleAccent, size: 18),
-                  SizedBox(width: 8),
-                  Text(
-                    'Interactive What-If Scenario Controls',
+          if (isMobile) ...[
+            const Row(
+              children: [
+                Icon(Icons.tune_rounded,
+                    color: AppConstants.purpleAccent, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'What-If Scenario Controls',
                     style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
                         color: AppConstants.primaryNavy),
                   ),
-                ],
-              ),
-              ElevatedButton.icon(
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
                 onPressed: _isRecalculating ? null : _runWhatIfRecalculation,
                 icon: _isRecalculating
                     ? const SizedBox(
@@ -600,160 +797,79 @@ class _DispatchOptimizationDialogState
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
-            ],
-          ),
+            ),
+          ] else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.tune_rounded,
+                        color: AppConstants.purpleAccent, size: 18),
+                    SizedBox(width: 8),
+                    Text(
+                      'Interactive What-If Scenario Controls',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppConstants.primaryNavy),
+                    ),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  onPressed: _isRecalculating ? null : _runWhatIfRecalculation,
+                  icon: _isRecalculating
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.calculate_outlined, size: 14),
+                  label: const Text('Recalculate Optimization',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppConstants.purpleAccent,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const Divider(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Vehicle Capacity Slider
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Vehicle Capacity Rating',
-                            style: TextStyle(
-                                fontSize: 11, fontWeight: FontWeight.w600)),
-                        Text('${(_vehicleCapacityKg / 1000).toStringAsFixed(1)} MT',
-                            style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppConstants.primaryNavy)),
-                      ],
-                    ),
-                    Slider(
-                      value: _vehicleCapacityKg.clamp(3000.0, 16000.0),
-                      min: 3000.0,
-                      max: 16000.0,
-                      divisions: 13,
-                      activeColor: AppConstants.accentBlue,
-                      onChanged: (val) =>
-                          setState(() => _vehicleCapacityKg = val),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // 2. Fuel Cost per KM Slider
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Operating / Fuel Cost Rate',
-                            style: TextStyle(
-                                fontSize: 11, fontWeight: FontWeight.w600)),
-                        Text('₹${_fuelCostPerKm.toStringAsFixed(1)} / km',
-                            style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppConstants.primaryNavy)),
-                      ],
-                    ),
-                    Slider(
-                      value: _fuelCostPerKm.clamp(20.0, 70.0),
-                      min: 20.0,
-                      max: 70.0,
-                      divisions: 10,
-                      activeColor: AppConstants.successGreen,
-                      onChanged: (val) => setState(() => _fuelCostPerKm = val),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // 3. Route Condition Dropdown
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Route Corridor Condition',
-                        style: TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String>(
-                      initialValue: _routeCondition,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(6)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'EXPRESSWAY_CORRIDOR',
-                            child: Text('Expressway / Ring Road',
-                                style: TextStyle(fontSize: 11))),
-                        DropdownMenuItem(
-                            value: 'URBAN_ARTERIAL',
-                            child: Text('Standard Urban Arterial',
-                                style: TextStyle(fontSize: 11))),
-                        DropdownMenuItem(
-                            value: 'CONGESTED_PEAK_CORRIDOR',
-                            child: Text('Congested Core (Peak Delay)',
-                                style: TextStyle(fontSize: 11))),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _routeCondition = val);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // 4. Departure Window Dropdown
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Dispatch Departure Window',
-                        style: TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String>(
-                      initialValue: _departureWindow,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(6)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                            value: '07:30 AM',
-                            child: Text('07:30 AM (Early Priority)',
-                                style: TextStyle(fontSize: 11))),
-                        DropdownMenuItem(
-                            value: '08:30 AM',
-                            child: Text('08:30 AM (Standard Morning)',
-                                style: TextStyle(fontSize: 11))),
-                        DropdownMenuItem(
-                            value: '09:15 AM',
-                            child: Text('09:15 AM (Mid-Morning Slot)',
-                                style: TextStyle(fontSize: 11))),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _departureWindow = val);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          if (isMobile)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                controls[0],
+                const SizedBox(height: 10),
+                controls[1],
+                const SizedBox(height: 10),
+                controls[2],
+                const SizedBox(height: 10),
+                controls[3],
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: controls[0]),
+                const SizedBox(width: 16),
+                Expanded(child: controls[1]),
+                const SizedBox(width: 16),
+                Expanded(child: controls[2]),
+                const SizedBox(width: 16),
+                Expanded(child: controls[3]),
+              ],
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildCandidateComparisonSection(CorridorOptimizationDossier d) {
+  Widget _buildCandidateComparisonSection(CorridorOptimizationDossier d, bool isMobile) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -762,23 +878,35 @@ class _DispatchOptimizationDialogState
             Icon(Icons.compare_rounded,
                 color: AppConstants.primaryNavy, size: 18),
             SizedBox(width: 8),
-            Text(
-              'Multi-Candidate Feasibility & Penalty Scoring Comparison',
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppConstants.primaryNavy),
+            Expanded(
+              child: Text(
+                'Multi-Candidate Feasibility & Penalty Scoring Comparison',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppConstants.primaryNavy),
+              ),
             ),
           ],
         ),
         const SizedBox(height: 10),
-        Row(
-          children: d.evaluatedCandidates.map((c) {
-            return Expanded(
-              child: _buildCandidateCard(c),
-            );
-          }).toList(),
-        ),
+        if (isMobile)
+          Column(
+            children: d.evaluatedCandidates.map((c) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _buildCandidateCard(c),
+              );
+            }).toList(),
+          )
+        else
+          Row(
+            children: d.evaluatedCandidates.map((c) {
+              return Expanded(
+                child: _buildCandidateCard(c),
+              );
+            }).toList(),
+          ),
       ],
     );
   }
@@ -1002,10 +1130,10 @@ class _DispatchOptimizationDialogState
     );
   }
 
-  Widget _buildPreDispatchIncidentsSection(CorridorOptimizationDossier d) {
+  Widget _buildPreDispatchIncidentsSection(CorridorOptimizationDossier d, bool isMobile) {
     final activeCount = _activeIncidentsCount;
     return Container(
-      padding: const EdgeInsets.all(AppConstants.space16),
+      padding: EdgeInsets.all(isMobile ? 12 : AppConstants.space16),
       decoration: BoxDecoration(
         color: const Color(0xFFFFFBEB),
         borderRadius: BorderRadius.circular(AppConstants.radiusLarge),
@@ -1021,77 +1149,156 @@ class _DispatchOptimizationDialogState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD97706).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
+          if (isMobile) ...[
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 20),
                 ),
-                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 20),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'PRE-DISPATCH OPERATIONAL INCIDENTS — PREPARE BEFORE TRUCK DEPARTS',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF92400E),
-                        letterSpacing: 0.5,
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'PRE-DISPATCH OPERATIONAL INCIDENTS',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF92400E),
+                          letterSpacing: 0.5,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '"Don\'t reroute the truck after it leaves. Prepare the demand before it leaves."',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontStyle: FontStyle.italic,
-                        color: Color(0xFFB45309),
+                      Text(
+                        'Prepare demand before truck departs',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontStyle: FontStyle.italic,
+                          color: Color(0xFFB45309),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              ElevatedButton.icon(
-                onPressed: _triggerMultiIncidentSimulation,
-                icon: const Icon(Icons.play_circle_fill_rounded, size: 15),
-                label: const Text(
-                  'Run Incident Simulation',
-                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFB45309),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: activeCount > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: activeCount > 0 ? const Color(0xFFFECACA) : const Color(0xFFBBF7D0),
+                    ],
                   ),
                 ),
-                child: Text(
-                  activeCount > 0
-                      ? '$activeCount LIVE PRE-DISPATCH ALERTS'
-                      : 'ALL ALERTS RESOLVED ✓',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: activeCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF15803D),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _triggerMultiIncidentSimulation,
+                  icon: const Icon(Icons.play_circle_fill_rounded, size: 14),
+                  label: const Text(
+                    'Run Simulation',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFB45309),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   ),
                 ),
-              ),
-            ],
-          ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: activeCount > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: activeCount > 0 ? const Color(0xFFFECACA) : const Color(0xFFBBF7D0),
+                    ),
+                  ),
+                  child: Text(
+                    activeCount > 0
+                        ? '$activeCount LIVE ALERTS'
+                        : 'ALL RESOLVED ✓',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: activeCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF15803D),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 20),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'PRE-DISPATCH OPERATIONAL INCIDENTS — PREPARE BEFORE TRUCK DEPARTS',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF92400E),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        '"Don\'t reroute the truck after it leaves. Prepare the demand before it leaves."',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontStyle: FontStyle.italic,
+                          color: Color(0xFFB45309),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _triggerMultiIncidentSimulation,
+                  icon: const Icon(Icons.play_circle_fill_rounded, size: 15),
+                  label: const Text(
+                    'Run Incident Simulation',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFB45309),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: activeCount > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: activeCount > 0 ? const Color(0xFFFECACA) : const Color(0xFFBBF7D0),
+                    ),
+                  ),
+                  child: Text(
+                    activeCount > 0
+                        ? '$activeCount LIVE PRE-DISPATCH ALERTS'
+                        : 'ALL ALERTS RESOLVED ✓',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: activeCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF15803D),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (_isIncidentSimulationActive) ...[
             const SizedBox(height: 10),
             Container(
@@ -1344,13 +1551,13 @@ class _DispatchOptimizationDialogState
     return LatLng(sumLat / points.length, sumLng / points.length);
   }
 
-  Widget _buildInteractiveRouteMapSection(CorridorOptimizationDossier d) {
+  Widget _buildInteractiveRouteMapSection(CorridorOptimizationDossier d, bool isMobile) {
     final routePoints = _buildRoutePoints(d);
     final center = _calculateCenter(routePoints);
     final depotPoint = _getDepotLatLng(d);
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -1360,69 +1567,119 @@ class _DispatchOptimizationDialogState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Section Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: AppConstants.primaryNavy.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(6),
+          if (isMobile) ...[
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppConstants.primaryNavy.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(Icons.map_rounded,
+                      color: AppConstants.primaryNavy, size: 18),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'DELIVERY CORRIDOR MAP',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppConstants.primaryNavy,
+                      letterSpacing: 0.5,
                     ),
-                    child: const Icon(Icons.map_rounded,
-                        color: AppConstants.primaryNavy, size: 18),
                   ),
-                  const SizedBox(width: 10),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'INTERACTIVE DELIVERY CORRIDOR MAP',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppConstants.primaryNavy,
-                          letterSpacing: 0.5,
-                        ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                _buildMapMetricChip(
+                  icon: Icons.storefront_rounded,
+                  label: '${d.deliverySequence.length} Stops',
+                  color: AppConstants.accentBlue,
+                ),
+                _buildMapMetricChip(
+                  icon: Icons.timeline_rounded,
+                  label: '${d.selectedRouteDistanceKm.toStringAsFixed(1)} km',
+                  color: AppConstants.purpleAccent,
+                ),
+                _buildMapMetricChip(
+                  icon: Icons.speed_rounded,
+                  label: '${d.selectedEfficiencyPct.toStringAsFixed(1)}% Eff.',
+                  color: AppConstants.successGreen,
+                ),
+              ],
+            ),
+          ] else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppConstants.primaryNavy.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                      SizedBox(height: 2),
-                      Text(
-                        'OpenStreetMap • Backend-optimized TSP sequence',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: AppConstants.textSecondary,
+                      child: const Icon(Icons.map_rounded,
+                          color: AppConstants.primaryNavy, size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'INTERACTIVE DELIVERY CORRIDOR MAP',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppConstants.primaryNavy,
+                            letterSpacing: 0.5,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              // Header right summary pills
-              Wrap(
-                spacing: 8,
-                children: [
-                  _buildMapMetricChip(
-                    icon: Icons.storefront_rounded,
-                    label: '${d.deliverySequence.length} FPS Stops',
-                    color: AppConstants.accentBlue,
-                  ),
-                  _buildMapMetricChip(
-                    icon: Icons.timeline_rounded,
-                    label: '${d.selectedRouteDistanceKm.toStringAsFixed(1)} km Tour',
-                    color: AppConstants.purpleAccent,
-                  ),
-                  _buildMapMetricChip(
-                    icon: Icons.speed_rounded,
-                    label: '${d.selectedEfficiencyPct.toStringAsFixed(1)}% Efficiency',
-                    color: AppConstants.successGreen,
-                  ),
-                ],
-              ),
-            ],
-          ),
+                        SizedBox(height: 2),
+                        Text(
+                          'OpenStreetMap • Backend-optimized TSP sequence',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: AppConstants.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                // Header right summary pills
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    _buildMapMetricChip(
+                      icon: Icons.storefront_rounded,
+                      label: '${d.deliverySequence.length} FPS Stops',
+                      color: AppConstants.accentBlue,
+                    ),
+                    _buildMapMetricChip(
+                      icon: Icons.timeline_rounded,
+                      label: '${d.selectedRouteDistanceKm.toStringAsFixed(1)} km Tour',
+                      color: AppConstants.purpleAccent,
+                    ),
+                    _buildMapMetricChip(
+                      icon: Icons.speed_rounded,
+                      label: '${d.selectedEfficiencyPct.toStringAsFixed(1)}% Efficiency',
+                      color: AppConstants.successGreen,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
 
           // Simulation Control Toolbar & Live Telemetry Controls
@@ -1433,83 +1690,86 @@ class _DispatchOptimizationDialogState
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.blueGrey.shade200),
             ),
-            child: Row(
-              children: [
-                const Icon(Icons.satellite_alt_rounded, size: 16, color: AppConstants.primaryNavy),
-                const SizedBox(width: 8),
-                const Text(
-                  'Live Dispatch Simulation & Corridor Guard:',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _isSimulationRunning
-                      ? (_isSimulationPaused ? _pauseSimulation : _pauseSimulation)
-                      : _startSimulation,
-                  icon: Icon(
-                    _isSimulationRunning
-                        ? (_isSimulationPaused ? Icons.play_arrow : Icons.pause)
-                        : Icons.play_arrow,
-                    size: 14,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  const Icon(Icons.satellite_alt_rounded, size: 16, color: AppConstants.primaryNavy),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Live Dispatch Simulation & Corridor Guard:',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppConstants.primaryNavy),
                   ),
-                  label: Text(
-                    _isSimulationRunning
-                        ? (_isSimulationPaused ? 'Resume' : 'Pause')
-                        : 'Start Dispatch Simulation',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _isSimulationRunning
+                        ? (_isSimulationPaused ? _pauseSimulation : _pauseSimulation)
+                        : _startSimulation,
+                    icon: Icon(
+                      _isSimulationRunning
+                          ? (_isSimulationPaused ? Icons.play_arrow : Icons.pause)
+                          : Icons.play_arrow,
+                      size: 14,
+                    ),
+                    label: Text(
+                      _isSimulationRunning
+                          ? (_isSimulationPaused ? 'Resume' : 'Pause')
+                          : 'Start Dispatch Simulation',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isSimulationRunning
+                          ? (_isSimulationPaused ? Colors.green : Colors.amber.shade800)
+                          : AppConstants.successGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isSimulationRunning
-                        ? (_isSimulationPaused ? Colors.green : Colors.amber.shade800)
-                        : AppConstants.successGreen,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: _stepNextStop,
+                    icon: const Icon(Icons.skip_next, size: 14),
+                    label: const Text('Next Stop', style: TextStyle(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: _stepNextStop,
-                  icon: const Icon(Icons.skip_next, size: 14),
-                  label: const Text('Next Stop', style: TextStyle(fontSize: 11)),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _triggerMultiIncidentSimulation,
+                    icon: const Icon(Icons.crisis_alert_rounded, size: 14),
+                    label: const Text(
+                      'Trigger 3-Incident Simulation',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: _triggerMultiIncidentSimulation,
-                  icon: const Icon(Icons.crisis_alert_rounded, size: 14),
-                  label: const Text(
-                    'Trigger 3-Incident Simulation',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _toggleCorridorDeviationAlert,
+                    icon: const Icon(Icons.warning_amber_rounded, size: 14),
+                    label: Text(
+                      _isCorridorBreachSimulated ? 'Clear Deviation Alert' : 'Route Deviation',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isCorridorBreachSimulated ? Colors.red.shade700 : Colors.deepOrange.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.restart_alt, size: 18),
+                    tooltip: 'Reset Simulation',
+                    onPressed: _resetSimulation,
                   ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: _toggleCorridorDeviationAlert,
-                  icon: const Icon(Icons.warning_amber_rounded, size: 14),
-                  label: Text(
-                    _isCorridorBreachSimulated ? 'Clear Deviation Alert' : 'Route Deviation',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isCorridorBreachSimulated ? Colors.red.shade700 : Colors.deepOrange.shade600,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.restart_alt, size: 18),
-                  tooltip: 'Reset Simulation',
-                  onPressed: _resetSimulation,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -2158,9 +2418,9 @@ class _DispatchOptimizationDialogState
     );
   }
 
-  Widget _buildDeliverySequenceSection(CorridorOptimizationDossier d) {
+  Widget _buildDeliverySequenceSection(CorridorOptimizationDossier d, bool isMobile) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -2169,34 +2429,127 @@ class _DispatchOptimizationDialogState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.format_list_numbered_rounded,
-                      color: AppConstants.accentBlue, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Optimized TSP Delivery Sequence (${d.deliverySequence.length} Shop Stops)',
+          if (isMobile) ...[
+            Row(
+              children: [
+                const Icon(Icons.format_list_numbered_rounded,
+                    color: AppConstants.accentBlue, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'TSP Delivery Sequence (${d.deliverySequence.length} Stops)',
                     style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
                         color: AppConstants.primaryNavy),
                   ),
-                ],
-              ),
-              Text(
-                'Source: ${d.sourceDepot}',
-                style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppConstants.textSecondary),
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Source Depot: ${d.sourceDepot}',
+              style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: AppConstants.textSecondary),
+            ),
+          ] else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.format_list_numbered_rounded,
+                        color: AppConstants.accentBlue, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Optimized TSP Delivery Sequence (${d.deliverySequence.length} Shop Stops)',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppConstants.primaryNavy),
+                    ),
+                  ],
+                ),
+                Text(
+                  'Source: ${d.sourceDepot}',
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppConstants.textSecondary),
+                ),
+              ],
+            ),
+          ],
           const Divider(height: 16),
           ...d.deliverySequence.map((s) {
+            if (isMobile) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppConstants.backgroundLight,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppConstants.cardBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 22,
+                          height: 22,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppConstants.primaryNavy,
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: Text(
+                            '${s.sequenceOrder}',
+                            style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(s.fpsName,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppConstants.textPrimary),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        Text('Drop: ${s.totalDropKg.toStringAsFixed(0)} kg',
+                            style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppConstants.successGreen)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('${s.fpsId} • Leg: ${s.legDistanceKm} km',
+                            style: const TextStyle(
+                                fontSize: 10,
+                                color: AppConstants.textSecondary)),
+                        Text('ETA: ${s.estimatedArrivalWindow}',
+                            style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppConstants.accentBlue)),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }
+
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2286,7 +2639,25 @@ class _DispatchOptimizationDialogState
     );
   }
 
-  Widget _buildFooter(BuildContext context) {
+  Widget _buildFooter(BuildContext context, bool isMobile) {
+    if (isMobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Notice: DEMO DATA — NOT GOVERNMENT DATA (DISPATCH OPTIMIZATION ENGINE)',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 9, color: AppConstants.textTertiary),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      );
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [

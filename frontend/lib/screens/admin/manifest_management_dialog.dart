@@ -371,16 +371,17 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
-    final dialogWidth = (screenSize.width * 0.95).clamp(340.0, 1180.0);
+    final isMobile = screenSize.width < 768;
+    final dialogWidth = (screenSize.width * (isMobile ? 0.98 : 0.95)).clamp(340.0, 1180.0);
     final dialogHeight = (screenSize.height * 0.92).clamp(480.0, 880.0);
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16, vertical: isMobile ? 8 : 12),
       child: Container(
         width: dialogWidth,
         height: dialogHeight,
-        padding: const EdgeInsets.all(22),
+        padding: EdgeInsets.all(isMobile ? 12 : 22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -415,64 +416,75 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
   Widget _buildHeader(BuildContext context) {
     final isLocked = _manifest?.isLocked ?? false;
     final ver = _manifest?.version ?? 'v1.0';
+    final isMobile = MediaQuery.of(context).size.width < 768;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isLocked
-                    ? AppConstants.successGreen.withValues(alpha: 0.12)
-                    : AppConstants.accentAmber.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
+        Expanded(
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(isMobile ? 8 : 10),
+                decoration: BoxDecoration(
+                  color: isLocked
+                      ? AppConstants.successGreen.withValues(alpha: 0.12)
+                      : AppConstants.accentAmber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isLocked ? Icons.verified_rounded : Icons.description_rounded,
+                  color: isLocked ? AppConstants.successGreen : AppConstants.accentAmber,
+                  size: isMobile ? 20 : 24,
+                ),
               ),
-              child: Icon(
-                isLocked ? Icons.verified_rounded : Icons.description_rounded,
-                color: isLocked ? AppConstants.successGreen : AppConstants.accentAmber,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+              SizedBox(width: isMobile ? 8 : 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'PDS Pre-Dispatch Manifest & Auditable Lock',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppConstants.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: isLocked ? AppConstants.successGreen : AppConstants.accentAmber,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        isLocked ? 'LOCKED ($ver)' : 'DRAFT ($ver)',
-                        style: const TextStyle(
-                            fontSize: 10,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          isMobile ? 'Dispatch Manifest' : 'PDS Pre-Dispatch Manifest & Auditable Lock',
+                          style: TextStyle(
+                            fontSize: isMobile ? 14 : 18,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white),
-                      ),
+                            color: AppConstants.textPrimary,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isLocked ? AppConstants.successGreen : AppConstants.accentAmber,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            isLocked ? 'LOCKED ($ver)' : 'DRAFT ($ver)',
+                            style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isMobile
+                          ? 'Forecast → Constraints → LOCKED MANIFEST'
+                          : 'End-to-End Workflow: Forecast → Recommended Quantity → 9 Constraints → Optimization → LOCKED MANIFEST',
+                      style: const TextStyle(fontSize: 10.5, color: AppConstants.textSecondary),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
-                const Text(
-                  'End-to-End Workflow: Forecast → Recommended Quantity → 9 Constraints → Optimization → LOCKED MANIFEST',
-                  style: TextStyle(fontSize: 11, color: AppConstants.textSecondary),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
         IconButton(
           onPressed: () => Navigator.of(context).pop(),
@@ -565,52 +577,56 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppConstants.primaryNavy.withValues(alpha: 0.2)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: steps.map((s) {
-          final isDone = s['state'] == 'COMPLETED';
-          final isLock = s['state'] == 'LOCKED';
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: steps.map((s) {
+            final isDone = s['state'] == 'COMPLETED';
+            final isLock = s['state'] == 'LOCKED';
 
-          return Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: isLock
-                      ? AppConstants.successGreen
-                      : (isDone ? AppConstants.primaryNavy : AppConstants.accentAmber),
-                  shape: BoxShape.circle,
+            return Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isLock
+                        ? AppConstants.successGreen
+                        : (isDone ? AppConstants.primaryNavy : AppConstants.accentAmber),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isLock ? Icons.lock_rounded : (isDone ? Icons.check : Icons.edit),
+                    color: Colors.white,
+                    size: 12,
+                  ),
                 ),
-                child: Icon(
-                  isLock ? Icons.lock_rounded : (isDone ? Icons.check : Icons.edit),
-                  color: Colors.white,
-                  size: 12,
+                const SizedBox(width: 6),
+                Text(
+                  s['title']!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isLock || isDone ? FontWeight.bold : FontWeight.w600,
+                    color: isLock
+                        ? AppConstants.successGreen
+                        : (isDone ? AppConstants.primaryNavy : AppConstants.textSecondary),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                s['title']!,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: isLock || isDone ? FontWeight.bold : FontWeight.w600,
-                  color: isLock
-                      ? AppConstants.successGreen
-                      : (isDone ? AppConstants.primaryNavy : AppConstants.textSecondary),
-                ),
-              ),
-              if (s != steps.last)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10),
-                  child: Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Colors.grey),
-                ),
-            ],
-          );
-        }).toList(),
+                if (s != steps.last)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    child: Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Colors.grey),
+                  ),
+              ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 
   Widget _buildCorridorSelectorBar() {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
@@ -618,54 +634,103 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppConstants.cardBorder),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text(
-            'SELECT CORRIDOR MANIFEST:',
-            style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppConstants.textSecondary),
-          ),
-          Row(
-            children: _corridors.map((c) {
-              final isSelected = c['truck_id'] == _selectedTruckId;
-              return Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: ElevatedButton(
-                  onPressed: () => _loadManifest(truckId: c['truck_id']),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isSelected
-                        ? AppConstants.primaryNavy
-                        : Colors.grey.shade200,
-                    foregroundColor:
-                        isSelected ? Colors.white : AppConstants.textPrimary,
-                    elevation: isSelected ? 2 : 0,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6)),
-                  ),
-                  child: Text(
-                    c['label']!,
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.w500),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'SELECT CORRIDOR MANIFEST:',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppConstants.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _corridors.map((c) {
+                      final isSelected = c['truck_id'] == _selectedTruckId;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ElevatedButton(
+                          onPressed: () => _loadManifest(truckId: c['truck_id']),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isSelected
+                                ? AppConstants.primaryNavy
+                                : Colors.grey.shade200,
+                            foregroundColor:
+                                isSelected ? Colors.white : AppConstants.textPrimary,
+                            elevation: isSelected ? 2 : 0,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6)),
+                          ),
+                          child: Text(
+                            c['label']!,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight:
+                                    isSelected ? FontWeight.bold : FontWeight.w500),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'SELECT CORRIDOR MANIFEST:',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppConstants.textSecondary),
+                ),
+                Row(
+                  children: _corridors.map((c) {
+                    final isSelected = c['truck_id'] == _selectedTruckId;
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: ElevatedButton(
+                        onPressed: () => _loadManifest(truckId: c['truck_id']),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isSelected
+                              ? AppConstants.primaryNavy
+                              : Colors.grey.shade200,
+                          foregroundColor:
+                              isSelected ? Colors.white : AppConstants.textPrimary,
+                          elevation: isSelected ? 2 : 0,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6)),
+                        ),
+                        child: Text(
+                          c['label']!,
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight:
+                                  isSelected ? FontWeight.bold : FontWeight.w500),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
     );
   }
 
   Widget _buildManifestOfficialHeader(DispatchManifestDossier m) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -674,86 +739,173 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.account_balance_rounded,
-                          color: AppConstants.primaryNavy, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'GOVERNMENT OF KARNATAKA • FOOD & CIVIL SUPPLIES',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                            color: AppConstants.primaryNavy.withValues(alpha: 0.8)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Pre-Dispatch Logistics Manifest: ${m.manifestId}',
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        color: AppConstants.primaryNavy),
-                  ),
-                ],
-              ),
-              // Digital Seal / QR Representation
-              if (m.isLocked && m.digitalSealHash != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppConstants.successGreen.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppConstants.successGreen),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.verified_rounded,
-                              size: 14, color: AppConstants.successGreen),
-                          SizedBox(width: 4),
-                          Text('CRYPTOGRAPHIC DIGITAL SEAL',
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppConstants.successGreen)),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        m.digitalSealHash!,
-                        style: const TextStyle(
-                            fontFamily: 'Courier',
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: AppConstants.primaryNavy),
-                      ),
-                    ],
+          if (isMobile) ...[
+            Row(
+              children: [
+                const Icon(Icons.account_balance_rounded,
+                    color: AppConstants.primaryNavy, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'GOVERNMENT OF KARNATAKA • FOOD & CIVIL SUPPLIES',
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        color: AppConstants.primaryNavy.withValues(alpha: 0.8)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Pre-Dispatch Logistics Manifest: ${m.manifestId}',
+              style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: AppConstants.primaryNavy),
+            ),
+            if (m.isLocked && m.digitalSealHash != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppConstants.successGreen.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppConstants.successGreen),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.verified_rounded,
+                        size: 14, color: AppConstants.successGreen),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('CRYPTOGRAPHIC DIGITAL SEAL',
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppConstants.successGreen)),
+                          Text(
+                            m.digitalSealHash!,
+                            style: const TextStyle(
+                                fontFamily: 'Courier',
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: AppConstants.primaryNavy),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
-          ),
+          ] else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.account_balance_rounded,
+                            color: AppConstants.primaryNavy, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'GOVERNMENT OF KARNATAKA • FOOD & CIVIL SUPPLIES',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                              color: AppConstants.primaryNavy.withValues(alpha: 0.8)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Pre-Dispatch Logistics Manifest: ${m.manifestId}',
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: AppConstants.primaryNavy),
+                    ),
+                  ],
+                ),
+                // Digital Seal / QR Representation
+                if (m.isLocked && m.digitalSealHash != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppConstants.successGreen.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppConstants.successGreen),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.verified_rounded,
+                                size: 14, color: AppConstants.successGreen),
+                            SizedBox(width: 4),
+                            Text('CRYPTOGRAPHIC DIGITAL SEAL',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppConstants.successGreen)),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          m.digitalSealHash!,
+                          style: const TextStyle(
+                              fontFamily: 'Courier',
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: AppConstants.primaryNavy),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           const Divider(height: 18),
           // 4 Metadata KPI Badges
-          Row(
-            children: [
-              _buildMetaTile('SOURCE DEPOT', m.sourceDepotName, Icons.warehouse_rounded),
-              _buildMetaTile('ASSIGNED CARRIER', '${m.truckModel} (${m.truckId})', Icons.local_shipping_rounded),
-              _buildMetaTile('DRIVER', '${m.driverName} (${m.driverPhone})', Icons.badge_rounded),
-              _buildMetaTile('TOTAL PAYLOAD', '${m.totalQuantityKg.toStringAsFixed(0)} kg (${m.payloadUtilizationPct}% Utilization)', Icons.scale_rounded),
-            ],
-          ),
+          if (isMobile)
+            Column(
+              children: [
+                Row(
+                  children: [
+                    _buildMetaTile('SOURCE DEPOT', m.sourceDepotName, Icons.warehouse_rounded),
+                    _buildMetaTile('CARRIER', '${m.truckModel} (${m.truckId})', Icons.local_shipping_rounded),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _buildMetaTile('DRIVER', '${m.driverName} (${m.driverPhone})', Icons.badge_rounded),
+                    _buildMetaTile('PAYLOAD', '${m.totalQuantityKg.toStringAsFixed(0)} kg (${m.payloadUtilizationPct}%)', Icons.scale_rounded),
+                  ],
+                ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                _buildMetaTile('SOURCE DEPOT', m.sourceDepotName, Icons.warehouse_rounded),
+                _buildMetaTile('ASSIGNED CARRIER', '${m.truckModel} (${m.truckId})', Icons.local_shipping_rounded),
+                _buildMetaTile('DRIVER', '${m.driverName} (${m.driverPhone})', Icons.badge_rounded),
+                _buildMetaTile('TOTAL PAYLOAD', '${m.totalQuantityKg.toStringAsFixed(0)} kg (${m.payloadUtilizationPct}% Utilization)', Icons.scale_rounded),
+              ],
+            ),
         ],
       ),
     );
@@ -800,9 +952,10 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
 
   Widget _buildCriticalParametersCard(DispatchManifestDossier m) {
     final isLocked = m.isLocked;
+    final isMobile = MediaQuery.of(context).size.width < 768;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -812,222 +965,312 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    isLocked ? Icons.lock_outline_rounded : Icons.edit_note_rounded,
-                    color: isLocked ? AppConstants.successGreen : AppConstants.accentAmber,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    isLocked
-                        ? 'Manifest Status: LOCKED & IMMUTABLE (Version ${m.version})'
-                        : 'Manifest Status: DRAFT & EDITABLE (Version ${m.version})',
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: isLocked ? AppConstants.successGreen : AppConstants.accentAmber),
-                  ),
-                ],
-              ),
-              if (isLocked)
-                ElevatedButton.icon(
-                  onPressed: _isActionExecuting ? null : _createRevision,
-                  icon: const Icon(Icons.edit_note_rounded, size: 14),
-                  label: const Text('Create Revision',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppConstants.accentAmber,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                )
-              else
+          if (isMobile)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Row(
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: _isActionExecuting ? null : _saveDraftModifications,
-                      icon: const Icon(Icons.save_outlined, size: 14),
-                      label: const Text('Save Draft Changes',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppConstants.primaryNavy,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
+                    Icon(
+                      isLocked ? Icons.lock_outline_rounded : Icons.edit_note_rounded,
+                      color: isLocked ? AppConstants.successGreen : AppConstants.accentAmber,
+                      size: 18,
                     ),
                     const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _isActionExecuting ? null : _lockManifest,
-                      icon: const Icon(Icons.lock_rounded, size: 14),
-                      label: const Text('Approve & Lock Manifest',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppConstants.primaryNavy,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    Expanded(
+                      child: Text(
+                        isLocked
+                            ? 'Status: LOCKED & IMMUTABLE (Ver ${m.version})'
+                            : 'Status: DRAFT & EDITABLE (Ver ${m.version})',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isLocked ? AppConstants.successGreen : AppConstants.accentAmber),
                       ),
                     ),
                   ],
                 ),
-            ],
-          ),
+                const SizedBox(height: 10),
+                if (isLocked)
+                  ElevatedButton.icon(
+                    onPressed: _isActionExecuting ? null : _createRevision,
+                    icon: const Icon(Icons.edit_note_rounded, size: 14),
+                    label: const Text('Create Revision',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppConstants.accentAmber,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isActionExecuting ? null : _saveDraftModifications,
+                          icon: const Icon(Icons.save_outlined, size: 14),
+                          label: const Text('Save Draft',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppConstants.primaryNavy,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isActionExecuting ? null : _lockManifest,
+                          icon: const Icon(Icons.lock_rounded, size: 14),
+                          label: const Text('Lock Manifest',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppConstants.primaryNavy,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            )
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      isLocked ? Icons.lock_outline_rounded : Icons.edit_note_rounded,
+                      color: isLocked ? AppConstants.successGreen : AppConstants.accentAmber,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isLocked
+                          ? 'Manifest Status: LOCKED & IMMUTABLE (Version ${m.version})'
+                          : 'Manifest Status: DRAFT & EDITABLE (Version ${m.version})',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: isLocked ? AppConstants.successGreen : AppConstants.accentAmber),
+                    ),
+                  ],
+                ),
+                if (isLocked)
+                  ElevatedButton.icon(
+                    onPressed: _isActionExecuting ? null : _createRevision,
+                    icon: const Icon(Icons.edit_note_rounded, size: 14),
+                    label: const Text('Create Revision',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppConstants.accentAmber,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  )
+                else
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _isActionExecuting ? null : _saveDraftModifications,
+                        icon: const Icon(Icons.save_outlined, size: 14),
+                        label: const Text('Save Draft Changes',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppConstants.primaryNavy,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: _isActionExecuting ? null : _lockManifest,
+                        icon: const Icon(Icons.lock_rounded, size: 14),
+                        label: const Text('Approve & Lock Manifest',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppConstants.primaryNavy,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           const Divider(height: 16),
           // Form Controls (Editable in DRAFT / Disabled in LOCKED)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Quantity Slider / Field
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Total Dispatch Quantity',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        Text('${_editableQuantityKg.toStringAsFixed(0)} kg',
-                            style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                color: AppConstants.primaryNavy)),
-                      ],
-                    ),
-                    Slider(
-                      value: _editableQuantityKg.clamp(1000.0, 10000.0),
-                      min: 1000.0,
-                      max: 10000.0,
-                      divisions: 18,
-                      activeColor: isLocked ? Colors.grey : AppConstants.accentBlue,
-                      onChanged: isLocked
-                          ? null
-                          : (val) => setState(() => _editableQuantityKg = val),
-                    ),
-                    Text(
-                      'Rice: ${(_editableQuantityKg * 0.65).toStringAsFixed(0)} kg • Wheat: ${(_editableQuantityKg * 0.35).toStringAsFixed(0)} kg',
-                      style: const TextStyle(fontSize: 10, color: AppConstants.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // 2. Assigned Carrier Dropdown
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Assigned Fleet Carrier',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String>(
-                      initialValue: _editableTruckId,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        enabled: !isLocked,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'DEMO-KA-04-E-1021',
-                            child: Text('Eicher Pro 10 MT (KA-04-E-1021)',
-                                style: TextStyle(fontSize: 11))),
-                        DropdownMenuItem(
-                            value: 'DEMO-KA-04-E-1022',
-                            child: Text('Tata Ultra 10 MT (KA-04-E-1022)',
-                                style: TextStyle(fontSize: 11))),
-                        DropdownMenuItem(
-                            value: 'DEMO-KA-51-M-3419',
-                            child: Text('BharatBenz 10 MT (KA-51-M-3419)',
-                                style: TextStyle(fontSize: 11))),
-                      ],
-                      onChanged: isLocked ? null : (val) => setState(() => _editableTruckId = val!),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // 3. Route Corridor Type Dropdown
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Route Corridor Path',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String>(
-                      initialValue: _editableRouteType,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        enabled: !isLocked,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'EXPRESS_CORRIDOR',
-                            child: Text('Expressway / Ring Road Tour',
-                                style: TextStyle(fontSize: 11))),
-                        DropdownMenuItem(
-                            value: 'DIRECT_ARTERIAL',
-                            child: Text('Direct Urban Arterial Route',
-                                style: TextStyle(fontSize: 11))),
-                        DropdownMenuItem(
-                            value: 'STAGGERED_PARALLEL',
-                            child: Text('Staggered Split Corridor',
-                                style: TextStyle(fontSize: 11))),
-                      ],
-                      onChanged: isLocked ? null : (val) => setState(() => _editableRouteType = val!),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // 4. Departure Window
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Departure Time Window',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String>(
-                      initialValue: _editableDepartureWindow,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        enabled: !isLocked,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                            value: '07:30 AM (Early Priority)',
-                            child: Text('07:30 AM (Early Priority)',
-                                style: TextStyle(fontSize: 11))),
-                        DropdownMenuItem(
-                            value: '08:30 AM (Morning Slot)',
-                            child: Text('08:30 AM (Morning Slot)',
-                                style: TextStyle(fontSize: 11))),
-                        DropdownMenuItem(
-                            value: '09:15 AM (Mid-Morning)',
-                            child: Text('09:15 AM (Mid-Morning)',
-                                style: TextStyle(fontSize: 11))),
-                      ],
-                      onChanged: isLocked
-                          ? null
-                          : (val) => setState(() => _editableDepartureWindow = val!),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          if (isMobile)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildQuantityControl(isLocked),
+                const SizedBox(height: 14),
+                _buildCarrierControl(isLocked),
+                const SizedBox(height: 14),
+                _buildRouteControl(isLocked),
+                const SizedBox(height: 14),
+                _buildDepartureControl(isLocked),
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _buildQuantityControl(isLocked)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildCarrierControl(isLocked)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildRouteControl(isLocked)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildDepartureControl(isLocked)),
+              ],
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _buildQuantityControl(bool isLocked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Total Dispatch Quantity',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            Text('${_editableQuantityKg.toStringAsFixed(0)} kg',
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: AppConstants.primaryNavy)),
+          ],
+        ),
+        Slider(
+          value: _editableQuantityKg.clamp(1000.0, 10000.0),
+          min: 1000.0,
+          max: 10000.0,
+          divisions: 18,
+          activeColor: isLocked ? Colors.grey : AppConstants.accentBlue,
+          onChanged: isLocked
+              ? null
+              : (val) => setState(() => _editableQuantityKg = val),
+        ),
+        Text(
+          'Rice: ${(_editableQuantityKg * 0.65).toStringAsFixed(0)} kg • Wheat: ${(_editableQuantityKg * 0.35).toStringAsFixed(0)} kg',
+          style: const TextStyle(fontSize: 10, color: AppConstants.textSecondary),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCarrierControl(bool isLocked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Assigned Fleet Carrier',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          initialValue: _editableTruckId,
+          decoration: InputDecoration(
+            isDense: true,
+            enabled: !isLocked,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+          ),
+          items: const [
+            DropdownMenuItem(
+                value: 'DEMO-KA-04-E-1021',
+                child: Text('Eicher Pro 10 MT (KA-04-E-1021)',
+                    style: TextStyle(fontSize: 11))),
+            DropdownMenuItem(
+                value: 'DEMO-KA-04-E-1022',
+                child: Text('Tata Ultra 10 MT (KA-04-E-1022)',
+                    style: TextStyle(fontSize: 11))),
+            DropdownMenuItem(
+                value: 'DEMO-KA-51-M-3419',
+                child: Text('BharatBenz 10 MT (KA-51-M-3419)',
+                    style: TextStyle(fontSize: 11))),
+          ],
+          onChanged: isLocked ? null : (val) => setState(() => _editableTruckId = val!),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRouteControl(bool isLocked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Route Corridor Path',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          initialValue: _editableRouteType,
+          decoration: InputDecoration(
+            isDense: true,
+            enabled: !isLocked,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+          ),
+          items: const [
+            DropdownMenuItem(
+                value: 'EXPRESS_CORRIDOR',
+                child: Text('Expressway / Ring Road Tour',
+                    style: TextStyle(fontSize: 11))),
+            DropdownMenuItem(
+                value: 'DIRECT_ARTERIAL',
+                child: Text('Direct Urban Arterial Route',
+                    style: TextStyle(fontSize: 11))),
+            DropdownMenuItem(
+                value: 'STAGGERED_PARALLEL',
+                child: Text('Staggered Split Corridor',
+                    style: TextStyle(fontSize: 11))),
+          ],
+          onChanged: isLocked ? null : (val) => setState(() => _editableRouteType = val!),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDepartureControl(bool isLocked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Departure Time Window',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          initialValue: _editableDepartureWindow,
+          decoration: InputDecoration(
+            isDense: true,
+            enabled: !isLocked,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+          ),
+          items: const [
+            DropdownMenuItem(
+                value: '07:30 AM (Early Priority)',
+                child: Text('07:30 AM (Early Priority)',
+                    style: TextStyle(fontSize: 11))),
+            DropdownMenuItem(
+                value: '08:30 AM (Morning Slot)',
+                child: Text('08:30 AM (Morning Slot)',
+                    style: TextStyle(fontSize: 11))),
+            DropdownMenuItem(
+                value: '09:15 AM (Mid-Morning)',
+                child: Text('09:15 AM (Mid-Morning)',
+                    style: TextStyle(fontSize: 11))),
+          ],
+          onChanged: isLocked
+              ? null
+              : (val) => setState(() => _editableDepartureWindow = val!),
+        ),
+      ],
     );
   }
 
@@ -1056,10 +1299,14 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header ──────────────────────────────────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(7),
@@ -1082,7 +1329,7 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
                             color: AppConstants.primaryNavy),
                       ),
                       Text(
-                        'Vehicle: ${m.truckModel} • ${m.truckId} • ${m.totalStopsCount} delivery stops • ${m.deliverySequence.isNotEmpty ? m.deliverySequence.last.cumulativeDistanceKm.toStringAsFixed(1) : "—"} km total',
+                        'Vehicle: ${m.truckModel} • ${m.truckId} • ${m.totalStopsCount} stops • ${m.deliverySequence.isNotEmpty ? m.deliverySequence.last.cumulativeDistanceKm.toStringAsFixed(1) : "—"} km',
                         style: const TextStyle(
                             fontSize: 10.5, color: AppConstants.textSecondary),
                       ),
@@ -1154,26 +1401,29 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
           const SizedBox(height: 12),
 
           // ── Legend Row ──────────────────────────────────────────────────────
-          Row(
-            children: [
-              _buildMapLegendItem(
-                  const Color(0xFF1A3A6B), Icons.warehouse_rounded, 'Source Depot'),
-              const SizedBox(width: 16),
-              _buildMapLegendItem(
-                  AppConstants.purpleAccent, Icons.store_rounded, 'FPS Delivery Stop'),
-              const SizedBox(width: 16),
-              _buildMapLegendItem(
-                  AppConstants.accentAmber, Icons.local_shipping_rounded, 'Truck (In Transit)'),
-              const SizedBox(width: 16),
-              _buildMapLegendItem(
-                  AppConstants.accentBlue, Icons.timeline_rounded, 'Optimized Route Path'),
-              const Spacer(),
-              Text(
-                'Departure: ${m.departureWindow}  •  Route: ${m.routeType.replaceAll("_", " ")}',
-                style: const TextStyle(
-                    fontSize: 10, color: AppConstants.textSecondary),
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildMapLegendItem(
+                    const Color(0xFF1A3A6B), Icons.warehouse_rounded, 'Source Depot'),
+                const SizedBox(width: 14),
+                _buildMapLegendItem(
+                    AppConstants.purpleAccent, Icons.store_rounded, 'FPS Delivery Stop'),
+                const SizedBox(width: 14),
+                _buildMapLegendItem(
+                    AppConstants.accentAmber, Icons.local_shipping_rounded, 'Truck (In Transit)'),
+                const SizedBox(width: 14),
+                _buildMapLegendItem(
+                    AppConstants.accentBlue, Icons.timeline_rounded, 'Optimized Route Path'),
+                const SizedBox(width: 14),
+                Text(
+                  '• Dep: ${m.departureWindow} • ${m.routeType.replaceAll("_", " ")}',
+                  style: const TextStyle(
+                      fontSize: 10, color: AppConstants.textSecondary),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1196,8 +1446,10 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
   }
 
   Widget _buildDeliverySequenceSection(DispatchManifestDossier m) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -1206,10 +1458,14 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.route_rounded,
                       color: AppConstants.purpleAccent, size: 18),
@@ -1234,6 +1490,60 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
           ),
           const Divider(height: 16),
           ...m.deliverySequence.map((s) {
+            if (isMobile) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppConstants.backgroundLight,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppConstants.cardBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 10,
+                          backgroundColor: AppConstants.primaryNavy,
+                          child: Text('${s.sequenceOrder}',
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text('${s.fpsName} (${s.fpsId})',
+                              style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppConstants.textPrimary)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('ETA: ${s.estimatedArrivalWindow}',
+                            style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppConstants.accentBlue)),
+                        Text(
+                            '${s.totalDropKg.toStringAsFixed(0)} kg (R:${s.riceKg.toStringAsFixed(0)} / W:${s.wheatKg.toStringAsFixed(0)})',
+                            style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: AppConstants.successGreen)),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }
             return Container(
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1358,8 +1668,11 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 2,
                           children: [
                             Text(
                               '${a.action} (${a.version}) • ${a.actorName}',
@@ -1406,13 +1719,35 @@ class _ManifestManagementDialogState extends State<ManifestManagementDialog> {
   }
 
   Widget _buildFooter(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    if (isMobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'NATIONAL FOOD SECURITY ACT (NFSA) • OFFICIAL DISPATCH MANIFEST SYSTEM',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 10, color: AppConstants.textTertiary),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      );
+    }
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Text(
-          'NATIONAL FOOD SECURITY ACT (NFSA) • OFFICIAL DISPATCH MANIFEST SYSTEM',
-          style: TextStyle(fontSize: 10, color: AppConstants.textTertiary),
+        const Expanded(
+          child: Text(
+            'NATIONAL FOOD SECURITY ACT (NFSA) • OFFICIAL DISPATCH MANIFEST SYSTEM',
+            style: TextStyle(fontSize: 10, color: AppConstants.textTertiary),
+          ),
         ),
+        const SizedBox(width: 16),
         ElevatedButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),
