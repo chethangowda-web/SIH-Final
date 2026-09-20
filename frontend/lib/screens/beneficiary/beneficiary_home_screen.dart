@@ -744,10 +744,18 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
   // -------------------------------------------------------------
   // SIMPLE BENEFICIARY ENTITLEMENT CARD (PREDOMINANTLY WHITE THEME)
   // -------------------------------------------------------------
+  // -------------------------------------------------------------
+  // SIMPLE BENEFICIARY ENTITLEMENT CARD (PREDOMINANTLY WHITE THEME)
+  // -------------------------------------------------------------
   Widget _buildSimpleEntitlementCard() {
     final isHindi = VoiceAssistantService.instance.isHindi;
     final isKannada = VoiceAssistantService.instance.isKannada;
     final isElderly = VoiceAssistantService.instance.isElderlyMode;
+
+    final homeFpsName = _beneficiary?.registeredFpsName ?? 'Malleshwaram Seva Kendra';
+    final activeFpsName = _deliveryRecords.isNotEmpty
+        ? (_deliveryRecords.first.intendedFpsName ?? _deliveryRecords.first.registeredFpsName ?? homeFpsName)
+        : (_activeIntents.isNotEmpty ? _activeIntents.first.intendedFpsName : homeFpsName);
 
     final riceTotal = _entitlement != null ? _entitlement!.statutoryEntitlementRiceKg : (_eligibleMembersCount * 4.0);
     final wheatTotal = _entitlement != null ? _entitlement!.statutoryEntitlementWheatKg : (_eligibleMembersCount * 1.0);
@@ -755,9 +763,13 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         ? _entitlement!.totalEligibleBalanceKg
         : (riceTotal + wheatTotal);
 
+    final hasCompletedDelivery = _deliveryRecords.any((r) => r.deliveryStatus == 'DELIVERY_CONFIRMED' || r.citizenConfirmedAt != null);
+    final hasPlanLocked = _entitlement?.rationReceivedForCycle == true || _userSubmittedChoice || _activeIntents.isNotEmpty || hasCompletedDelivery;
+    final isReceived = _entitlement?.rationReceivedForCycle == true || hasCompletedDelivery;
+
     return Container(
       key: const ValueKey('card_simple_entitlement'),
-      padding: EdgeInsets.all(isElderly ? 18 : 16),
+      padding: EdgeInsets.all(isElderly ? 20 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(isElderly ? 18 : 14),
@@ -775,30 +787,48 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Text('🌾', style: TextStyle(fontSize: 22)),
-                  const SizedBox(width: 8),
-                  Text(
-                    isHindi
-                        ? 'आपका मासिक राशन'
-                        : isKannada
-                            ? 'ನಿಮ್ಮ ಮಾಸಿಕ ಪಡಿತರ'
-                            : 'Your Monthly Ration',
-                    style: TextStyle(
-                      fontSize: isElderly ? 17 : 14.5,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF0F2942),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('🌾', style: TextStyle(fontSize: 22)),
+                        const SizedBox(width: 8),
+                        Text(
+                          isHindi
+                              ? 'आपका मासिक राशन'
+                              : isKannada
+                                  ? 'ನಿಮ್ಮ ಮಾಸಿಕ ಪಡಿತರ'
+                                  : 'Your Monthly Ration',
+                          style: TextStyle(
+                            fontSize: isElderly ? 18 : 16,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF0F2942),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 3),
+                    Text(
+                      tr('entitlement.family_title'),
+                      style: TextStyle(
+                        fontSize: isElderly ? 13 : 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFFDCFCE7),
                   borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFBBF7D0)),
                 ),
                 child: Text(
                   isHindi ? '₹0 मुफ्त कोटा' : isKannada ? '₹0 ಉಚಿತ' : '100% Free (NFSA)',
@@ -895,14 +925,68 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            isHindi
-                ? 'कुल कोटा: ${totalEntitlementKg.toStringAsFixed(0)} किलो • ${_eligibleMembersCount} सदस्य पंजीकृत'
-                : isKannada
-                    ? 'ಒಟ್ಟು ಕೋಟಾ: ${totalEntitlementKg.toStringAsFixed(0)} ಕೆಜಿ • ${_eligibleMembersCount} ಸದಸ್ಯರು'
-                    : 'Total Entitlement: ${totalEntitlementKg.toStringAsFixed(0)} kg • ${_eligibleMembersCount} family members',
-            style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                isHindi
+                    ? 'कुल कोटा: ${totalEntitlementKg.toStringAsFixed(0)} किलो • ${_eligibleMembersCount} सदस्य पंजीकृत'
+                    : isKannada
+                        ? 'ಒಟ್ಟು ಕೋಟಾ: ${totalEntitlementKg.toStringAsFixed(0)} ಕೆಜಿ • ${_eligibleMembersCount} ಸದಸ್ಯರು'
+                        : 'Total Entitlement: ${totalEntitlementKg.toStringAsFixed(0)} kg • ${_eligibleMembersCount} family members',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Integrated Citizen Action / Reassurance Button
+          ElevatedButton(
+            onPressed: () {
+              if (isReceived) {
+                VoiceAssistantService.instance.guideCycleAlreadyReceived();
+              } else if (hasPlanLocked) {
+                _showFpsRouteTrackingModal(activeFpsName ?? homeFpsName);
+              } else {
+                _navigateToIntentSelection();
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isReceived
+                  ? const Color(0xFF15803D)
+                  : hasPlanLocked
+                      ? const Color(0xFF0F2942)
+                      : const Color(0xFF15803D),
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(vertical: isElderly ? 16 : 13),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0.5,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  isReceived
+                      ? Icons.check_circle_rounded
+                      : hasPlanLocked
+                          ? Icons.lock_outline_rounded
+                          : Icons.how_to_reg_rounded,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  isReceived
+                      ? (isHindi ? '✓ राशन मिल चुका है' : isKannada ? '✓ ಪಡಿತರ ಸ್ವೀಕರಿಸಲಾಗಿದೆ' : '✓ Ration Received')
+                      : hasPlanLocked
+                          ? (isHindi ? '🔒 पसंद दर्ज है ($activeFpsName) • विवरण देखें' : isKannada ? '🔒 ಆಯ್ಕೆ ದಾಖಲಾಗಿದೆ ($activeFpsName) • ವಿವರ ನೋಡಿ' : '🔒 Request Locked • $activeFpsName')
+                          : tr('simple.btn_select_choice'),
+                  style: TextStyle(
+                    fontSize: isElderly ? 16 : 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1042,8 +1126,9 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                               children: [
                                 // Persistent Voice Assistant Spoken Instruction Banner (with Repeat button)
                                 const VoiceAssistantBanner(),
+                                const SizedBox(height: AppConstants.space16),
 
-                                // 1. Clean Simple Entitlement Summary (चावल 15kg, गेहूं 5kg)
+                                // 1. Clean Simple Entitlement Summary (चावल 15kg, गेहूं 5kg) & Plan Status
                                 _buildSimpleEntitlementCard(),
                                 const SizedBox(height: AppConstants.space16),
 
@@ -1051,23 +1136,22 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
                                 _buildPlanningCycleBanner(),
                                 const SizedBox(height: AppConstants.space16),
 
-                                // 3. THE 4 HERO BENEFICIARY ACTION CARDS (ACCESSIBLE & VISUAL UX)
-                                _buildFourHeroCardsSection(),
-                                const SizedBox(height: AppConstants.space20),
-
-                                // 4. Current Request / Delivery Status (5-Stage Timeline)
+                                // 3. Current Request / Delivery Status (5-Stage Timeline & Delay Alerts)
                                 if (_deliveryRecords.isNotEmpty) ...[
                                   _buildCurrentDeliveryStatusSection(),
-                                  const SizedBox(height: AppConstants.space20),
+                                  const SizedBox(height: AppConstants.space16),
                                 ],
 
-                                // 5. Eligible Household Members Selector (5 kg per person)
-                                _buildHouseholdMembersSelectorCard(),
+                                // 4. THE 4 HERO BENEFICIARY ACTION CARDS (ACCESSIBLE & VISUAL 2x2 UX)
+                                _buildFourHeroCardsSection(),
                                 const SizedBox(height: AppConstants.space16),
 
-                                // 6. Plan Your Upcoming Collection (Two Large Service Cards)
+                                // 5. Plan Your Upcoming Collection (Only shown if choice not yet submitted)
                                 _buildPlanCollectionSection(),
-                                const SizedBox(height: AppConstants.space20),
+
+                                // 6. Eligible Household Members Selector (5 kg per person statutory quota)
+                                _buildHouseholdMembersSelectorCard(),
+                                const SizedBox(height: AppConstants.space16),
 
                                 // 7. Recent Distribution History (Compact list rows)
                                 _buildRecentDistributionHistorySection(),
@@ -1112,14 +1196,6 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
         ? (_deliveryRecords.first.intendedFpsName ?? _deliveryRecords.first.registeredFpsName ?? homeFpsName)
         : (_activeIntents.isNotEmpty ? _activeIntents.first.intendedFpsName : homeFpsName);
 
-    final totalEligible = _entitlement?.totalEligibleBalanceKg ?? (_eligibleMembersCount * 5.0);
-    final riceTotal = _entitlement != null && _entitlement!.statutoryEntitlementRiceKg > 0
-        ? _entitlement!.statutoryEntitlementRiceKg
-        : (_eligibleMembersCount * 4.0);
-    final wheatTotal = _entitlement != null && _entitlement!.statutoryEntitlementWheatKg > 0
-        ? _entitlement!.statutoryEntitlementWheatKg
-        : (_eligibleMembersCount * 1.0);
-
     final hasCompletedDelivery = _deliveryRecords.any((r) => r.deliveryStatus == 'DELIVERY_CONFIRMED' || r.citizenConfirmedAt != null);
     final hasPlanLocked = _entitlement?.rationReceivedForCycle == true || _userSubmittedChoice || _activeIntents.isNotEmpty || hasCompletedDelivery;
     final isReceived = _entitlement?.rationReceivedForCycle == true || hasCompletedDelivery;
@@ -1144,233 +1220,224 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
       activeStepIndex = 2;
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // CARD 1: MY ENTITLEMENT (आपके परिवार का राशन हक)
-        _buildHeroActionCard(
-          key: const ValueKey('card_hero_my_ration'),
-          emoji: '🌾',
-          icon: Icons.grain_rounded,
-          iconColor: const Color(0xFF15803D),
-          iconBg: const Color(0xFFDCFCE7),
-          title: tr('entitlement.family_title'),
-          subtitle: isHindi
-              ? '${totalEligible.toStringAsFixed(0)} किलो मासिक राशन (${riceTotal.toStringAsFixed(0)} किलो चावल + ${wheatTotal.toStringAsFixed(0)} किलो गेहूं)'
-              : isKannada
-                  ? '${totalEligible.toStringAsFixed(0)} ಕೆಜಿ ಮಾಸಿಕ ಪಡಿತರ (${riceTotal.toStringAsFixed(0)} ಕೆಜಿ ಅಕ್ಕಿ + ${wheatTotal.toStringAsFixed(0)} ಕೆಜಿ ಗೋಧಿ)'
-                  : '${totalEligible.toStringAsFixed(0)} kg Total (${riceTotal.toStringAsFixed(0)} kg Rice + ${wheatTotal.toStringAsFixed(0)} kg Wheat)',
-          tagText: isHindi ? '₹0 मुफ्त राशन' : isKannada ? '₹0 ಉಚಿತ' : '₹0 Free',
-          tagColor: const Color(0xFF15803D),
-          tagBg: const Color(0xFFDCFCE7),
-          btnLabel: isReceived
-              ? (isHindi ? '✓ राशन मिल चुका है' : isKannada ? '✓ ಪಡಿತರ ಸ್ವೀಕರಿಸಲಾಗಿದೆ' : '✓ Ration Received')
-              : hasPlanLocked
-                  ? (isHindi ? '🔒 पसंद दर्ज हो चुकी है' : isKannada ? '🔒 ಆಯ್ಕೆ ದಾಖಲಾಗಿದೆ' : '🔒 Request Locked')
-                  : tr('simple.btn_select_choice'),
-          btnBg: isReceived
-              ? const Color(0xFF15803D)
-              : hasPlanLocked
-                  ? const Color(0xFF475569)
-                  : const Color(0xFF15803D),
-          onBtnTap: () => _navigateToIntentSelection(),
-          onSpeak: () {
-            if (isReceived) {
-              VoiceAssistantService.instance.guideCycleAlreadyReceived();
-            } else {
-              VoiceAssistantService.instance.guideDemandEntitlement(
-                totalKg: totalEligible,
-                riceKg: riceTotal,
-                wheatKg: wheatTotal,
-                membersCount: _eligibleMembersCount,
-              );
-            }
-          },
-          isElderly: isElderly,
-        ),
-        const SizedBox(height: 14),
+    // 1. MY RATION SHOP (मेरी राशन दुकान)
+    final cardShop = _buildHeroActionCard(
+      key: const ValueKey('card_hero_my_shop'),
+      emoji: '🏪',
+      icon: Icons.storefront_rounded,
+      iconColor: AppConstants.primaryNavy,
+      iconBg: const Color(0xFFEFF6FF),
+      title: isHindi
+          ? 'मेरी राशन दुकान'
+          : isKannada
+              ? 'ನನ್ನ ಪಡಿತರ ಅಂಗಡಿ'
+              : 'My Ration Shop',
+      subtitle: activeFpsName ?? homeFpsName,
+      tagText: isHindi ? '🟢 आज खुली है' : isKannada ? '🟢 ತೆರೆದಿದೆ' : '🟢 Open Today',
+      tagColor: const Color(0xFF15803D),
+      tagBg: const Color(0xFFF0FDF4),
+      subDetail: isHindi
+          ? '📍 0.6 km • 🚶 लगभग 10 मिनट पैदल रास्ता'
+          : isKannada
+              ? '📍 0.6 ಕಿಮೀ • 🚶 ಸುಮಾರು 10 ನಿಮಿಷ'
+              : '📍 0.6 km • 🚶 ~10 mins walking distance',
+      btnLabel: isHindi
+          ? 'दुकान का रास्ता और नक्शा देखें 🗺️'
+          : isKannada
+              ? 'ಅಂಗಡಿ ದಾರಿ ಮತ್ತು ನಕ್ಷೆ ನೋಡಿ 🗺️'
+              : 'View Shop Location & Map 🗺️',
+      btnBg: AppConstants.primaryNavy,
+      onBtnTap: () => _showFpsRouteTrackingModal(activeFpsName ?? homeFpsName),
+      onSpeak: () {
+        VoiceAssistantService.instance.speakLocalized(
+          hiText: 'आपकी राशन दुकान है ${activeFpsName ?? homeFpsName}। दूरी लगभग 600 मीटर है और दुकान आज सुबह 8:30 से दोपहर 1:30 तक खुली है।',
+          knText: 'ನಿಮ್ಮ ಪಡಿತರ ಅಂಗಡಿ ${activeFpsName ?? homeFpsName}. ದೂರ ಸುಮಾರು 600 ಮೀಟರ್.',
+          enText: 'Your ration shop is ${activeFpsName ?? homeFpsName}. Distance is approximately 0.6 kilometers and the shop is open today.',
+        );
+      },
+      isElderly: isElderly,
+    );
 
-        // CARD: VENDING MACHINE (RATION VENDING MACHINE / राशन वेंडिंग मशीन / ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್)
-        _buildHeroActionCard(
-          key: const ValueKey('card_hero_grain_atm'),
-          emoji: '📦',
-          icon: Icons.precision_manufacturing_rounded,
-          iconColor: const Color(0xFF0D9488),
-          iconBg: const Color(0xFFCCFBF1),
-          title: isHindi
-              ? 'राशन वेंडिंग मशीन'
-              : isKannada
-                  ? 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್'
-                  : 'Ration Vending Machine',
-          subtitle: isHindi
-              ? 'राशन वेंडिंग मशीन • स्वचालित 24/7 राशन संग्रह'
-              : isKannada
-                  ? 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ • ಸ್ವಯಂಚಾಲಿತ 24/7 ಪಡಿತರ'
-                  : 'Ration Vending Machine • Automated 24/7 Ration Pickup',
-          tagText: isReceived
-              ? (isHindi ? 'प्राप्त हुआ' : isKannada ? 'ಸ್ವೀಕರಿಸಲಾಗಿದೆ' : 'Received')
-              : (isHindi ? '🟢 24/7 चालू • VM-001' : isKannada ? '🟢 24/7 ಸಕ್ರಿಯ • VM-001' : '🟢 Ready • VM-001'),
-          tagColor: const Color(0xFF0D9488),
-          tagBg: const Color(0xFFF0FDFA),
-          subDetail: isHindi
-              ? '📍 डेमो पीडीएस केंद्र • संपर्क रहित स्वचालित वितरण'
-              : isKannada
-                  ? '📍 ಡೆಮೊ ಪಿಡಿಎಸ್ ಕೇಂದ್ರ • ಸಂಪರ್ಕರಹಿತ ಸ್ವಯಂಚಾಲಿತ ವಿತರಣೆ'
-                  : '📍 Demo PDS Centre • Contactless Automated Dispensing',
-          btnLabel: isReceived
-              ? (isHindi ? '✓ राशन मिल चुका है' : isKannada ? '✓ ಪಡಿತರ ಸ್ವೀಕರಿಸಲಾಗಿದೆ' : '✓ Ration Received')
-              : (isHindi ? 'वेंडिंग मशीन से लें 📦' : isKannada ? 'ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ ಬಳಸಿ 📦' : 'Use Vending Machine 📦'),
-          btnBg: isReceived ? const Color(0xFF15803D) : const Color(0xFF0D9488),
-          onBtnTap: () => _navigateToGrainAtm(),
-          onSpeak: () {
-            if (isReceived) {
-              VoiceAssistantService.instance.guideAtmAlreadyReceived();
-            } else {
-              VoiceAssistantService.instance.speakLocalized(
-                hiText: 'राशन वेंडिंग मशीन: स्वचालित मशीन से अपना राशन लेने के लिए वेंडिंग मशीन बटन दबाएं।',
-                knText: 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್: ಯಂತ್ರದಿಂದ ನಿಮ್ಮ ಪಡಿತರ ಪಡೆಯಲು ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ ಬಟನ್ ಒತ್ತಿ.',
-                enText: 'Ration Vending Machine: Tap Use Vending Machine to collect your grains from the automated machine.',
-              );
-            }
-          },
-          isElderly: isElderly,
-        ),
-        const SizedBox(height: 14),
+    // 2. TRACK MY RATION (राशन कहां पहुंचा?)
+    final cardStatus = _buildHeroActionCard(
+      key: const ValueKey('card_hero_ration_status'),
+      emoji: '🚚',
+      icon: Icons.local_shipping_rounded,
+      iconColor: const Color(0xFF2563EB),
+      iconBg: const Color(0xFFEFF6FF),
+      title: isHindi
+          ? 'राशन कहां पहुंचा? (ट्रैकिंग)'
+          : isKannada
+              ? 'ಪಡಿತರ ಎಲ್ಲಿಗೆ ತಲುಪಿದೆ? (ಟ್ರ್ಯಾಕಿಂಗ್)'
+              : 'Track My Ration',
+      subtitle: deliveryStepText,
+      customChild: _buildSimpleJourneyStepper(activeStepIndex, isHindi, isKannada),
+      btnLabel: isReceived
+          ? (isHindi ? '✓ राशन प्राप्ति दर्ज है' : isKannada ? '✓ ಸ್ವೀಕೃತಿ ದಾಖಲಾಗಿದೆ' : '✓ Receipt Confirmed')
+          : (activeStepIndex >= 4
+              ? (isHindi ? 'राशन मिल गया? बताएं 👉' : isKannada ? 'ಪಡಿತರ ಸಿಕ್ಕಿತೇ? ತಿಳಿಸಿ 👉' : 'Confirm Receipt 👉')
+              : (isHindi ? 'पूरी स्थिति देखें 👉' : isKannada ? 'ಸಂಪೂರ್ಣ ಸ್ಥಿತಿ ನೋಡಿ 👉' : 'Track My Ration 👉')),
+      btnBg: activeStepIndex >= 4 ? const Color(0xFF15803D) : const Color(0xFF2563EB),
+      onBtnTap: () {
+        VoiceAssistantService.instance.guideTracking(deliveryStepText);
+        if (activeStepIndex >= 4 && !isReceived) {
+          SimpleBeneficiaryFeedbackDialog.show(
+            context,
+            beneficiaryId: widget.beneficiaryId,
+            activeRequestId: _deliveryRecords.isNotEmpty ? _deliveryRecords.first.requestId : null,
+            registeredFpsId: _beneficiary?.registeredFpsId,
+            apiService: _apiService,
+            onFeedbackSubmitted: _loadBeneficiaryData,
+          );
+        } else if (_deliveryRecords.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(deliveryStepText),
+              backgroundColor: AppConstants.primaryNavy,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+      onSpeak: () {
+        VoiceAssistantService.instance.guideTracking(deliveryStepText);
+      },
+      isElderly: isElderly,
+    );
 
-        // CARD 2: MY RATION SHOP (मेरी राशन दुकान)
-        _buildHeroActionCard(
-          key: const ValueKey('card_hero_my_shop'),
-          emoji: '🏪',
-          icon: Icons.storefront_rounded,
-          iconColor: AppConstants.primaryNavy,
-          iconBg: const Color(0xFFEFF6FF),
-          title: isHindi
-              ? 'मेरी राशन दुकान'
-              : isKannada
-                  ? 'ನನ್ನ ಪಡಿತರ ಅಂಗಡಿ'
-                  : 'My Ration Shop',
-          subtitle: activeFpsName ?? homeFpsName,
-          tagText: isHindi ? '🟢 आज खुली है (8:30 - 1:30)' : isKannada ? '🟢 ತೆರೆದಿದೆ' : '🟢 Open Today',
-          tagColor: const Color(0xFF15803D),
-          tagBg: const Color(0xFFF0FDF4),
-          subDetail: isHindi
-              ? '📍 0.6 km • 🚶 लगभग 10 मिनट पैदल रास्ता'
-              : isKannada
-                  ? '📍 0.6 ಕಿಮೀ • 🚶 ಸುಮಾರು 10 ನಿಮಿಷ'
-                  : '📍 0.6 km • 🚶 ~10 mins walking distance',
-          btnLabel: isHindi
-              ? 'दुकान का रास्ता और नक्शा देखें 🗺️'
-              : isKannada
-                  ? 'ಅಂಗಡಿ ದಾರಿ ಮತ್ತು ನಕ್ಷೆ ನೋಡಿ 🗺️'
-                  : 'View Shop Location & Map 🗺️',
-          btnBg: AppConstants.primaryNavy,
-          onBtnTap: () => _showFpsRouteTrackingModal(activeFpsName ?? homeFpsName),
-          onSpeak: () {
-            VoiceAssistantService.instance.speakLocalized(
-              hiText: 'आपकी राशन दुकान है ${activeFpsName ?? homeFpsName}। दूरी लगभग 600 मीटर है और दुकान आज सुबह 8:30 से दोपहर 1:30 तक खुली है।',
-              knText: 'ನಿಮ್ಮ ಪಡಿತರ ಅಂಗಡಿ ${activeFpsName ?? homeFpsName}. ದೂರ ಸುಮಾರು 600 ಮೀಟರ್.',
-              enText: 'Your ration shop is ${activeFpsName ?? homeFpsName}. Distance is approximately 0.6 kilometers and the shop is open today.',
-            );
-          },
-          isElderly: isElderly,
-        ),
-        const SizedBox(height: 14),
+    // 3. RATION VENDING MACHINE (राशन वेंडिंग मशीन / ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್)
+    final cardAtm = _buildHeroActionCard(
+      key: const ValueKey('card_hero_grain_atm'),
+      emoji: '📦',
+      icon: Icons.precision_manufacturing_rounded,
+      iconColor: const Color(0xFF0D9488),
+      iconBg: const Color(0xFFCCFBF1),
+      title: isHindi
+          ? 'राशन वेंडिंग मशीन'
+          : isKannada
+              ? 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್'
+              : 'Ration Vending Machine',
+      subtitle: isHindi
+          ? 'स्वचालित 24/7 राशन संग्रह'
+          : isKannada
+              ? 'ಸ್ವಯಂಚಾಲಿತ 24/7 ಪಡಿತರ'
+              : 'Automated 24/7 Ration Pickup',
+      tagText: isReceived
+          ? (isHindi ? 'प्राप्त हुआ' : isKannada ? 'ಸ್ವೀಕರಿಸಲಾಗಿದೆ' : 'Received')
+          : (isHindi ? '🟢 चालू • VM-001' : isKannada ? '🟢 ಸಕ್ರಿಯ • VM-001' : '🟢 Ready • VM-001'),
+      tagColor: const Color(0xFF0D9488),
+      tagBg: const Color(0xFFF0FDFA),
+      subDetail: isHindi
+          ? '📍 डेमो केंद्र • संपर्क रहित वितरण'
+          : isKannada
+              ? '📍 ಡೆಮೊ ಕೇಂದ್ರ • ಸಂಪರ್ಕರಹಿತ ವಿತರಣೆ'
+              : '📍 Demo Center • Contactless Automated Dispensing',
+      btnLabel: isReceived
+          ? (isHindi ? '✓ राशन मिल चुका है' : isKannada ? '✓ ಪಡಿತರ ಸ್ವೀಕರಿಸಲಾಗಿದೆ' : '✓ Ration Received')
+          : (isHindi ? 'वेंडिंग मशीन से लें 📦' : isKannada ? 'ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ ಬಳಸಿ 📦' : 'Use Vending Machine 📦'),
+      btnBg: isReceived ? const Color(0xFF15803D) : const Color(0xFF0D9488),
+      onBtnTap: () => _navigateToGrainAtm(),
+      onSpeak: () {
+        if (isReceived) {
+          VoiceAssistantService.instance.guideAtmAlreadyReceived();
+        } else {
+          VoiceAssistantService.instance.speakLocalized(
+            hiText: 'राशन वेंडिंग मशीन: स्वचालित मशीन से अपना राशन लेने के लिए वेंडिंग मशीन बटन दबाएं।',
+            knText: 'ರೇಷನ್ ವೆಂಡಿಂಗ್ ಮೆಷಿನ್: ಯಂತ್ರದಿಂದ ನಿಮ್ಮ ಪಡಿತರ ಪಡೆಯಲು ವೆಂಡಿಂಗ್ ಮೆಷಿನ್ ಬಟನ್ ಒತ್ತಿ.',
+            enText: 'Ration Vending Machine: Tap Use Vending Machine to collect your grains from the automated machine.',
+          );
+        }
+      },
+      isElderly: isElderly,
+    );
 
-        // CARD 3: RATION STATUS (राशन कहां पहुंचा?)
-        _buildHeroActionCard(
-          key: const ValueKey('card_hero_ration_status'),
-          emoji: '🚚',
-          icon: Icons.local_shipping_rounded,
-          iconColor: const Color(0xFF2563EB),
-          iconBg: const Color(0xFFEFF6FF),
-          title: isHindi
-              ? 'राशन कहां पहुंचा? (ट्रैकिंग)'
-              : isKannada
-                  ? 'ಪಡಿತರ ಎಲ್ಲಿಗೆ ತಲುಪಿದೆ? (ಟ್ರ್ಯಾಕಿಂಗ್)'
-                  : 'Track My Ration',
-          subtitle: deliveryStepText,
-          customChild: _buildSimpleJourneyStepper(activeStepIndex, isHindi, isKannada),
-          btnLabel: isReceived
-              ? (isHindi ? '✓ राशन प्राप्ति दर्ज है' : isKannada ? '✓ ಸ್ವೀಕೃತಿ ದಾಖಲಾಗಿದೆ' : '✓ Receipt Confirmed')
-              : (activeStepIndex >= 4
-                  ? (isHindi ? 'राशन मिल गया? बताएं 👉' : isKannada ? 'ಪಡಿತರ ಸಿಕ್ಕಿತೇ? ತಿಳಿಸಿ 👉' : 'Confirm Receipt 👉')
-                  : (isHindi ? 'पूरी स्थिति देखें 👉' : isKannada ? 'ಸಂಪೂರ್ಣ ಸ್ಥಿತಿ ನೋಡಿ 👉' : 'Track My Ration 👉')),
-          btnBg: activeStepIndex >= 4 ? const Color(0xFF15803D) : const Color(0xFF2563EB),
-          onBtnTap: () {
-            VoiceAssistantService.instance.guideTracking(deliveryStepText);
-            if (activeStepIndex >= 4 && !isReceived) {
-              SimpleBeneficiaryFeedbackDialog.show(
-                context,
-                beneficiaryId: widget.beneficiaryId,
-                activeRequestId: _deliveryRecords.isNotEmpty ? _deliveryRecords.first.requestId : null,
-                registeredFpsId: _beneficiary?.registeredFpsId,
-                apiService: _apiService,
-                onFeedbackSubmitted: _loadBeneficiaryData,
-              );
-            } else if (_deliveryRecords.isNotEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(deliveryStepText),
-                  backgroundColor: AppConstants.primaryNavy,
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            }
-          },
-          onSpeak: () {
-            VoiceAssistantService.instance.guideTracking(deliveryStepText);
-          },
-          isElderly: isElderly,
-        ),
-        const SizedBox(height: 14),
+    // 4. HELP & REPORT PROBLEM (मदद और समस्या)
+    final cardHelp = _buildHeroActionCard(
+      key: const ValueKey('card_hero_help_dispute'),
+      emoji: '🆘',
+      icon: Icons.support_agent_rounded,
+      iconColor: const Color(0xFFDC2626),
+      iconBg: const Color(0xFFFEF2F2),
+      title: isHindi
+          ? 'मदद और समस्या'
+          : isKannada
+              ? 'ಸಹಾಯ ಮತ್ತು ದೂರು'
+              : 'Help & Report Problem',
+      subtitle: isHindi
+          ? 'कम राशन मिला? दुकान बंद थी? तुरंत बताएं'
+          : isKannada
+              ? 'ಕಡಿಮೆ ಪಡಿತರ ಸಿಕ್ಕಿತೇ? ಅಂಗಡಿ ಮುಚ್ಚಿತ್ತೇ? ದೂರು ದಾಖಲಿಸಿ'
+              : 'Short weight? Shop closed? Quality issue? Report directly to DSO officers',
+      tagText: isHindi ? 'अधिकारी जांच करेंगे' : isKannada ? 'ಅಧಿಕಾರಿ ಪರಿಶೀಲನೆ' : 'DSO Triage',
+      tagColor: const Color(0xFFB91C1C),
+      tagBg: const Color(0xFFFEE2E2),
+      btnLabel: isHindi
+          ? 'शिकायत या मदद दर्ज करें 💬'
+          : isKannada
+              ? 'ದೂರು ಸಲ್ಲಿಸಿ 💬'
+              : 'Report Issue / Complaint 💬',
+      btnBg: const Color(0xFFDC2626),
+      onBtnTap: () {
+        VoiceAssistantService.instance.guideHelp();
+        SimpleBeneficiaryFeedbackDialog.show(
+          context,
+          beneficiaryId: widget.beneficiaryId,
+          activeRequestId: _deliveryRecords.isNotEmpty ? _deliveryRecords.first.requestId : null,
+          registeredFpsId: _beneficiary?.registeredFpsId,
+          apiService: _apiService,
+          onFeedbackSubmitted: _loadBeneficiaryData,
+        );
+      },
+      onSpeak: () {
+        VoiceAssistantService.instance.speakLocalized(
+          hiText: 'मदद और समस्या: यदि आपको कम राशन मिला है या दुकान बंद थी, तो शिकायत दर्ज करें बटन दबाकर अपनी बात बताएं।',
+          knText: 'ಸಹಾಯ ಮತ್ತು ದೂರು: ಕಡಿಮೆ ಪಡಿತರ ಅಥವಾ ಅಂಗಡಿ ಮುಚ್ಚಿದ್ದರೆ, ದೂರು ಸಲ್ಲಿಸಿ ಬಟನ್ ಒತ್ತಿ.',
+          enText: 'Help and problem: If you received less ration or the shop was closed, tap report complaint.',
+        );
+      },
+      isElderly: isElderly,
+    );
 
-        // CARD 4: HELP & REPORT PROBLEM (मदद और समस्या)
-        _buildHeroActionCard(
-          key: const ValueKey('card_hero_help_dispute'),
-          emoji: '🆘',
-          icon: Icons.support_agent_rounded,
-          iconColor: const Color(0xFFDC2626),
-          iconBg: const Color(0xFFFEF2F2),
-          title: isHindi
-              ? 'मदद और समस्या'
-              : isKannada
-                  ? 'ಸಹಾಯ ಮತ್ತು ದೂರು'
-                  : 'Help & Report Problem',
-          subtitle: isHindi
-              ? 'कम राशन मिला? दुकान बंद थी? कोई शिकायत है? तुरंत बताएं'
-              : isKannada
-                  ? 'ಕಡಿಮೆ ಪಡಿತರ ಸಿಕ್ಕಿತೇ? ಅಂಗಡಿ ಮುಚ್ಚಿತ್ತೇ? ದೂರು ದಾಖಲಿಸಿ'
-                  : 'Short weight? Shop closed? Quality issue? Report directly to DSO officers',
-          tagText: isHindi ? 'अधिकारी जांच करेंगे' : isKannada ? 'ಅಧಿಕಾರಿ ಪರಿಶೀಲನೆ' : 'DSO Triage',
-          tagColor: const Color(0xFFB91C1C),
-          tagBg: const Color(0xFFFEE2E2),
-          btnLabel: isHindi
-              ? 'शिकायत या मदद दर्ज करें 💬'
-              : isKannada
-                  ? 'ದೂರು ಸಲ್ಲಿಸಿ 💬'
-                  : 'Report Issue / Complaint 💬',
-          btnBg: const Color(0xFFDC2626),
-          onBtnTap: () {
-            VoiceAssistantService.instance.guideHelp();
-            SimpleBeneficiaryFeedbackDialog.show(
-              context,
-              beneficiaryId: widget.beneficiaryId,
-              activeRequestId: _deliveryRecords.isNotEmpty ? _deliveryRecords.first.requestId : null,
-              registeredFpsId: _beneficiary?.registeredFpsId,
-              apiService: _apiService,
-              onFeedbackSubmitted: _loadBeneficiaryData,
-            );
-          },
-          onSpeak: () {
-            VoiceAssistantService.instance.speakLocalized(
-              hiText: 'मदद और समस्या: यदि आपको कम राशन मिला है या दुकान बंद थी, तो शिकायत दर्ज करें बटन दबाकर अपनी बात बताएं।',
-              knText: 'ಸಹಾಯ ಮತ್ತು ದೂರು: ಕಡಿಮೆ ಪಡಿತರ ಅಥವಾ ಅಂಗಡಿ ಮುಚ್ಚಿದ್ದರೆ, ದೂರು ಸಲ್ಲಿಸಿ ಬಟನ್ ಒತ್ತಿ.',
-              enText: 'Help and problem: If you received less ration or the shop was closed, tap report complaint.',
-            );
-          },
-          isElderly: isElderly,
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 600) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: cardShop),
+                  const SizedBox(width: 14),
+                  Expanded(child: cardStatus),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: cardAtm),
+                  const SizedBox(width: 14),
+                  Expanded(child: cardHelp),
+                ],
+              ),
+            ],
+          );
+        } else {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              cardShop,
+              const SizedBox(height: 12),
+              cardStatus,
+              const SizedBox(height: 12),
+              cardAtm,
+              const SizedBox(height: 12),
+              cardHelp,
+            ],
+          );
+        }
+      },
     );
   }
 
@@ -2092,118 +2159,20 @@ class _BeneficiaryHomeScreenState extends State<BeneficiaryHomeScreen> {
 
 
 
-  // 3. PLAN YOUR UPCOMING COLLECTION (Two Large Service Cards)
+  // 3. PLAN YOUR UPCOMING COLLECTION (Only shown if choice not yet submitted)
   Widget _buildPlanCollectionSection() {
     final homeFpsName = _beneficiary?.registeredFpsName ?? 'Malleshwaram Seva Kendra';
-    final isReceived = _entitlement?.rationReceivedForCycle == true;
-
-    if (isReceived) {
-      return Container(
-        key: const ValueKey('card_ration_received_cycle_lock'),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF86EFAC), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF16A34A).withValues(alpha: 0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFDCFCE7),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF86EFAC)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF166534)),
-                      const SizedBox(width: 6),
-                      Text(
-                        tr('delivery.ration_received_badge'),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF166534),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    _planningCycleState?['cycle_id'] ?? '2026-09',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              tr('delivery.ration_received_desc'),
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w600,
-                color: AppConstants.textPrimary,
-                height: 1.45,
-              ),
-            ),
-            if (_entitlement?.receiptConfirmedAt != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Receipt Confirmed: ${_entitlement!.receiptConfirmedAt}',
-                style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary),
-              ),
-            ],
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.lock_outline_rounded, size: 15, color: AppConstants.textSecondary),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Ration application controls are closed for this cycle. You can submit a new request when the next distribution cycle begins.',
-                      style: TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     final hasActiveIntents = _activeIntents.isNotEmpty;
     final hasCompletedDelivery = _deliveryRecords.any((r) => r.deliveryStatus == 'DELIVERY_CONFIRMED' || r.citizenConfirmedAt != null);
     final hasPlanLocked = _entitlement?.rationReceivedForCycle == true || _userSubmittedChoice || hasActiveIntents || hasCompletedDelivery;
+    final isReceived = _entitlement?.rationReceivedForCycle == true || hasCompletedDelivery;
     final activeFpsName = _deliveryRecords.isNotEmpty
         ? (_deliveryRecords.first.intendedFpsName ?? _deliveryRecords.first.registeredFpsName ?? homeFpsName)
         : (_activeIntents.isNotEmpty ? _activeIntents.first.intendedFpsName : homeFpsName);
+
+    if (hasPlanLocked || isReceived) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
