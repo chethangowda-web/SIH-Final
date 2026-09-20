@@ -237,8 +237,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   void _showVoiceInputModal({
     required String title,
     required String prompt,
-    required String fieldType, // 'card', 'phone', 'otp'
+    required String fieldType, // 'card', 'phone', 'otp', 'smart_login'
     required void Function(String result) onValueRecognized,
+    void Function(String card, String phone)? onSmartLoginApply,
   }) {
     showModalBottomSheet(
       context: context,
@@ -252,6 +253,12 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           onApply: (val) {
             Navigator.pop(ctx);
             onValueRecognized(val);
+          },
+          onSmartLoginApply: (card, phone) {
+            Navigator.pop(ctx);
+            if (onSmartLoginApply != null) {
+              onSmartLoginApply(card, phone);
+            }
           },
         );
       },
@@ -340,6 +347,41 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           _citizenOtpController.text = val;
         });
         VoiceAssistantService.instance.guideLoginStepOtpEntered();
+      },
+    );
+  }
+
+  void _listenForSmartVoiceLogin() {
+    final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
+    final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
+
+    final title = isKn
+        ? '⚡ ಸ್ಮಾರ್ಟ್ ಧ್ವನಿ ಲಾಗಿನ್'
+        : isHi
+            ? '⚡ स्मार्ट वॉयस लॉगिन'
+            : '⚡ Smart One-Touch Voice Login';
+
+    final prompt = isKn
+        ? 'ಯಾವುದೇ ಭಾಷೆಯಲ್ಲಿ ಮಾತನಾಡಿ: "ಕಾರ್ಡ್ 1 ಮೊಬೈಲ್ 9845012345" ಅಥವಾ "RC-KA-000001 9845012345"'
+        : isHi
+            ? 'किसी भी भाषा में बोलें: "कार्ड 1 मोबाइल 9845012345" या "RC-KA-000001 9845012345"'
+            : 'Speak naturally in any language: e.g. "Card 1 mobile 9845012345" or "RC-KA-000001 9845012345"';
+
+    _showVoiceInputModal(
+      title: title,
+      prompt: prompt,
+      fieldType: 'smart_login',
+      onValueRecognized: (val) {},
+      onSmartLoginApply: (card, phone) {
+        if (card.isNotEmpty) {
+          setState(() => _citizenCardController.text = card);
+        }
+        if (phone.isNotEmpty) {
+          setState(() => _citizenPhoneController.text = phone);
+        }
+        if (_citizenCardController.text.isNotEmpty && _citizenPhoneController.text.length >= 10) {
+          _handleSendOtp();
+        }
       },
     );
   }
@@ -1089,6 +1131,82 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         ),
         const SizedBox(height: 12),
 
+        // One-Touch Smart Voice Login Card (Multilingual)
+        InkWell(
+          onTap: _listenForSmartVoiceLogin,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFDCFCE7), Color(0xFFF0FDF4)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF86EFAC), width: 1.5),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0F15803D),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF15803D),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.mic_rounded, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              LanguageController.instance.currentLanguage == AppLanguage.kannada
+                                  ? '🎙️ ಸ್ಮಾರ್ಟ್ ಧ್ವನಿ ಲಾಗಿನ್ (ಮಾತನಾಡಿ)'
+                                  : LanguageController.instance.currentLanguage == AppLanguage.hindi
+                                      ? '🎙️ स्मार्ट वॉयस लॉगिन (बोलें)'
+                                      : '🎙️ One-Touch Voice Login (Speak)',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF166534),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        LanguageController.instance.currentLanguage == AppLanguage.kannada
+                            ? 'ಯಾವುದೇ ಭಾಷೆಯಲ್ಲಿ ರೇಷನ್ ಕಾರ್ಡ್ & ಮೊಬೈಲ್ ನಂಬರ್ ಹೇಳಿ ಲಾಗಿನ್ ಆಗಿ'
+                            : LanguageController.instance.currentLanguage == AppLanguage.hindi
+                                ? 'कन्नड़, हिंदी या अंग्रेज़ी में बोलकर तुरंत लॉगिन करें'
+                                : 'Speak your Card & Mobile number in any language',
+                        style: const TextStyle(fontSize: 10.5, color: Color(0xFF15803D), fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF15803D)),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+
         // Field 1: Ration Card Number
         Text(tr('login.ration_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
         const SizedBox(height: 4),
@@ -1529,14 +1647,16 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 class _VoiceInputListeningSheet extends StatefulWidget {
   final String title;
   final String prompt;
-  final String fieldType; // 'card', 'phone', 'otp'
+  final String fieldType; // 'card', 'phone', 'otp', 'smart_login'
   final void Function(String result) onApply;
+  final void Function(String card, String phone)? onSmartLoginApply;
 
   const _VoiceInputListeningSheet({
     required this.title,
     required this.prompt,
     required this.fieldType,
     required this.onApply,
+    this.onSmartLoginApply,
   });
 
   @override
@@ -1547,14 +1667,20 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
   late AnimationController _animController;
   String _liveTranscript = '';
   String _formattedPreview = '';
+  String? _smartCard;
+  String? _smartPhone;
+  String _selectedLangCode = 'kn-IN';
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
+
+    final curr = LanguageController.instance.currentLanguage;
+    _selectedLangCode = curr == AppLanguage.hindi ? 'hi-IN' : (curr == AppLanguage.kannada ? 'kn-IN' : 'en-IN');
 
     VoiceAssistantService.instance.addListener(_onVoiceServiceUpdate);
     _startRecording();
@@ -1580,7 +1706,16 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
 
   String _formatResult(String raw) {
     if (raw.trim().isEmpty) return '';
-    if (widget.fieldType == 'card') {
+    if (widget.fieldType == 'smart_login') {
+      final creds = VoiceAssistantService.extractLoginCredentials(raw);
+      _smartCard = creds['card'];
+      _smartPhone = creds['phone'];
+      final parts = <String>[];
+      if (_smartCard != null) parts.add('💳 Card: $_smartCard');
+      if (_smartPhone != null) parts.add('📱 Mobile: $_smartPhone');
+      if (parts.isNotEmpty) return parts.join('  •  ');
+      return raw.trim();
+    } else if (widget.fieldType == 'card') {
       final digits = VoiceAssistantService.normalizeSpokenDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
       if (digits.isNotEmpty) {
         return 'RC-KA-${digits.padLeft(6, '0')}';
@@ -1590,10 +1725,10 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
       final phone = VoiceAssistantService.extractPhoneNumber(raw);
       if (phone.isNotEmpty) return phone;
       final digits = VoiceAssistantService.normalizeSpokenDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
-      return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+      return digits.length >= 10 ? digits.substring(digits.length - 10) : digits;
     } else if (widget.fieldType == 'otp') {
       final digits = VoiceAssistantService.normalizeSpokenDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
-      return digits.length > 6 ? digits.substring(0, 6) : digits;
+      return digits.length >= 6 ? digits.substring(0, 6) : digits;
     }
     return raw.trim();
   }
@@ -1602,8 +1737,11 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
     setState(() {
       _liveTranscript = '';
       _formattedPreview = '';
+      _smartCard = null;
+      _smartPhone = null;
     });
     VoiceAssistantService.instance.startListening(
+      overrideLangCode: _selectedLangCode,
       onFinalResult: (transcript) {
         if (!mounted) return;
         final formatted = _formatResult(transcript);
@@ -1615,12 +1753,20 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
     );
   }
 
+  void _switchLanguage(String langCode) {
+    if (_selectedLangCode == langCode) return;
+    setState(() {
+      _selectedLangCode = langCode;
+    });
+    _startRecording();
+  }
+
   @override
   Widget build(BuildContext context) {
     final voice = VoiceAssistantService.instance;
     final isListening = voice.isListening;
-    final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
-    final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
+    final isKn = _selectedLangCode.startsWith('kn');
+    final isHi = _selectedLangCode.startsWith('hi');
 
     return Container(
       decoration: const BoxDecoration(
@@ -1638,74 +1784,107 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
               height: 4,
               decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+
+            // In-Modal Multilingual Language Switcher (Beneficiary can pick whatever language they want to speak)
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildLangChip('kn-IN', '🟢 ಕನ್ನಡ', isKn),
+                  _buildLangChip('hi-IN', '🇮🇳 हिन्दी', isHi),
+                  _buildLangChip('en-IN', '🌐 English', !isKn && !isHi),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
 
             // Header Title
             Text(
               widget.title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF0F2942)),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF0F2942)),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               widget.prompt,
-              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-            // Animated Mic Button
-            AnimatedBuilder(
-              animation: _animController,
-              builder: (context, child) {
-                final scale = isListening ? (1.0 + _animController.value * 0.15) : 1.0;
-                return Transform.scale(
-                  scale: scale,
-                  child: GestureDetector(
-                    onTap: _startRecording,
-                    child: Container(
-                      width: 76,
-                      height: 76,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isListening ? const Color(0xFF15803D) : const Color(0xFF0F2942),
-                        boxShadow: [
-                          BoxShadow(
-                            color: isListening ? const Color(0x6615803D) : Colors.black12,
-                            blurRadius: isListening ? (12 + _animController.value * 10) : 6,
-                            spreadRadius: isListening ? (_animController.value * 6) : 0,
+            // Animated Mic Button with Sound Wave Visualizers
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildWaveBar(16, 36, 0.2),
+                const SizedBox(width: 6),
+                _buildWaveBar(24, 48, 0.5),
+                const SizedBox(width: 14),
+
+                AnimatedBuilder(
+                  animation: _animController,
+                  builder: (context, child) {
+                    final scale = isListening ? (1.0 + _animController.value * 0.12) : 1.0;
+                    return Transform.scale(
+                      scale: scale,
+                      child: GestureDetector(
+                        onTap: _startRecording,
+                        child: Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isListening ? const Color(0xFF15803D) : const Color(0xFF0F2942),
+                            boxShadow: [
+                              BoxShadow(
+                                color: isListening ? const Color(0x6615803D) : Colors.black12,
+                                blurRadius: isListening ? (12 + _animController.value * 10) : 6,
+                                spreadRadius: isListening ? (_animController.value * 6) : 0,
+                              ),
+                            ],
                           ),
-                        ],
+                          child: Icon(
+                            isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                            color: Colors.white,
+                            size: 36,
+                          ),
+                        ),
                       ),
-                      child: Icon(
-                        isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                        color: Colors.white,
-                        size: 38,
-                      ),
-                    ),
-                  ),
-                );
-              },
+                    );
+                  },
+                ),
+
+                const SizedBox(width: 14),
+                _buildWaveBar(24, 48, 0.7),
+                const SizedBox(width: 6),
+                _buildWaveBar(16, 36, 0.4),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
             // Listening status
             Text(
               isListening
-                  ? (isKn ? '🎙️ ಕೇಳಿಸಿಕೊಳ್ಳಲಾಗುತ್ತಿದೆ... ಮಾತನಾಡಿ' : isHi ? '🎙️ सुन रहे हैं... बोलिए' : '🎙️ Listening... Speak now')
+                  ? (isKn ? '🎙️ ಕೇಳಿಸಿಕೊಳ್ಳಲಾಗುತ್ತಿದೆ... ಸ್ಪಷ್ಟವಾಗಿ ಮಾತನಾಡಿ' : isHi ? '🎙️ सुन रहे हैं... स्पष्ट बोलें' : '🎙️ Listening... Speak clearly now')
                   : (isKn ? 'ಧ್ವನಿ ದಾಖಲಿಸಲು ಮೈಕ್ ಒತ್ತಿ' : isHi ? 'माइक पर टैप करके बोलें' : 'Tap mic to speak'),
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
                 color: isListening ? const Color(0xFF15803D) : Colors.grey.shade600,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             // Live Speech / Formatted Result Card
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(12),
@@ -1717,11 +1896,11 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
               child: Column(
                 children: [
                   Text(
-                    _formattedPreview.isNotEmpty ? _formattedPreview : (_liveTranscript.isNotEmpty ? _liveTranscript : (isKn ? '...' : isHi ? '...' : '...')),
+                    _formattedPreview.isNotEmpty ? _formattedPreview : (_liveTranscript.isNotEmpty ? _liveTranscript : '...'),
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: widget.fieldType == 'otp' ? 22 : 16,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: widget.fieldType == 'otp' ? 6 : 1,
+                      letterSpacing: widget.fieldType == 'otp' ? 6 : 0.5,
                       color: _formattedPreview.isNotEmpty ? const Color(0xFF0F2942) : Colors.grey.shade400,
                     ),
                     textAlign: TextAlign.center,
@@ -1731,12 +1910,13 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
                     Text(
                       'Spoken: "$_liveTranscript"',
                       style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
             // Action Buttons
             Row(
@@ -1759,9 +1939,19 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
                 Expanded(
                   flex: 2,
                   child: ElevatedButton(
-                    onPressed: _formattedPreview.isNotEmpty
-                        ? () => widget.onApply(_formattedPreview)
-                        : (_liveTranscript.isNotEmpty ? () => widget.onApply(_liveTranscript) : null),
+                    onPressed: () {
+                      if (widget.fieldType == 'smart_login') {
+                        if (widget.onSmartLoginApply != null && (_smartCard != null || _smartPhone != null)) {
+                          widget.onSmartLoginApply!(_smartCard ?? '', _smartPhone ?? '');
+                        } else if (_formattedPreview.isNotEmpty) {
+                          widget.onApply(_formattedPreview);
+                        }
+                      } else if (_formattedPreview.isNotEmpty) {
+                        widget.onApply(_formattedPreview);
+                      } else if (_liveTranscript.isNotEmpty) {
+                        widget.onApply(_liveTranscript);
+                      }
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF15803D),
                       foregroundColor: Colors.white,
@@ -1775,8 +1965,10 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
                         const Icon(Icons.check_rounded, size: 18),
                         const SizedBox(width: 6),
                         Text(
-                          isKn ? 'ಅನ್ವಯಿಸಿ' : isHi ? 'लागू करें' : 'Apply & Fill',
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                          widget.fieldType == 'smart_login'
+                              ? (isKn ? 'ದೃಢೀಕರಿಸಿ ಲಾಗಿನ್ ಮಾಡಿ' : isHi ? 'लागू और लॉगिन करें' : 'Apply & Continue')
+                              : (isKn ? 'ಅನ್ವಯಿಸಿ' : isHi ? 'लागू करें' : 'Apply & Fill'),
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
                         ),
                       ],
                     ),
@@ -1789,6 +1981,47 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
       ),
     );
   }
+
+  Widget _buildLangChip(String code, String label, bool isSelected) {
+    return InkWell(
+      onTap: () => _switchLanguage(code),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF15803D) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF334155),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWaveBar(double minH, double maxH, double phaseOffset) {
+    return AnimatedBuilder(
+      animation: _animController,
+      builder: (context, child) {
+        final val = ((_animController.value + phaseOffset) % 1.0);
+        final height = minH + (maxH - minH) * (val * 2 < 1.0 ? val * 2 : 2.0 - val * 2);
+        return Container(
+          width: 4,
+          height: height,
+          decoration: BoxDecoration(
+            color: const Color(0xFF16A34A).withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        );
+      },
+    );
+  }
 }
+
 
 

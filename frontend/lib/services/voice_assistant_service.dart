@@ -124,23 +124,15 @@ class VoiceAssistantService extends ChangeNotifier {
   // -------------------------------------------------------------
   // SPEECH RECOGNITION (VOICE INPUT IN ENGLISH, HINDI, KANNADA)
   // -------------------------------------------------------------
-  void startListening({Function(String transcript)? onFinalResult}) {
+  void startListening({
+    String? overrideLangCode,
+    Function(String transcript)? onFinalResult,
+  }) {
     // 1. Stop any currently playing speech so mic does not pick up speaker audio
     stop();
 
     final lang = LanguageController.instance.currentLanguage;
-    String langCode;
-    switch (lang) {
-      case AppLanguage.hindi:
-        langCode = 'hi-IN';
-        break;
-      case AppLanguage.kannada:
-        langCode = 'kn-IN';
-        break;
-      case AppLanguage.english:
-        langCode = 'en-IN';
-        break;
-    }
+    String langCode = overrideLangCode ?? (lang == AppLanguage.hindi ? 'hi-IN' : (lang == AppLanguage.kannada ? 'kn-IN' : 'en-IN'));
 
     _isListening = true;
     _recognizedSpeech = '';
@@ -211,70 +203,101 @@ class VoiceAssistantService extends ChangeNotifier {
 
     String text = spokenText.toLowerCase();
 
-    // Map words to digits across Kannada, Hindi, and English
+    // 1. Replace native Kannada numerals (೦-೯) with standard ASCII digits (0-9)
+    const knDigits = ['೦', '೧', '೨', '೩', '೪', '೫', '೬', '೭', '೮', '೯'];
+    for (int i = 0; i < knDigits.length; i++) {
+      text = text.replaceAll(knDigits[i], '$i');
+    }
+
+    // 2. Replace native Devanagari numerals (०-९) with standard ASCII digits (0-9)
+    const hiDigits = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
+    for (int i = 0; i < hiDigits.length; i++) {
+      text = text.replaceAll(hiDigits[i], '$i');
+    }
+
+    // 3. Double / Triple multi-digit expansions
+    text = text
+        .replaceAll('double zero', '00')
+        .replaceAll('double 0', '00')
+        .replaceAll('triple zero', '000')
+        .replaceAll('triple 0', '000')
+        .replaceAll('ಡಬಲ್ ಸೊನ್ನೆ', '00')
+        .replaceAll('ಡಬಲ್ 0', '00')
+        .replaceAll('डबल जीरो', '00')
+        .replaceAll('डबल 0', '00');
+
+    // 4. Word-to-digit dictionary across Kannada, Hindi, and English
     final Map<String, String> wordMap = {
-      // Kannada
-      'ಸೊನ್ನೆ': '0', 'ಶೂನ್ಯ': '0',
-      'ಒಂದು': '1', 'ಒಂದ': '1',
-      'ಎರಡು': '2',
-      'ಮೂರು': '3',
-      'ನಾಲ್ಕು': '4',
-      'ಐದು': '5',
-      'ಆರು': '6',
-      'ಏಳು': '7',
-      'ಎಂಟು': '8',
-      'ಒಂಬತ್ತು': '9',
-      // Kannada tens
-      'ಹತ್ತು': '10', 'ಇಪ್ಪತ್ತು': '20', 'ಮೂವತ್ತು': '30', 'ನಲವತ್ತು': '40', 'ಐವತ್ತು': '50',
+      // Kannada spoken digits
+      'ಸೊನ್ನೆ': '0', 'ಶೂನ್ಯ': '0', 'ಜೀರೋ': '0',
+      'ಒಂದು': '1', 'ಒಂದ': '1', 'ಒನ್': '1',
+      'ಎರಡು': '2', 'ಎರಡ': '2', 'ಟೂ': '2',
+      'ಮೂರು': '3', 'ಮೂರ': '3', 'ತ್ರೀ': '3',
+      'ನಾಲ್ಕು': '4', 'ನಾಲ್ಕ': '4', 'ಫೋರ್': '4',
+      'ಐದು': '5', 'ಐದ': '5', 'ಫೈವ್': '5',
+      'ಆರು': '6', 'ಆರ': '6', 'ಸಿಕ್ಸ್': '6',
+      'ಏಳು': '7', 'ಏಳ': '7', 'ಸೆವೆನ್': '7',
+      'ಎಂಟು': '8', 'ಎಂಟ': '8', 'ಏಟ್': '8',
+      'ಒಂಬತ್ತು': '9', 'ಒಂಬತ್ತ': '9', 'ನೈನ್': '9',
+      'ಹತ್ತು': '10', 'ಟೆನ್': '10',
+      'ಇಪ್ಪತ್ತು': '20', 'ಮೂವತ್ತು': '30', 'ನಲವತ್ತು': '40', 'ಐವತ್ತು': '50',
+      'ಅರವತ್ತು': '60', 'ಎಪ್ಪತ್ತು': '70', 'ಎಂಬತ್ತು': '80', 'ತೊಂಬತ್ತು': '90',
+      'ನೂರು': '100', 'ಸಾವಿರ': '1000',
 
+      // Hindi spoken digits
+      'शून्य': '0', 'जीरो': '0', 'सिफर': '0',
+      'एक': '1', 'वन': '1',
+      'दो': '2', 'टू': '2',
+      'तीन': '3', 'थ्री': '3',
+      'चार': '4', 'फोर': '4',
+      'पांच': '5', 'पाँच': '5', 'फाइव': '5',
+      'छह': '6', 'छ': '6', 'छः': '6', 'सिक्स': '6',
+      'सात': '7', 'सेवन': '7',
+      'आठ': '8', 'एट': '8',
+      'नौ': '9', 'नाइन': '9',
+      'दस': '10', 'ग्यारह': '11', 'बारह': '12', 'तेरह': '13', 'चौदह': '14',
+      'पंद्रह': '15', 'सोलह': '16', 'सत्रह': '17', 'अठारह': '18', 'उन्नीस': '19',
+      'बीस': '20', 'तीस': '30', 'चालीस': '40', 'पचास': '50',
+      'साठ': '60', 'सत्तर': '70', 'अस्सी': '80', 'नब्बे': '90',
+      'सौ': '100', 'हजार': '1000', 'हज़ार': '1000',
 
-      // Hindi
-      'शून्य': '0', 'जीरो': '0',
-      'एक': '1',
-      'दो': '2',
-      'तीन': '3',
-      'चार': '4',
-      'पांच': '5', 'पाँच': '5',
-      'छह': '6', 'छ': '6',
-      'सात': '7',
-      'आठ': '8',
-      'नौ': '9',
-      // Hindi tens
-      'दस': '10', 'बीस': '20', 'तीस': '30', 'चालीस': '40', 'पचास': '50',
-
-
-      // English
+      // English spoken digits
       'zero': '0', 'oh': '0',
-      'one': '1',
+      'one': '1', 'won': '1',
       'two': '2', 'to': '2', 'too': '2',
-      'three': '3',
-      'four': '4', 'for': '4',
+      'three': '3', 'tree': '3',
+      'four': '4', 'for': '4', 'fore': '4',
       'five': '5',
       'six': '6',
       'seven': '7',
       'eight': '8', 'ate': '8',
       'nine': '9',
-      // English tens
-      'ten': '10', 'twenty': '20', 'thirty': '30', 'forty': '40', 'fifty': '50',
-
+      'ten': '10', 'eleven': '11', 'twelve': '12', 'thirteen': '13', 'fourteen': '14',
+      'fifteen': '15', 'sixteen': '16', 'seventeen': '17', 'eighteen': '18', 'nineteen': '19',
+      'twenty': '20', 'thirty': '30', 'forty': '40', 'fifty': '50',
+      'sixty': '60', 'seventy': '70', 'eighty': '80', 'ninety': '90',
+      'hundred': '100', 'thousand': '1000',
     };
 
     for (final entry in wordMap.entries) {
-      text = text.replaceAll(RegExp(r'\b' + RegExp.escape(entry.key) + r'\b'), entry.value);
+      text = text.replaceAll(RegExp(r'(^|\s+)' + RegExp.escape(entry.key) + r'($|\s+)'), ' ${entry.value} ');
     }
 
-    return text;
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   static String extractRationId(String spokenText) {
-    final clean = normalizeSpokenDigits(spokenText).toUpperCase().replaceAll(' ', '');
-    final digitMatch = RegExp(r'\d{4,}').firstMatch(clean);
-    if (digitMatch != null) {
-      final digits = digitMatch.group(0)!;
-      final padded = digits.padLeft(6, '0');
-      return 'RC-KA-$padded';
+    final clean = normalizeSpokenDigits(spokenText).toUpperCase();
+    final digitsOnly = clean.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitsOnly.isNotEmpty) {
+      if (digitsOnly.length >= 6) {
+        final idPart = digitsOnly.substring(digitsOnly.length - 6);
+        return 'RC-KA-$idPart';
+      } else {
+        return 'RC-KA-${digitsOnly.padLeft(6, '0')}';
+      }
     }
-    return clean;
+    return clean.replaceAll(' ', '-');
   }
 
   static double? extractSpokenQuantity(String spokenText) {
@@ -289,10 +312,49 @@ class VoiceAssistantService extends ChangeNotifier {
 
   static String extractPhoneNumber(String spokenText) {
     final clean = normalizeSpokenDigits(spokenText).replaceAll(RegExp(r'[^0-9]'), '');
-    if (clean.length > 10) {
+    if (clean.length >= 10) {
       return clean.substring(clean.length - 10);
     }
     return clean;
+  }
+
+  /// Extracts combined Ration Card and/or Phone Number from a single multilingual spoken sentence
+  static Map<String, String?> extractLoginCredentials(String spokenText) {
+    final normalized = normalizeSpokenDigits(spokenText);
+    String? foundPhone;
+    String? foundCard;
+
+    // Look for 10-digit mobile number
+    final phoneMatch = RegExp(r'[6-9]\d{9}').firstMatch(normalized.replaceAll(RegExp(r'[^0-9]'), ''));
+    if (phoneMatch != null) {
+      foundPhone = phoneMatch.group(0);
+    }
+
+    // Look for Ration Card
+    final lower = spokenText.toLowerCase();
+    if (lower.contains('rc') || lower.contains('card') || lower.contains('ಕಾರ್ಡ್') || lower.contains('कार्ड') || lower.contains('ಪಡಿತರ') || lower.contains('राशन') || foundPhone == null) {
+      final digits = normalized.replaceAll(RegExp(r'[^0-9]'), '');
+      if (foundPhone != null) {
+        final remainingDigits = digits.replaceFirst(foundPhone, '');
+        if (remainingDigits.isNotEmpty) {
+          foundCard = 'RC-KA-${remainingDigits.padLeft(6, '0')}';
+        }
+      } else if (digits.isNotEmpty) {
+        if (digits.length <= 6) {
+          foundCard = 'RC-KA-${digits.padLeft(6, '0')}';
+        } else if (digits.length == 10) {
+          foundPhone = digits;
+        } else {
+          foundCard = 'RC-KA-${digits.substring(0, 6)}';
+        }
+      }
+    }
+
+    return {
+      'card': foundCard,
+      'phone': foundPhone,
+      'raw': spokenText,
+    };
   }
 
   // -------------------------------------------------------------
