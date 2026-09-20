@@ -522,65 +522,55 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   // ================================================================
   Widget _buildHeader(bool isSmall) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _slate200),
+            boxShadow: const [
+              BoxShadow(color: Color(0x08000000), blurRadius: 4, offset: Offset(0, 2)),
+            ],
+          ),
+          child: Image.asset(
+            'assets/images/emblem_gold.png',
+            height: isSmall ? 28 : 34,
+            width: isSmall ? 28 : 34,
+            errorBuilder: (_, __, ___) => Icon(
+              Icons.account_balance_rounded,
+              size: isSmall ? 24 : 30,
+              color: _govNavy,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
         Expanded(
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _slate200),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0x08000000), blurRadius: 4, offset: Offset(0, 2)),
-                  ],
+              Text(
+                'PDS DemandSync',
+                style: TextStyle(
+                  fontSize: isSmall ? 16 : 18,
+                  fontWeight: FontWeight.w800,
+                  color: _govNavy,
+                  letterSpacing: -0.3,
                 ),
-                child: Image.asset(
-                  'assets/images/emblem_gold.png',
-                  height: isSmall ? 28 : 34,
-                  width: isSmall ? 28 : 34,
-                  errorBuilder: (_, __, ___) => Icon(
-                    Icons.account_balance_rounded,
-                    size: isSmall ? 24 : 30,
-                    color: _govNavy,
-                  ),
-                ),
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'PDS DemandSync',
-                      style: TextStyle(
-                        fontSize: isSmall ? 16 : 18,
-                        fontWeight: FontWeight.w800,
-                        color: _govNavy,
-                        letterSpacing: -0.3,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      tr('login.dept_title'),
-                      style: TextStyle(
-                        fontSize: isSmall ? 10 : 11.5,
-                        fontWeight: FontWeight.w500,
-                        color: _slate500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+              Text(
+                tr('login.dept_title'),
+                style: TextStyle(
+                  fontSize: isSmall ? 10 : 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: _slate500,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
         ),
-        const SizedBox(width: 8),
-        // Language Toggle inside Login Screen Header
-        const LanguageSelectorWidget(isCompact: true, isLight: true),
       ],
     );
   }
