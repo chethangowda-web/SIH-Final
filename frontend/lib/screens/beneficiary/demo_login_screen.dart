@@ -718,15 +718,70 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      final errMsg = _cleanErrorMessage(e);
+      final isRateLimit = errMsg.toLowerCase().contains('wait') && errMsg.toLowerCase().contains('second');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(tr('login.mismatch_error')),
+          content: Text(isRateLimit ? errMsg : tr('login.mismatch_error')),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSendingOtp = false);
+    }
+  }
+
+  // Instant 1-Tap Entry into Beneficiary Portal for Evaluators and Testing
+  Future<void> _quickLoginBeneficiary({
+    required String cardId,
+    required String phoneNumber,
+    String? name,
+  }) async {
+    setState(() {
+      _citizenCardController.text = cardId;
+      _citizenPhoneController.text = phoneNumber;
+      _citizenOtpController.text = '123456';
+      _isVerifyingOtp = true;
+    });
+
+    try {
+      // 1. Establish authenticated session with backend
+      await _apiService.verifyCitizenOtp(cardId, '123456');
+
+      if (!mounted) return;
+
+      VoiceAssistantService.instance.enableBeneficiaryVoiceMode();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Logged in as ${name ?? cardId} ($cardId)'),
+          backgroundColor: const Color(0xFF15803D),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => BeneficiaryHomeScreen(
+            beneficiaryId: cardId,
+            apiService: _apiService,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open portal: ${_cleanErrorMessage(e)}'),
           backgroundColor: Colors.red.shade700,
           behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
-      if (mounted) setState(() => _isSendingOtp = false);
+      if (mounted) setState(() => _isVerifyingOtp = false);
     }
   }
 
@@ -1589,8 +1644,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   }
 
   Widget _buildDemoBeneficiarySelector(bool isSmall) {
-    final selectedCard = _citizenCardController.text.trim();
-
     return Container(
       padding: EdgeInsets.all(isSmall ? 10 : 12),
       decoration: BoxDecoration(
@@ -1614,7 +1667,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'DEMO BENEFICIARY (1-TAP TEST)',
+                  'DEMO BENEFICIARIES (INSTANT ACCESS)',
                   style: TextStyle(
                     fontSize: isSmall ? 10.5 : 11.5,
                     fontWeight: FontWeight.w900,
@@ -1624,7 +1677,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
@@ -1633,189 +1685,225 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
                   border: Border.all(color: const Color(0xFF86EFAC)),
                 ),
                 child: const Text(
-                  'CLICK TO FILL',
+                  '1-TAP ENTER',
                   style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          // Demo Card 1: Deepa Reddy
-          InkWell(
-            onTap: () {
-              setState(() {
-                _citizenCardController.text = 'RC-KA-000001';
-                _citizenPhoneController.text = '9845010000';
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Demo Beneficiary: Deepa Reddy (RC-KA-000001) credentials selected.'),
-                  backgroundColor: Color(0xFF15803D),
-                  duration: Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: selectedCard == 'RC-KA-000001' ? Colors.white : const Color(0xFFFAFDFA),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: selectedCard == 'RC-KA-000001' ? const Color(0xFF15803D) : const Color(0xFFBBF7D0),
-                  width: selectedCard == 'RC-KA-000001' ? 1.8 : 1.0,
-                ),
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: isSmall ? 16 : 18,
-                    backgroundColor: const Color(0xFFDCFCE7),
-                    child: const Icon(Icons.person_rounded, color: Color(0xFF15803D), size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 6,
-                          runSpacing: 2,
-                          children: [
-                            Text(
-                              'Deepa Reddy',
-                              style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F2942)),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                              decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(4)),
-                              child: const Text('PHH • 2 M', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF334155))),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'RC-KA-000001 • 98450 10000',
-                          style: TextStyle(fontSize: isSmall ? 10 : 11, fontWeight: FontWeight.w700, color: const Color(0xFF15803D)),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          'Bagalur (FPS-KA-BAG-0001)',
-                          style: TextStyle(fontSize: isSmall ? 9 : 9.5, color: const Color(0xFF64748B)),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: selectedCard == 'RC-KA-000001' ? const Color(0xFF15803D) : const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      selectedCard == 'RC-KA-000001' ? 'Selected ✓' : 'Use Card',
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.bold,
-                        color: selectedCard == 'RC-KA-000001' ? Colors.white : const Color(0xFF334155),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          const SizedBox(height: 4),
+          Text(
+            'Tap "Enter Portal ➔" for instant access or "Fill Form" to test standard OTP.',
+            style: TextStyle(fontSize: isSmall ? 9.5 : 10.5, color: const Color(0xFF166534)),
           ),
-          const SizedBox(height: 6),
-          // Demo Card 2: Suresh S.
-          InkWell(
-            onTap: () {
-              setState(() {
-                _citizenCardController.text = 'RC-KA-000002';
-                _citizenPhoneController.text = '9845010001';
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Demo Beneficiary: Suresh S. (RC-KA-000002) credentials selected.'),
-                  backgroundColor: Color(0xFF15803D),
-                  duration: Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: selectedCard == 'RC-KA-000002' ? Colors.white : const Color(0xFFFAFDFA),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: selectedCard == 'RC-KA-000002' ? const Color(0xFF15803D) : const Color(0xFFBBF7D0),
-                  width: selectedCard == 'RC-KA-000002' ? 1.8 : 1.0,
-                ),
+          const SizedBox(height: 10),
+
+          // Demo Beneficiary 1: Deepa Reddy
+          _buildDemoBeneficiaryItem(
+            cardId: 'RC-KA-000001',
+            phone: '9845010000',
+            name: 'Deepa Reddy',
+            fpsName: 'Bagalur (FPS-KA-BAG-0001)',
+            meta: 'PHH • 2 Members',
+            isSmall: isSmall,
+            accentColor: const Color(0xFF15803D),
+            bgAvatarColor: const Color(0xFFDCFCE7),
+          ),
+
+          // Demo Beneficiary 2: Suresh S.
+          _buildDemoBeneficiaryItem(
+            cardId: 'BEN-KA-0002',
+            phone: '9845010001',
+            name: 'Suresh S.',
+            fpsName: 'Hebbal (FPS-KA-BLR-001)',
+            meta: 'PHH • 4 Members',
+            isSmall: isSmall,
+            accentColor: const Color(0xFF0284C7),
+            bgAvatarColor: const Color(0xFFE0F2FE),
+          ),
+
+          // Demo Beneficiary 3: Priya Gowda (RC-KA-000064)
+          _buildDemoBeneficiaryItem(
+            cardId: 'RC-KA-000064',
+            phone: '9845010064',
+            name: 'Priya Gowda',
+            fpsName: 'BLR Rural (FPS-KA-BLR-R-0004)',
+            meta: 'PHH • 4 Members',
+            isSmall: isSmall,
+            accentColor: const Color(0xFF7C3AED),
+            bgAvatarColor: const Color(0xFFF3E8FF),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDemoBeneficiaryItem({
+    required String cardId,
+    required String phone,
+    required String name,
+    required String fpsName,
+    required String meta,
+    required bool isSmall,
+    required Color accentColor,
+    required Color bgAvatarColor,
+  }) {
+    final selectedCard = _citizenCardController.text.trim();
+    final isSelected = selectedCard == cardId;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.all(isSmall ? 8 : 10),
+      decoration: BoxDecoration(
+        color: isSelected ? Colors.white : const Color(0xFFFAFDFA),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isSelected ? accentColor : const Color(0xFFBBF7D0),
+          width: isSelected ? 1.8 : 1.0,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: isSmall ? 16 : 18,
+                backgroundColor: bgAvatarColor,
+                child: Icon(Icons.person_rounded, color: accentColor, size: isSmall ? 18 : 20),
               ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: isSmall ? 14 : 16,
-                    backgroundColor: const Color(0xFFE0F2FE),
-                    child: const Icon(Icons.person_rounded, color: Color(0xFF0284C7), size: 18),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 2,
                       children: [
-                        Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 6,
-                          runSpacing: 2,
-                          children: [
-                            Text(
-                              'Suresh S.',
-                              style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F2942)),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                              decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(4)),
-                              child: const Text('PHH • 4 M', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF334155))),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
                         Text(
-                          'RC-KA-000002 • 98450 10001',
-                          style: TextStyle(fontSize: isSmall ? 10 : 11, fontWeight: FontWeight.w600, color: const Color(0xFF0284C7)),
-                          overflow: TextOverflow.ellipsis,
+                          name,
+                          style: TextStyle(
+                            fontSize: isSmall ? 12.5 : 13.5,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F2942),
+                          ),
                         ),
-                        Text(
-                          'Hebbal (FPS-KA-BLR-001)',
-                          style: TextStyle(fontSize: isSmall ? 9 : 9.5, color: const Color(0xFF64748B)),
-                          overflow: TextOverflow.ellipsis,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE2E8F0),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            meta,
+                            style: const TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF334155),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: selectedCard == 'RC-KA-000002' ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      selectedCard == 'RC-KA-000002' ? 'Selected ✓' : 'Use Card',
+                    const SizedBox(height: 2),
+                    Text(
+                      '$cardId • $phone',
                       style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.bold,
-                        color: selectedCard == 'RC-KA-000002' ? Colors.white : const Color(0xFF334155),
+                        fontSize: isSmall ? 10 : 11,
+                        fontWeight: FontWeight.w700,
+                        color: accentColor,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                    Text(
+                      fpsName,
+                      style: TextStyle(
+                        fontSize: isSmall ? 9 : 9.5,
+                        color: const Color(0xFF64748B),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              // Button 1: Fill Credentials
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      _citizenCardController.text = cardId;
+                      _citizenPhoneController.text = phone;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Form populated: $name ($cardId)'),
+                        backgroundColor: const Color(0xFF15803D),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    side: BorderSide(color: isSelected ? accentColor : const Color(0xFFCBD5E1)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    backgroundColor: isSelected ? const Color(0xFFF0FDF4) : Colors.white,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(isSelected ? Icons.check_circle_rounded : Icons.edit_note_rounded, size: 14, color: isSelected ? accentColor : const Color(0xFF475569)),
+                      const SizedBox(width: 4),
+                      Text(
+                        isSelected ? 'Filled ✓' : 'Fill Form',
+                        style: TextStyle(
+                          fontSize: isSmall ? 10.5 : 11,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? accentColor : const Color(0xFF334155),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Button 2: Instant 1-Tap Portal Entry
+              Expanded(
+                flex: 1,
+                child: ElevatedButton(
+                  onPressed: _isVerifyingOtp
+                      ? null
+                      : () => _quickLoginBeneficiary(cardId: cardId, phoneNumber: phone, name: name),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF15803D),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    elevation: 0,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.login_rounded, size: 13, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Enter Portal ➔',
+                        style: TextStyle(
+                          fontSize: isSmall ? 10.5 : 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

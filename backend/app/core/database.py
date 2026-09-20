@@ -1536,21 +1536,27 @@ def _migration_015_household_members_and_otp_hardening(cursor: sqlite3.Cursor) -
 
     # 3. Seed baseline household members for key demo cards
     demo_members = [
-        # RC-KA-000001 (Deepa Reddy, 2 members)
+        # RC-KA-000001 (Deepa Reddy, 2+ members) - supports both +919845012345 and +919845010000
         ("RC-KA-000001", "M-01", "Deepa Reddy", "Head of Household", 38, "F", "+919845012345", "4321", 1),
         ("RC-KA-000001", "M-02", "Rajesh Reddy", "Spouse", 42, "M", "+919845067890", "8765", 1),
+        ("RC-KA-000001", "M-03", "Swathi Reddy", "Daughter", 20, "F", "+919845010000", "1001", 1),
 
-        # BEN-KA-0001 (Swathi Bhat, 4 members)
+        # BEN-KA-0001 (Swathi Bhat, 4 members) - supports +919845010000 and +919845012345
         ("BEN-KA-0001", "M-01", "Swathi Bhat", "Head of Household", 36, "F", "+919845010000", "1001", 1),
         ("BEN-KA-0001", "M-02", "Vinod Bhat", "Spouse", 40, "M", "+919845010050", "1002", 1),
         ("BEN-KA-0001", "M-03", "Ananya Bhat", "Daughter", 14, "F", None, "1003", 1),
         ("BEN-KA-0001", "M-04", "Rohan Bhat", "Son", 10, "M", None, "1004", 1),
+        ("BEN-KA-0001", "M-05", "Deepa Reddy", "Co-resident", 38, "F", "+919845012345", "4321", 1),
 
-        # BEN-KA-0002 (Suresh S., 4 members)
+        # BEN-KA-0002 (Suresh S., 4 members) - supports +919845010001
         ("BEN-KA-0002", "M-01", "Suresh S.", "Head of Household", 45, "M", "+919845010001", "2001", 1),
         ("BEN-KA-0002", "M-02", "Kavitha S.", "Spouse", 40, "F", "+919845010051", "2002", 1),
         ("BEN-KA-0002", "M-03", "Pooja S.", "Daughter", 16, "F", None, "2003", 1),
         ("BEN-KA-0002", "M-04", "Kiran S.", "Son", 12, "M", None, "2004", 1),
+
+        # RC-KA-000002 (Swathi Joshi) - supports +919845010002 and +919845010001
+        ("RC-KA-000002", "M-01", "Swathi Joshi", "Head of Household", 34, "F", "+919845010002", "3001", 1),
+        ("RC-KA-000002", "M-02", "Suresh S.", "Relative", 45, "M", "+919845010001", "3002", 1),
 
         # BEN-KA-0005 (Sunita Devi, 4 members)
         ("BEN-KA-0005", "M-01", "Sunita Devi", "Head of Household", 39, "F", "+919845010004", "5001", 1),

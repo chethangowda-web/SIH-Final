@@ -152,7 +152,7 @@ class ApiService {
   /// for a ration card.
   Future<Map<String, dynamic>> fetchHouseholdPhones(String cardId) async {
     final response = await client.get(
-      Uri.parse('/auth/citizen/household-phones/${Uri.encodeComponent(cardId.trim())}'),
+      Uri.parse('${AppConstants.apiBaseUrl}/auth/citizen/household-phones/${Uri.encodeComponent(cardId.trim())}'),
       headers: {'Accept': 'application/json'},
     ).timeout(AppConstants.apiTimeout);
 
@@ -171,7 +171,7 @@ class ApiService {
     final cleanQ = query.trim();
     if (cleanQ.isEmpty) return [];
     try {
-      final uri = Uri.parse('/auth/citizen/search').replace(
+      final uri = Uri.parse('${AppConstants.apiBaseUrl}/auth/citizen/search').replace(
         queryParameters: {
           'q': cleanQ,
           'limit': limit.toString(),
