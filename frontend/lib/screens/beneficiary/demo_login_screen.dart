@@ -163,116 +163,74 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     }
   }
 
-  void _showVoiceInputModal({
-    required String title,
-    required String prompt,
-    required String fieldType, // 'card', 'phone', 'otp', 'smart_login'
-    required void Function(String result) onValueRecognized,
-    void Function(String card, String phone)? onSmartLoginApply,
-  }) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return _VoiceInputListeningSheet(
-          title: title,
-          prompt: prompt,
-          fieldType: fieldType,
-          onApply: (val) {
-            Navigator.pop(ctx);
-            onValueRecognized(val);
-          },
-          onSmartLoginApply: (card, phone) {
-            Navigator.pop(ctx);
-            if (onSmartLoginApply != null) {
-              onSmartLoginApply(card, phone);
-            }
-          },
-        );
-      },
-    );
-  }
+  bool _isListeningCard = false;
+  bool _isListeningPhone = false;
 
   void _listenForRationCard() {
-    final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
-    final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
+    final voice = VoiceAssistantService.instance;
+    if (voice.isListening && _isListeningCard) {
+      voice.stopListening();
+      setState(() => _isListeningCard = false);
+      return;
+    }
 
-    final title = isKn
-        ? 'ಪಡಿತರ ಚೀಟಿ ಸಂಖ್ಯೆ ಹೇಳಿ'
-        : isHi
-            ? 'राशन कार्ड नंबर बोलें'
-            : 'Speak Ration Card Number';
+    setState(() {
+      _isListeningCard = true;
+      _isListeningPhone = false;
+    });
 
-    final prompt = isKn
-        ? 'ಉದಾಹರಣೆಗೆ: ಆರ್ ಸಿ ಕೆ ಎ 0 0 0 0 0 1 ಅಥವಾ 1 ರಿಂದ 8000'
-        : isHi
-            ? 'उदाहरण के लिए: आर सी के ए 0 0 0 0 0 1 या 1 से 8000'
-            : 'Say digits or card number e.g., RC-KA-000001 or 1 to 8000';
+    final lang = LanguageController.instance.currentLanguage;
+    final langCode = lang == AppLanguage.hindi ? 'hi-IN' : (lang == AppLanguage.kannada ? 'kn-IN' : 'en-IN');
 
-    _showVoiceInputModal(
-      title: title,
-      prompt: prompt,
-      fieldType: 'card',
-      onValueRecognized: (val) {
+    voice.startListening(
+      overrideLangCode: langCode,
+      onFinalResult: (transcript) {
+        if (!mounted) return;
+        final digits = VoiceAssistantService.normalizeSpokenDigits(transcript).replaceAll(RegExp(r'[^0-9]'), '');
+        String formatted = transcript.trim();
+        if (digits.isNotEmpty) {
+          formatted = 'RC-KA-${digits.padLeft(6, '0')}';
+        } else if (transcript.trim().isNotEmpty) {
+          formatted = transcript.trim().toUpperCase().replaceAll(' ', '-');
+        }
         setState(() {
-          _citizenCardController.text = val;
+          if (formatted.isNotEmpty) {
+            _citizenCardController.text = formatted;
+          }
+          _isListeningCard = false;
         });
       },
     );
   }
 
   void _listenForPhone() {
-    final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
-    final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
+    final voice = VoiceAssistantService.instance;
+    if (voice.isListening && _isListeningPhone) {
+      voice.stopListening();
+      setState(() => _isListeningPhone = false);
+      return;
+    }
 
-    final title = isKn
-        ? 'ನೋಂದಾಯಿತ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ಹೇಳಿ'
-        : isHi
-            ? 'पंजीकृत मोबाइल नंबर बोलें'
-            : 'Speak Registered Mobile Number';
+    setState(() {
+      _isListeningPhone = true;
+      _isListeningCard = false;
+    });
 
-    final prompt = isKn
-        ? 'ನಿಮ್ಮ 10-ಅಂಕಿಯ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ಸ್ಪಷ್ಟವಾಗಿ ಹೇಳಿ'
-        : isHi
-            ? 'अपना 10-अंकीय मोबाइल नंबर स्पष्ट रूप से बोलें'
-            : 'Speak your 10-digit registered mobile number';
+    final lang = LanguageController.instance.currentLanguage;
+    final langCode = lang == AppLanguage.hindi ? 'hi-IN' : (lang == AppLanguage.kannada ? 'kn-IN' : 'en-IN');
 
-    _showVoiceInputModal(
-      title: title,
-      prompt: prompt,
-      fieldType: 'phone',
-      onValueRecognized: (val) {
+    voice.startListening(
+      overrideLangCode: langCode,
+      onFinalResult: (transcript) {
+        if (!mounted) return;
+        final phone = VoiceAssistantService.extractPhoneNumber(transcript);
+        final digits = VoiceAssistantService.normalizeSpokenDigits(transcript).replaceAll(RegExp(r'[^0-9]'), '');
+        String formatted = phone.isNotEmpty ? phone : (digits.length >= 10 ? digits.substring(digits.length - 10) : digits);
         setState(() {
-          _citizenPhoneController.text = val;
-        });
-      },
-    );
-  }
-
-  void _listenForOtp() {
-    final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
-    final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
-
-    final title = isKn
-        ? 'ಒಟಿಪಿ ಕೋಡ್ ಹೇಳಿ'
-        : isHi
-            ? 'ओटीपी कोड बोलें'
-            : 'Speak 6-Digit OTP Code';
-
-    final prompt = isKn
-        ? 'ಎಸ್ಎಂಎಸ್ ಮೂಲಕ ಬಂದ 6-ಅಂಕಿಯ ಒಟಿಪಿ ಹೇಳಿ'
-        : isHi
-            ? 'एसएमएस से प्राप्त 6-अंकीय ओटीपी बोलें'
-            : 'Speak the 6 digits of your SMS OTP';
-
-    _showVoiceInputModal(
-      title: title,
-      prompt: prompt,
-      fieldType: 'otp',
-      onValueRecognized: (val) {
-        setState(() {
-          _citizenOtpController.text = val;
+          if (formatted.isNotEmpty) {
+            _citizenPhoneController.text = formatted;
+          }
+          _isListeningPhone = false;
         });
       },
     );
@@ -1020,11 +978,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               counterText: '',
               hintStyle: const TextStyle(letterSpacing: 8, color: _slate400),
               prefixIcon: const Icon(Icons.lock_outline_rounded, color: _slate400, size: 18),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.mic_rounded, color: Color(0xFF15803D), size: 20),
-                tooltip: 'Use microphone to enter',
-                onPressed: _listenForOtp,
-              ),
               filled: true,
               fillColor: _slate50,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
@@ -1476,400 +1429,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           style: TextStyle(fontSize: isSmall ? 9.5 : 10.5, color: _slate400),
         ),
       ],
-    );
-  }
-}
-
-/// Interactive Voice Listening Sheet providing instant audio & visual waveform feedback
-class _VoiceInputListeningSheet extends StatefulWidget {
-  final String title;
-  final String prompt;
-  final String fieldType; // 'card', 'phone', 'otp', 'smart_login'
-  final void Function(String result) onApply;
-  final void Function(String card, String phone)? onSmartLoginApply;
-
-  const _VoiceInputListeningSheet({
-    required this.title,
-    required this.prompt,
-    required this.fieldType,
-    required this.onApply,
-    this.onSmartLoginApply,
-  });
-
-  @override
-  State<_VoiceInputListeningSheet> createState() => _VoiceInputListeningSheetState();
-}
-
-class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
-  String _liveTranscript = '';
-  String _formattedPreview = '';
-  String? _smartCard;
-  String? _smartPhone;
-  String _selectedLangCode = 'kn-IN';
-
-  String? _statusError;
-
-  @override
-  void initState() {
-    super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-
-    final curr = LanguageController.instance.currentLanguage;
-    _selectedLangCode = curr == AppLanguage.hindi ? 'hi-IN' : (curr == AppLanguage.kannada ? 'kn-IN' : 'en-IN');
-
-    VoiceAssistantService.instance.addListener(_onVoiceServiceUpdate);
-    _startRecording();
-  }
-
-  @override
-  void dispose() {
-    VoiceAssistantService.instance.removeListener(_onVoiceServiceUpdate);
-    _animController.dispose();
-    super.dispose();
-  }
-
-  void _onVoiceServiceUpdate() {
-    if (!mounted) return;
-    final voice = VoiceAssistantService.instance;
-    final text = voice.recognizedSpeech;
-    final status = voice.speechRecognitionStatus;
-
-    String? err;
-    if (status == 'permission_denied') {
-      err = "Microphone permission required. You can type it manually.";
-    } else if (status == 'no_speech' || status == 'error') {
-      err = "Couldn't recognize that. You can type it manually.";
-    } else if (status == 'unsupported') {
-      err = "Speech service unavailable. You can type it manually.";
-    }
-
-    if (text != _liveTranscript && text.isNotEmpty) {
-      setState(() {
-        _liveTranscript = text;
-        _formattedPreview = _formatResult(text);
-        _statusError = null;
-      });
-    } else if (err != _statusError) {
-      setState(() {
-        _statusError = err;
-      });
-    }
-  }
-
-  String _formatResult(String raw) {
-    if (raw.trim().isEmpty) return '';
-    if (widget.fieldType == 'card') {
-      final digits = VoiceAssistantService.normalizeSpokenDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
-      if (digits.isNotEmpty) {
-        return 'RC-KA-${digits.padLeft(6, '0')}';
-      }
-      return raw.trim().toUpperCase().replaceAll(' ', '-');
-    } else if (widget.fieldType == 'phone') {
-      final phone = VoiceAssistantService.extractPhoneNumber(raw);
-      if (phone.isNotEmpty) return phone;
-      final digits = VoiceAssistantService.normalizeSpokenDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
-      return digits.length >= 10 ? digits.substring(digits.length - 10) : digits;
-    } else if (widget.fieldType == 'otp') {
-      final digits = VoiceAssistantService.normalizeSpokenDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
-      return digits.length >= 6 ? digits.substring(0, 6) : digits;
-    }
-    return raw.trim();
-  }
-
-  void _startRecording() {
-    setState(() {
-      _liveTranscript = '';
-      _formattedPreview = '';
-      _smartCard = null;
-      _smartPhone = null;
-      _statusError = null;
-    });
-    VoiceAssistantService.instance.startListening(
-      overrideLangCode: _selectedLangCode,
-      onFinalResult: (transcript) {
-        if (!mounted) return;
-        final formatted = _formatResult(transcript);
-        setState(() {
-          _liveTranscript = transcript;
-          _formattedPreview = formatted;
-        });
-      },
-    );
-  }
-
-  void _switchLanguage(String langCode) {
-    if (_selectedLangCode == langCode) return;
-    setState(() {
-      _selectedLangCode = langCode;
-    });
-    _startRecording();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final voice = VoiceAssistantService.instance;
-    final isListening = voice.isListening && _statusError == null;
-    final isKn = _selectedLangCode.startsWith('kn');
-    final isHi = _selectedLangCode.startsWith('hi');
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Top grab handle
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
-            ),
-            const SizedBox(height: 12),
-
-            // In-Modal Multilingual Language Switcher
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildLangChip('kn-IN', '🟢 ಕನ್ನಡ', isKn),
-                  _buildLangChip('hi-IN', '🇮🇳 हिन्दी', isHi),
-                  _buildLangChip('en-IN', '🌐 English', !isKn && !isHi),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Header Title
-            Text(
-              widget.title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF0F2942)),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              widget.prompt,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-
-            // Animated Mic Button with Sound Wave Visualizers
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildWaveBar(16, 36, 0.2),
-                const SizedBox(width: 6),
-                _buildWaveBar(24, 48, 0.5),
-                const SizedBox(width: 14),
-
-                AnimatedBuilder(
-                  animation: _animController,
-                  builder: (context, child) {
-                    final scale = isListening ? (1.0 + _animController.value * 0.12) : 1.0;
-                    return Transform.scale(
-                      scale: scale,
-                      child: GestureDetector(
-                        onTap: _startRecording,
-                        child: Container(
-                          width: 72,
-                          height: 72,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isListening ? const Color(0xFF15803D) : (_statusError != null ? Colors.red.shade700 : const Color(0xFF0F2942)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: isListening ? const Color(0x6615803D) : Colors.black12,
-                                blurRadius: isListening ? (12 + _animController.value * 10) : 6,
-                                spreadRadius: isListening ? (_animController.value * 6) : 0,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                            color: Colors.white,
-                            size: 36,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(width: 14),
-                _buildWaveBar(24, 48, 0.7),
-                const SizedBox(width: 6),
-                _buildWaveBar(16, 36, 0.4),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // Listening status / Error status
-            Text(
-              _statusError != null
-                  ? _statusError!
-                  : (isListening
-                      ? (isKn ? '🎙️ ಕೇಳಿಸಿಕೊಳ್ಳಲಾಗುತ್ತಿದೆ... ಸ್ಪಷ್ಟವಾಗಿ ಮಾತನಾಡಿ' : isHi ? '🎙️ सुन रहे हैं... स्पष्ट बोलें' : '🎙️ Listening... Speak clearly now')
-                      : (isKn ? 'ಧ್ವನಿ ದಾಖಲಿಸಲು ಮೈಕ್ ಒತ್ತಿ' : isHi ? 'माइक पर टैप करके बोलें' : 'Tap mic to speak')),
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: _statusError != null
-                    ? Colors.red.shade700
-                    : (isListening ? const Color(0xFF15803D) : Colors.grey.shade600),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 14),
-
-            // Live Speech / Formatted Result Card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _formattedPreview.isNotEmpty ? const Color(0xFF86EFAC) : const Color(0xFFE2E8F0),
-                  width: _formattedPreview.isNotEmpty ? 1.5 : 1.0,
-                ),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    _formattedPreview.isNotEmpty ? _formattedPreview : (_liveTranscript.isNotEmpty ? _liveTranscript : '...'),
-                    style: TextStyle(
-                      fontSize: widget.fieldType == 'otp' ? 22 : 16,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: widget.fieldType == 'otp' ? 6 : 0.5,
-                      color: _formattedPreview.isNotEmpty ? const Color(0xFF0F2942) : Colors.grey.shade400,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (_liveTranscript.isNotEmpty && _formattedPreview.isNotEmpty && _liveTranscript != _formattedPreview) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Spoken: "$_liveTranscript"',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Action Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      voice.stopListening();
-                      Navigator.pop(context);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      side: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    child: Text(
-                      isKn ? 'ರದ್ದುಮಾಡಿ' : isHi ? 'रद्द करें' : 'Cancel',
-                      style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      voice.stopListening();
-                      if (_formattedPreview.isNotEmpty) {
-                        widget.onApply(_formattedPreview);
-                      } else if (_liveTranscript.isNotEmpty) {
-                        widget.onApply(_liveTranscript);
-                      } else {
-                        Navigator.pop(context);
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF15803D),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      elevation: 0,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.check_rounded, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          isKn ? 'ಅನ್ವಯಿಸಿ' : isHi ? 'लागू करें' : 'Apply & Fill',
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLangChip(String code, String label, bool isSelected) {
-    return InkWell(
-      onTap: () => _switchLanguage(code),
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF15803D) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-            color: isSelected ? Colors.white : const Color(0xFF334155),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWaveBar(double minH, double maxH, double phaseOffset) {
-    return AnimatedBuilder(
-      animation: _animController,
-      builder: (context, child) {
-        final val = ((_animController.value + phaseOffset) % 1.0);
-        final height = minH + (maxH - minH) * (val * 2 < 1.0 ? val * 2 : 2.0 - val * 2);
-        return Container(
-          width: 4,
-          height: height,
-          decoration: BoxDecoration(
-            color: const Color(0xFF16A34A).withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        );
-      },
     );
   }
 }
