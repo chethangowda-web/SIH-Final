@@ -159,7 +159,9 @@ if WEB_BUILD_DIR.exists():
         f = WEB_BUILD_DIR / "flutter_bootstrap.js"
         if f.exists():
             from fastapi.responses import FileResponse
-            return FileResponse(f, media_type="application/javascript")
+            resp = FileResponse(f, media_type="application/javascript")
+            resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            return resp
         from fastapi import Response
         return Response(status_code=404)
 
@@ -168,7 +170,9 @@ if WEB_BUILD_DIR.exists():
         f = WEB_BUILD_DIR / "main.dart.js"
         if f.exists():
             from fastapi.responses import FileResponse
-            return FileResponse(f, media_type="application/javascript")
+            resp = FileResponse(f, media_type="application/javascript")
+            resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            return resp
         from fastapi import Response
         return Response(status_code=404)
 
@@ -196,11 +200,18 @@ if WEB_BUILD_DIR.exists():
         target_file = WEB_BUILD_DIR / full_path
         if target_file.exists() and target_file.is_file():
             from fastapi.responses import FileResponse
-            return FileResponse(target_file)
+            resp = FileResponse(target_file)
+            if target_file.name in ("index.html", "flutter_bootstrap.js", "flutter_service_worker.js", "version.json", "main.dart.js"):
+                resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+                resp.headers["Pragma"] = "no-cache"
+            return resp
         index_file = WEB_BUILD_DIR / "index.html"
         if index_file.exists():
             from fastapi.responses import FileResponse
-            return FileResponse(index_file)
+            resp = FileResponse(index_file)
+            resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            resp.headers["Pragma"] = "no-cache"
+            return resp
         return RedirectResponse(url="/")
 
 @app.get("/", tags=["Root"])
