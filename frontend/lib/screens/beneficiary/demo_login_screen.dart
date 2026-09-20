@@ -1358,7 +1358,41 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
+
+          // Demo Evaluation OTP Helper Chip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF86EFAC)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.verified_outlined, size: 15, color: Color(0xFF15803D)),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Demo Evaluation OTP: 123456',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF166534)),
+                  ),
+                ),
+                InkWell(
+                  onTap: () => setState(() => _citizenOtpController.text = '123456'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF15803D),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text('Auto-Fill', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
 
           // Verify & Login Button
           ElevatedButton(
@@ -1450,6 +1484,11 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           tr('login.instruction'),
           style: TextStyle(fontSize: isSmall ? 11 : 12, color: _slate500, height: 1.3),
         ),
+        const SizedBox(height: 14),
+
+        // Demo Beneficiary Quick Selector (1-Tap Fill for Easy Testing / Evaluation)
+        _buildDemoBeneficiarySelector(isSmall),
+
         const SizedBox(height: 14),
 
         // Compact Accessibility Voice Assistant Card
@@ -1546,6 +1585,240 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
               : Text(tr('login.get_otp_btn'), style: TextStyle(fontSize: isSmall ? 13.5 : 14.5, fontWeight: FontWeight.w700)),
         ),
       ],
+    );
+  }
+
+  Widget _buildDemoBeneficiarySelector(bool isSmall) {
+    final selectedCard = _citizenCardController.text.trim();
+
+    return Container(
+      padding: EdgeInsets.all(isSmall ? 10 : 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF86EFAC), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF15803D),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Icon(Icons.stars_rounded, color: Colors.white, size: 14),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'DEMO BENEFICIARY (1-TAP TEST)',
+                  style: TextStyle(
+                    fontSize: isSmall ? 10.5 : 11.5,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF166534),
+                    letterSpacing: 0.5,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF86EFAC)),
+                ),
+                child: const Text(
+                  'CLICK TO FILL',
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF15803D)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Demo Card 1: Deepa Reddy
+          InkWell(
+            onTap: () {
+              setState(() {
+                _citizenCardController.text = 'RC-KA-000001';
+                _citizenPhoneController.text = '9845010000';
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Demo Beneficiary: Deepa Reddy (RC-KA-000001) credentials selected.'),
+                  backgroundColor: Color(0xFF15803D),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: selectedCard == 'RC-KA-000001' ? Colors.white : const Color(0xFFFAFDFA),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: selectedCard == 'RC-KA-000001' ? const Color(0xFF15803D) : const Color(0xFFBBF7D0),
+                  width: selectedCard == 'RC-KA-000001' ? 1.8 : 1.0,
+                ),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: isSmall ? 16 : 18,
+                    backgroundColor: const Color(0xFFDCFCE7),
+                    child: const Icon(Icons.person_rounded, color: Color(0xFF15803D), size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 6,
+                          runSpacing: 2,
+                          children: [
+                            Text(
+                              'Deepa Reddy',
+                              style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F2942)),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(4)),
+                              child: const Text('PHH • 2 M', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF334155))),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'RC-KA-000001 • 98450 10000',
+                          style: TextStyle(fontSize: isSmall ? 10 : 11, fontWeight: FontWeight.w700, color: const Color(0xFF15803D)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'Bagalur (FPS-KA-BAG-0001)',
+                          style: TextStyle(fontSize: isSmall ? 9 : 9.5, color: const Color(0xFF64748B)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: selectedCard == 'RC-KA-000001' ? const Color(0xFF15803D) : const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      selectedCard == 'RC-KA-000001' ? 'Selected ✓' : 'Use Card',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: selectedCard == 'RC-KA-000001' ? Colors.white : const Color(0xFF334155),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Demo Card 2: Suresh S.
+          InkWell(
+            onTap: () {
+              setState(() {
+                _citizenCardController.text = 'RC-KA-000002';
+                _citizenPhoneController.text = '9845010001';
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Demo Beneficiary: Suresh S. (RC-KA-000002) credentials selected.'),
+                  backgroundColor: Color(0xFF15803D),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: selectedCard == 'RC-KA-000002' ? Colors.white : const Color(0xFFFAFDFA),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: selectedCard == 'RC-KA-000002' ? const Color(0xFF15803D) : const Color(0xFFBBF7D0),
+                  width: selectedCard == 'RC-KA-000002' ? 1.8 : 1.0,
+                ),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: isSmall ? 14 : 16,
+                    backgroundColor: const Color(0xFFE0F2FE),
+                    child: const Icon(Icons.person_rounded, color: Color(0xFF0284C7), size: 18),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 6,
+                          runSpacing: 2,
+                          children: [
+                            Text(
+                              'Suresh S.',
+                              style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F2942)),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(4)),
+                              child: const Text('PHH • 4 M', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF334155))),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'RC-KA-000002 • 98450 10001',
+                          style: TextStyle(fontSize: isSmall ? 10 : 11, fontWeight: FontWeight.w600, color: const Color(0xFF0284C7)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'Hebbal (FPS-KA-BLR-001)',
+                          style: TextStyle(fontSize: isSmall ? 9 : 9.5, color: const Color(0xFF64748B)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: selectedCard == 'RC-KA-000002' ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      selectedCard == 'RC-KA-000002' ? 'Selected ✓' : 'Use Card',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: selectedCard == 'RC-KA-000002' ? Colors.white : const Color(0xFF334155),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
