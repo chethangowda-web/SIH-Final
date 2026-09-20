@@ -74,12 +74,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     VoiceAssistantService.instance.stopVoiceAssistantMode();
     VoiceAssistantService.instance.onCommandRecognized = null;
 
-    if (_selectedTabIndex == 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _activateCitizenVoice();
-      });
-    }
-
     _citizenOtpController.addListener(_onOtpChanged);
 
     if (widget.sessionExpiredMessage != null) {
@@ -96,12 +90,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     }
   }
 
-  void _onOtpChanged() {
-    final text = _citizenOtpController.text.trim();
-    if (_otpSent && text.length == 6 && _selectedTabIndex == 0 && VoiceAssistantService.instance.isVoiceAssistantMode) {
-      VoiceAssistantService.instance.guideLoginStepOtpEntered();
-    }
-  }
+  void _onOtpChanged() {}
 
   @override
   void dispose() {
@@ -147,13 +136,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     return str;
   }
 
-  void _activateCitizenVoice() {
-    final voice = VoiceAssistantService.instance;
-    voice.enableBeneficiaryVoiceMode();
-    _setupCitizenVoiceRecognition();
-    voice.guideLoginStepRationId();
-  }
-
   void _deactivateCitizenVoice() {
     final voice = VoiceAssistantService.instance;
     voice.stop();
@@ -168,70 +150,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       _selectedTabIndex = index;
     });
 
-    if (index == 0) {
-      _activateCitizenVoice();
-    } else {
+    if (index != 0) {
       _deactivateCitizenVoice();
     }
-  }
-
-  void _setupCitizenVoiceRecognition() {
-    final voice = VoiceAssistantService.instance;
-    voice.onCommandRecognized = (transcript) {
-      if (!mounted || _selectedTabIndex != 0) return;
-      final lower = transcript.toLowerCase().trim();
-      if (lower.isEmpty) return;
-
-      if (lower.contains('hindi') || lower.contains('हिंदी') || lower.contains('हिन्दी')) {
-        LanguageController.instance.setLanguage(AppLanguage.hindi);
-        return;
-      }
-      if (lower.contains('kannada') || lower.contains('ಕನ್ನಡ')) {
-        LanguageController.instance.setLanguage(AppLanguage.kannada);
-        return;
-      }
-      if (lower.contains('english') || lower.contains('अंग्रेजी') || lower.contains('ಇಂಗ್ಲಿಷ್')) {
-        LanguageController.instance.setLanguage(AppLanguage.english);
-        return;
-      }
-
-      if (_otpSent) {
-        if (lower.contains('login') || lower.contains('verify') || lower.contains('सत्यापित') || lower.contains('लॉगिन') || lower.contains('ದೃಢೀಕರಿಸಿ') || lower.contains('ಲಾಗಿನ್')) {
-          _handleVerifyOtpAndLogin();
-          return;
-        }
-        final digits = VoiceAssistantService.normalizeSpokenDigits(transcript).replaceAll(RegExp(r'[^0-9]'), '');
-        if (digits.length >= 4) {
-          setState(() {
-            _citizenOtpController.text = digits.length > 6 ? digits.substring(0, 6) : digits;
-          });
-          voice.guideLoginStepOtpEntered();
-          return;
-        }
-      } else {
-        if (lower.contains('get otp') || lower.contains('send otp') || lower.contains('ओटीपी भेजें') || lower.contains('ಒಟಿಪಿ ಪಡೆಯಿರಿ') || lower.contains('otp')) {
-          _handleSendOtp();
-          return;
-        }
-        final phone = VoiceAssistantService.extractPhoneNumber(transcript);
-        if (phone.length == 10) {
-          setState(() {
-            _citizenPhoneController.text = phone;
-          });
-          return;
-        }
-        if (lower.contains('rc') || lower.contains('card') || lower.contains('कार्ड') || lower.contains('ಕಾರ್ಡ್')) {
-          final digits = VoiceAssistantService.normalizeSpokenDigits(transcript).replaceAll(RegExp(r'[^0-9]'), '');
-          if (digits.isNotEmpty) {
-            setState(() {
-              _citizenCardController.text = 'RC-KA-${digits.padLeft(6, '0')}';
-            });
-            voice.guideLoginStepPhone();
-            return;
-          }
-        }
-      }
-    };
   }
 
   void _showVoiceInputModal({
@@ -289,7 +210,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         setState(() {
           _citizenCardController.text = val;
         });
-        VoiceAssistantService.instance.guideLoginStepPhone();
       },
     );
   }
@@ -346,42 +266,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         setState(() {
           _citizenOtpController.text = val;
         });
-        VoiceAssistantService.instance.guideLoginStepOtpEntered();
-      },
-    );
-  }
-
-  void _listenForSmartVoiceLogin() {
-    final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
-    final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
-
-    final title = isKn
-        ? '⚡ ಸ್ಮಾರ್ಟ್ ಧ್ವನಿ ಲಾಗಿನ್'
-        : isHi
-            ? '⚡ स्मार्ट वॉयस लॉगिन'
-            : '⚡ Smart One-Touch Voice Login';
-
-    final prompt = isKn
-        ? 'ಯಾವುದೇ ಭಾಷೆಯಲ್ಲಿ ಮಾತನಾಡಿ: "ಕಾರ್ಡ್ 1 ಮೊಬೈಲ್ 9845012345" ಅಥವಾ "RC-KA-000001 9845012345"'
-        : isHi
-            ? 'किसी भी भाषा में बोलें: "कार्ड 1 मोबाइल 9845012345" या "RC-KA-000001 9845012345"'
-            : 'Speak naturally in any language: e.g. "Card 1 mobile 9845012345" or "RC-KA-000001 9845012345"';
-
-    _showVoiceInputModal(
-      title: title,
-      prompt: prompt,
-      fieldType: 'smart_login',
-      onValueRecognized: (val) {},
-      onSmartLoginApply: (card, phone) {
-        if (card.isNotEmpty) {
-          setState(() => _citizenCardController.text = card);
-        }
-        if (phone.isNotEmpty) {
-          setState(() => _citizenPhoneController.text = phone);
-        }
-        if (_citizenCardController.text.isNotEmpty && _citizenPhoneController.text.length >= 10) {
-          _handleSendOtp();
-        }
       },
     );
   }
@@ -1080,9 +964,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       key: const ValueKey('citizen_otp'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Voice Assistant Banner (Available ONLY for Citizen OTP Flow - Tap to Speak removed on login)
-        const VoiceAssistantBanner(showTapToSpeak: false),
-
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -1129,82 +1010,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 12),
-
-        // One-Touch Smart Voice Login Card (Multilingual)
-        InkWell(
-          onTap: _listenForSmartVoiceLogin,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFDCFCE7), Color(0xFFF0FDF4)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF86EFAC), width: 1.5),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0F15803D),
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF15803D),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.mic_rounded, color: Colors.white, size: 24),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              LanguageController.instance.currentLanguage == AppLanguage.kannada
-                                  ? '🎙️ ಸ್ಮಾರ್ಟ್ ಧ್ವನಿ ಲಾಗಿನ್ (ಮಾತನಾಡಿ)'
-                                  : LanguageController.instance.currentLanguage == AppLanguage.hindi
-                                      ? '🎙️ स्मार्ट वॉयस लॉगिन (बोलें)'
-                                      : '🎙️ One-Touch Voice Login (Speak)',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF166534),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        LanguageController.instance.currentLanguage == AppLanguage.kannada
-                            ? 'ಯಾವುದೇ ಭಾಷೆಯಲ್ಲಿ ರೇಷನ್ ಕಾರ್ಡ್ & ಮೊಬೈಲ್ ನಂಬರ್ ಹೇಳಿ ಲಾಗಿನ್ ಆಗಿ'
-                            : LanguageController.instance.currentLanguage == AppLanguage.hindi
-                                ? 'कन्नड़, हिंदी या अंग्रेज़ी में बोलकर तुरंत लॉगिन करें'
-                                : 'Speak your Card & Mobile number in any language',
-                        style: const TextStyle(fontSize: 10.5, color: Color(0xFF15803D), fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF15803D)),
-              ],
-            ),
-          ),
-        ),
         const SizedBox(height: 14),
 
         // Field 1: Ration Card Number
@@ -1218,7 +1023,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             prefixIcon: Icon(Icons.credit_card_rounded, size: isSmall ? 16 : 18, color: _slate500),
             suffixIcon: IconButton(
               icon: const Icon(Icons.mic_rounded, color: Color(0xFF15803D), size: 20),
-              tooltip: 'Speak Ration Card Number',
+              tooltip: 'Use microphone to enter',
               onPressed: _listenForRationCard,
             ),
             filled: true,
@@ -1244,7 +1049,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             prefixIcon: Icon(Icons.phone_android_rounded, size: isSmall ? 16 : 18, color: _slate500),
             suffixIcon: IconButton(
               icon: const Icon(Icons.mic_rounded, color: Color(0xFF15803D), size: 20),
-              tooltip: 'Speak Registered Mobile Number',
+              tooltip: 'Use microphone to enter',
               onPressed: _listenForPhone,
             ),
             filled: true,
@@ -1671,6 +1476,8 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
   String? _smartPhone;
   String _selectedLangCode = 'kn-IN';
 
+  String? _statusError;
+
   @override
   void initState() {
     super.initState();
@@ -1695,27 +1502,35 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
 
   void _onVoiceServiceUpdate() {
     if (!mounted) return;
-    final text = VoiceAssistantService.instance.recognizedSpeech;
+    final voice = VoiceAssistantService.instance;
+    final text = voice.recognizedSpeech;
+    final status = voice.speechRecognitionStatus;
+
+    String? err;
+    if (status == 'permission_denied') {
+      err = "Microphone permission required. You can type it manually.";
+    } else if (status == 'no_speech' || status == 'error') {
+      err = "Couldn't recognize that. You can type it manually.";
+    } else if (status == 'unsupported') {
+      err = "Speech service unavailable. You can type it manually.";
+    }
+
     if (text != _liveTranscript && text.isNotEmpty) {
       setState(() {
         _liveTranscript = text;
         _formattedPreview = _formatResult(text);
+        _statusError = null;
+      });
+    } else if (err != _statusError) {
+      setState(() {
+        _statusError = err;
       });
     }
   }
 
   String _formatResult(String raw) {
     if (raw.trim().isEmpty) return '';
-    if (widget.fieldType == 'smart_login') {
-      final creds = VoiceAssistantService.extractLoginCredentials(raw);
-      _smartCard = creds['card'];
-      _smartPhone = creds['phone'];
-      final parts = <String>[];
-      if (_smartCard != null) parts.add('💳 Card: $_smartCard');
-      if (_smartPhone != null) parts.add('📱 Mobile: $_smartPhone');
-      if (parts.isNotEmpty) return parts.join('  •  ');
-      return raw.trim();
-    } else if (widget.fieldType == 'card') {
+    if (widget.fieldType == 'card') {
       final digits = VoiceAssistantService.normalizeSpokenDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
       if (digits.isNotEmpty) {
         return 'RC-KA-${digits.padLeft(6, '0')}';
@@ -1739,6 +1554,7 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
       _formattedPreview = '';
       _smartCard = null;
       _smartPhone = null;
+      _statusError = null;
     });
     VoiceAssistantService.instance.startListening(
       overrideLangCode: _selectedLangCode,
@@ -1764,7 +1580,7 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
   @override
   Widget build(BuildContext context) {
     final voice = VoiceAssistantService.instance;
-    final isListening = voice.isListening;
+    final isListening = voice.isListening && _statusError == null;
     final isKn = _selectedLangCode.startsWith('kn');
     final isHi = _selectedLangCode.startsWith('hi');
 
@@ -1786,7 +1602,7 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
             ),
             const SizedBox(height: 12),
 
-            // In-Modal Multilingual Language Switcher (Beneficiary can pick whatever language they want to speak)
+            // In-Modal Multilingual Language Switcher
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
@@ -1840,7 +1656,7 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
                           height: 72,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: isListening ? const Color(0xFF15803D) : const Color(0xFF0F2942),
+                            color: isListening ? const Color(0xFF15803D) : (_statusError != null ? Colors.red.shade700 : const Color(0xFF0F2942)),
                             boxShadow: [
                               BoxShadow(
                                 color: isListening ? const Color(0x6615803D) : Colors.black12,
@@ -1868,16 +1684,21 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
             ),
             const SizedBox(height: 10),
 
-            // Listening status
+            // Listening status / Error status
             Text(
-              isListening
-                  ? (isKn ? '🎙️ ಕೇಳಿಸಿಕೊಳ್ಳಲಾಗುತ್ತಿದೆ... ಸ್ಪಷ್ಟವಾಗಿ ಮಾತನಾಡಿ' : isHi ? '🎙️ सुन रहे हैं... स्पष्ट बोलें' : '🎙️ Listening... Speak clearly now')
-                  : (isKn ? 'ಧ್ವನಿ ದಾಖಲಿಸಲು ಮೈಕ್ ಒತ್ತಿ' : isHi ? 'माइक पर टैप करके बोलें' : 'Tap mic to speak'),
+              _statusError != null
+                  ? _statusError!
+                  : (isListening
+                      ? (isKn ? '🎙️ ಕೇಳಿಸಿಕೊಳ್ಳಲಾಗುತ್ತಿದೆ... ಸ್ಪಷ್ಟವಾಗಿ ಮಾತನಾಡಿ' : isHi ? '🎙️ सुन रहे हैं... स्पष्ट बोलें' : '🎙️ Listening... Speak clearly now')
+                      : (isKn ? 'ಧ್ವನಿ ದಾಖಲಿಸಲು ಮೈಕ್ ಒತ್ತಿ' : isHi ? 'माइक पर टैप करके बोलें' : 'Tap mic to speak')),
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
-                color: isListening ? const Color(0xFF15803D) : Colors.grey.shade600,
+                color: _statusError != null
+                    ? Colors.red.shade700
+                    : (isListening ? const Color(0xFF15803D) : Colors.grey.shade600),
               ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 14),
 
@@ -1923,7 +1744,10 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      voice.stopListening();
+                      Navigator.pop(context);
+                    },
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1940,16 +1764,13 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
                   flex: 2,
                   child: ElevatedButton(
                     onPressed: () {
-                      if (widget.fieldType == 'smart_login') {
-                        if (widget.onSmartLoginApply != null && (_smartCard != null || _smartPhone != null)) {
-                          widget.onSmartLoginApply!(_smartCard ?? '', _smartPhone ?? '');
-                        } else if (_formattedPreview.isNotEmpty) {
-                          widget.onApply(_formattedPreview);
-                        }
-                      } else if (_formattedPreview.isNotEmpty) {
+                      voice.stopListening();
+                      if (_formattedPreview.isNotEmpty) {
                         widget.onApply(_formattedPreview);
                       } else if (_liveTranscript.isNotEmpty) {
                         widget.onApply(_liveTranscript);
+                      } else {
+                        Navigator.pop(context);
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -1965,9 +1786,7 @@ class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> wi
                         const Icon(Icons.check_rounded, size: 18),
                         const SizedBox(width: 6),
                         Text(
-                          widget.fieldType == 'smart_login'
-                              ? (isKn ? 'ದೃಢೀಕರಿಸಿ ಲಾಗಿನ್ ಮಾಡಿ' : isHi ? 'लागू और लॉगिन करें' : 'Apply & Continue')
-                              : (isKn ? 'ಅನ್ವಯಿಸಿ' : isHi ? 'लागू करें' : 'Apply & Fill'),
+                          isKn ? 'ಅನ್ವಯಿಸಿ' : isHi ? 'लागू करें' : 'Apply & Fill',
                           style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
                         ),
                       ],

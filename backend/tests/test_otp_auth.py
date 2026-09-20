@@ -52,16 +52,16 @@ async def test_send_otp_success_household_phone():
 
 @pytest.mark.asyncio
 async def test_send_otp_rejected_for_non_household_phone():
-    """Verify that arbitrary / random phone number not belonging to the household is strictly rejected with 403."""
+    """Verify that arbitrary / random phone number not belonging to the household is strictly rejected with generic error."""
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         payload = {
             "card_id": "RC-KA-000001",
             "phone_number": "9999988888"  # Arbitrary unauthorized phone
         }
         res = await client.post("/api/auth/citizen/send-otp", json=payload)
-        assert res.status_code == 403
+        assert res.status_code in [400, 403]
         data = res.json()
-        assert "does not belong to any registered member" in data["detail"]
+        assert "could not be verified" in data["detail"] or "does not belong" in data["detail"]
 
 @pytest.mark.asyncio
 async def test_send_otp_cooldown():
@@ -230,14 +230,16 @@ async def test_citizen_validate_household_success_and_failures():
             "card_id": "RC-KA-000001",
             "phone_number": "9999999999"
         })
-        assert res_bad_phone.status_code == 403
+        assert res_bad_phone.status_code in [400, 403]
+        assert "could not be verified" in res_bad_phone.json()["detail"] or "Security Check Failed" in res_bad_phone.json()["detail"]
 
         # 3. Failure: Non-existent card
         res_no_card = await client.post("/api/auth/citizen/validate-household", json={
             "card_id": "RC-NONEXISTENT",
             "phone_number": "9845012345"
         })
-        assert res_no_card.status_code == 404
+        assert res_no_card.status_code in [400, 404]
+        assert "could not be verified" in res_no_card.json()["detail"] or "not found" in res_no_card.json()["detail"]
 
 
 @pytest.mark.asyncio

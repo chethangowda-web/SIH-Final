@@ -12,7 +12,7 @@ void main() {
     VoiceAssistantService.instance.stopVoiceAssistantMode();
   });
 
-  testWidgets('1. Initial Login Screen has zero Voice Assistant and zero mic controls', (tester) async {
+  testWidgets('1. Initial Login Screen has zero Voice Assistant banners and zero voice-login cards', (tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -24,7 +24,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Voice assistant mode must be OFF
+    // Voice assistant mode must be OFF on login screen
     expect(VoiceAssistantService.instance.isVoiceAssistantMode, isFalse);
 
     // Initial role selection view is visible
@@ -34,15 +34,16 @@ void main() {
     expect(find.text('Citizen OTP / Beneficiary'), findsWidgets);
     expect(find.text('Department Official'), findsWidgets);
 
-    // No microphone buttons on initial state
+    // No microphone buttons on initial selection view
     expect(find.byIcon(Icons.mic_rounded), findsNothing);
 
-    // No Voice Assistant active badge or banner
+    // No Voice Assistant active banner or One-Touch Voice Login card
     expect(find.text('Voice Assistant (Active)'), findsNothing);
+    expect(find.text('One-Touch Voice Login (Speak)'), findsNothing);
     expect(find.text('Tap to Speak 🎙️'), findsNothing);
   });
 
-  testWidgets('2. Selecting Citizen OTP activates Voice Assistant without Tap to Speak button on login', (tester) async {
+  testWidgets('2. Selecting Citizen OTP displays form with in-field mic icons and zero voice banners/cards', (tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -60,24 +61,20 @@ void main() {
     await tester.tap(citizenOption);
     await tester.pumpAndSettle();
 
-    // Voice assistant mode must be ON
-    expect(VoiceAssistantService.instance.isVoiceAssistantMode, isTrue);
+    // Voice assistant mode remains OFF on login screen
+    expect(VoiceAssistantService.instance.isVoiceAssistantMode, isFalse);
 
-    // Voice Assistant Banner is displayed
-    expect(find.byType(VoiceAssistantBanner), findsOneWidget);
-
-    // EXACT REQUIREMENT: Tap to Speak must NOT appear on the login screen
+    // Voice Assistant Banner must NOT appear on login screen
+    expect(find.byType(VoiceAssistantBanner), findsNothing);
+    expect(find.text('One-Touch Voice Login (Speak)'), findsNothing);
     expect(find.text('Tap to Speak 🎙️'), findsNothing);
 
-    // Speaker / replay control is present
-    expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
-
-    // Citizen OTP form is displayed with field-level mic buttons
+    // Citizen OTP form is displayed with in-field mic buttons (for accessibility input assistance)
     expect(find.byKey(const ValueKey('citizen_otp')), findsOneWidget);
     expect(find.byIcon(Icons.mic_rounded), findsWidgets);
   });
 
-  testWidgets('3. Switching to Department Official immediately disables Voice Assistant', (tester) async {
+  testWidgets('3. Switching to Department Official displays form with zero mic buttons', (tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -92,8 +89,6 @@ void main() {
     // 1. Select Citizen OTP first
     await tester.tap(find.text('Select Citizen Login'));
     await tester.pumpAndSettle();
-    expect(VoiceAssistantService.instance.isVoiceAssistantMode, isTrue);
-    expect(find.byType(VoiceAssistantBanner), findsOneWidget);
 
     // 2. Switch to Department Official tab in top segment
     final deptTab = find.widgetWithText(InkWell, 'Department Official');
@@ -101,10 +96,8 @@ void main() {
     await tester.tap(deptTab);
     await tester.pumpAndSettle();
 
-    // Voice assistant must be immediately OFF
+    // Voice assistant must be OFF
     expect(VoiceAssistantService.instance.isVoiceAssistantMode, isFalse);
-
-    // Voice assistant banner must be gone
     expect(find.text('Tap to Speak 🎙️'), findsNothing);
     expect(find.text('Voice Assistant (Active)'), findsNothing);
 
@@ -113,38 +106,7 @@ void main() {
     expect(find.byIcon(Icons.mic_rounded), findsNothing);
   });
 
-  testWidgets('4. Switching back to Citizen OTP dynamically re-enables Voice Assistant without Tap to Speak', (tester) async {
-    tester.view.physicalSize = const Size(1280, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: DemoLoginScreen(),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    // Switch to Department Official first
-    await tester.tap(find.text('Select Official Login'));
-    await tester.pumpAndSettle();
-    expect(VoiceAssistantService.instance.isVoiceAssistantMode, isFalse);
-
-    // Switch to Citizen OTP tab
-    final citizenTab = find.widgetWithText(InkWell, 'Citizen OTP');
-    expect(citizenTab, findsOneWidget);
-    await tester.tap(citizenTab);
-    await tester.pumpAndSettle();
-
-    // Voice assistant must be ON again
-    expect(VoiceAssistantService.instance.isVoiceAssistantMode, isTrue);
-    expect(find.byType(VoiceAssistantBanner), findsOneWidget);
-    // Tap to Speak must NOT appear on login
-    expect(find.text('Tap to Speak 🎙️'), findsNothing);
-    expect(find.byKey(const ValueKey('citizen_otp')), findsOneWidget);
-  });
-
-  testWidgets('5. VoiceAssistantBanner retains Tap to Speak for post-login screens (Beneficiary Home)', (tester) async {
+  testWidgets('4. VoiceAssistantBanner retains Tap to Speak for post-login screens (Beneficiary Home)', (tester) async {
     VoiceAssistantService.instance.enableBeneficiaryVoiceMode();
     await tester.pumpWidget(
       const MaterialApp(
@@ -155,7 +117,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Tap to Speak MUST be present when showTapToSpeak defaults to true
+    // Tap to Speak MUST be present when showTapToSpeak defaults to true for authenticated screens
     expect(find.text('Tap to Speak 🎙️'), findsOneWidget);
     expect(find.byIcon(Icons.mic_rounded), findsWidgets);
   });

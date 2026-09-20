@@ -460,8 +460,8 @@ def citizen_send_otp(
     if not ben:
         logger.warning("Anti-fraud trigger: Card ID '%s' not found in NFSA dataset.", card_clean)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset. Access denied."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The ration card and registered mobile number could not be verified."
         )
 
     canonical_card = ben["pseudonymous_beneficiary_id"]
@@ -473,8 +473,8 @@ def citizen_send_otp(
         if db_fps and db_fps.upper() != fps_clean.upper():
             logger.warning("Anti-fraud trigger: Provided FPS '%s' does not match registered FPS '%s' for '%s'", fps_clean, db_fps, card_clean)
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Security Check Failed: Home FPS Center ID '{fps_clean}' does not match government PDS record for Ration Card '{card_clean}'."
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The ration card and registered mobile number could not be verified."
             )
 
     # Step 3: Load household members and all registered phones for this household
@@ -499,7 +499,7 @@ def citizen_send_otp(
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Registered mobile number is required to receive OTP."
+                detail="The ration card and registered mobile number could not be verified."
             )
     else:
         input_phone_clean = clean_indian_phone(payload.phone_number)
@@ -519,12 +519,12 @@ def citizen_send_otp(
 
         if not phone_matched:
             logger.warning(
-                "Anti-fraud trigger: Provided phone '%s' (cleaned: %s) does not belong to household for card '%s'. Registered phones: %s",
-                payload.phone_number, input_phone_clean, card_clean, [mask_phone(p) for p in household_phones]
+                "Anti-fraud trigger: Provided phone '%s' (cleaned: %s) does not belong to household for card '%s'.",
+                payload.phone_number, input_phone_clean, card_clean
             )
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Security Check Failed: Entered mobile number does not belong to any registered member of this Ration Card household."
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The ration card and registered mobile number could not be verified."
             )
 
     # Step 5: Rate Limiting / Resend Cooldown (30 seconds)
@@ -805,8 +805,8 @@ def citizen_validate_household(
     if not ben:
         logger.warning("Pre-flight check failed: Card ID '%s' not found in NFSA dataset.", card_clean)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset. Access denied."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The ration card and registered mobile number could not be verified."
         )
 
     canonical_card = ben["pseudonymous_beneficiary_id"]
@@ -818,8 +818,8 @@ def citizen_validate_household(
         if db_fps and db_fps.upper() != fps_clean.upper():
             logger.warning("Pre-flight check failed: Provided FPS '%s' does not match registered FPS '%s' for '%s'", fps_clean, db_fps, card_clean)
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Security Check Failed: Home FPS Center ID '{fps_clean}' does not match government PDS record for Ration Card '{card_clean}'."
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The ration card and registered mobile number could not be verified."
             )
 
     # 3. Load household members and all registered phones for this household
@@ -838,7 +838,7 @@ def citizen_validate_household(
     if not payload.phone_number or not payload.phone_number.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Registered mobile number is required for verification."
+            detail="The ration card and registered mobile number could not be verified."
         )
 
     input_phone_clean = clean_indian_phone(payload.phone_number)
@@ -850,17 +850,30 @@ def citizen_validate_household(
 
     if not phone_matched:
         logger.warning(
-            "Anti-fraud trigger: Provided phone '%s' does not belong to household for card '%s'. Registered phones: %s",
-            payload.phone_number, card_clean, [mask_phone(p) for p in household_phones]
+            "Anti-fraud trigger: Provided phone '%s' does not belong to household for card '%s'.",
+            payload.phone_number, card_clean
         )
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Security Check Failed: Entered mobile number does not belong to any registered member of this Ration Card household."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The ration card and registered mobile number could not be verified."
         )
 
     normalized_10_digit = input_phone_clean[-10:]
     international_phone = f"+91{normalized_10_digit}"
     masked = f"+91 ******{normalized_10_digit[-4:]}"
+
+    # Record/Upsert into beneficiary_auth table
+    try:
+        cursor.execute("""
+            INSERT INTO beneficiary_auth (card_id, phone_number, phone_verified, updated_at)
+            VALUES (?, ?, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(card_id) DO UPDATE SET
+                phone_number = excluded.phone_number,
+                updated_at = CURRENT_TIMESTAMP;
+        """, (canonical_card, international_phone))
+        db.commit()
+    except Exception as e:
+        logger.warning("beneficiary_auth upsert notice: %s", e)
 
     return CitizenValidateHouseholdOut(
         status="verified",
@@ -895,8 +908,8 @@ def citizen_firebase_login(
     ben = resolve_beneficiary_record(cursor, card_clean)
     if not ben:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The ration card and registered mobile number could not be verified."
         )
 
     canonical_card = ben["pseudonymous_beneficiary_id"]
@@ -922,11 +935,27 @@ def citizen_firebase_login(
 
     if not phone_matched:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Security Check Failed: Phone number mismatch during session establishment."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The ration card and registered mobile number could not be verified."
         )
 
-    # 3. Ensure user account in users table
+    # 3. Upsert into beneficiary_auth mapping table
+    try:
+        normalized_phone = f"+91{input_phone_clean[-10:]}"
+        cursor.execute("""
+            INSERT INTO beneficiary_auth (card_id, phone_number, firebase_uid, phone_verified, updated_at)
+            VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT(card_id) DO UPDATE SET
+                phone_number = excluded.phone_number,
+                firebase_uid = COALESCE(excluded.firebase_uid, beneficiary_auth.firebase_uid),
+                phone_verified = 1,
+                updated_at = CURRENT_TIMESTAMP;
+        """, (canonical_card, normalized_phone, payload.firebase_uid))
+        db.commit()
+    except Exception as e:
+        logger.warning("beneficiary_auth firebase upsert notice: %s", e)
+
+    # 4. Ensure user account in users table
     cursor.execute("SELECT id, username, role FROM users WHERE beneficiary_id = ? OR beneficiary_id = ?;", (card_clean, canonical_card))
     user_row = cursor.fetchone()
 

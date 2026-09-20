@@ -294,6 +294,20 @@ def _migration_001_core_supply_chain(cursor: sqlite3.Cursor) -> None:
         ('RC-KA-000001', 'Deepa Reddy', 'FPS-KA-BAG-0001', 'en', 'PHH', 2, 10.0, 0.0, 10.0);
     """)
 
+    # 4b. beneficiary_auth (Authentication mapping table)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS beneficiary_auth (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        card_id TEXT NOT NULL UNIQUE,
+        phone_number TEXT NOT NULL,
+        firebase_uid TEXT,
+        phone_verified INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (card_id) REFERENCES beneficiaries (pseudonymous_beneficiary_id)
+    );
+    """)
+
     # 5. intent (Forward Beneficiary Signal)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS intent (
@@ -1477,6 +1491,20 @@ def _migration_015_household_members_and_otp_hardening(cursor: sqlite3.Cursor) -
             cursor.execute(f"ALTER TABLE otp_verifications ADD COLUMN {col_def[0]} {col_def[1]};")
         except Exception:
             pass
+
+    # 3. beneficiary_auth (Authentication mapping table)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS beneficiary_auth (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        card_id TEXT NOT NULL UNIQUE,
+        phone_number TEXT NOT NULL,
+        firebase_uid TEXT,
+        phone_verified INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (card_id) REFERENCES beneficiaries (pseudonymous_beneficiary_id)
+    );
+    """)
 
     # Ensure baseline FPS and demo beneficiaries exist for referential integrity
     for test_fps_id in ['FPS-KA-BLR-001', 'FPS-KA-BLR-002', 'FPS-KA-BLR-003', 'FPS-KA-BLR-004', 'FPS-KA-BLR-005']:
