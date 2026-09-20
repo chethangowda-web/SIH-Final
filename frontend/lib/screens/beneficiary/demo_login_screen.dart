@@ -74,6 +74,8 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     VoiceAssistantService.instance.stopVoiceAssistantMode();
     VoiceAssistantService.instance.onCommandRecognized = null;
 
+    _citizenCardController.addListener(_onInputFieldsChanged);
+    _citizenPhoneController.addListener(_onInputFieldsChanged);
     _citizenOtpController.addListener(_onOtpChanged);
 
     if (widget.sessionExpiredMessage != null) {
@@ -90,11 +92,17 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     }
   }
 
+  void _onInputFieldsChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _onOtpChanged() {}
 
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _citizenCardController.removeListener(_onInputFieldsChanged);
+    _citizenPhoneController.removeListener(_onInputFieldsChanged);
     _citizenOtpController.removeListener(_onOtpChanged);
     _citizenCardController.dispose();
     _citizenPhoneController.dispose();
@@ -279,16 +287,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     final phoneNumber = _citizenPhoneController.text.trim();
 
     if (cardId.isEmpty || phoneNumber.isEmpty) {
-      final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
-      final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
-      final msg = isHi
-          ? 'कृपया राशन कार्ड नंबर और पंजीकृत मोबाइल नंबर दोनों दर्ज करें।'
-          : isKn
-              ? 'ದಯವಿಟ್ಟು ಪಡಿತರ ಚೀಟಿ ಸಂಖ್ಯೆ ಮತ್ತು ನೋಂದಾಯಿತ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ಎರಡನ್ನೂ ನಮೂದಿಸಿ.'
-              : 'Please enter both your Ration Card Number and Registered Mobile Number.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(msg),
+          content: Text(tr('login.invalid_card_error')),
           backgroundColor: Colors.orange.shade800,
           behavior: SnackBarBehavior.floating,
         ),
@@ -298,16 +299,9 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
     final digitsOnly = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
     if (digitsOnly.length < 10) {
-      final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
-      final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
-      final msg = isHi
-          ? 'कृपया एक मान्य 10-अंकीय मोबाइल नंबर दर्ज करें।'
-          : isKn
-              ? 'ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ 10-ಅಂಕಿಯ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ.'
-              : 'Please enter a valid 10-digit registered mobile number.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(msg),
+          content: Text(tr('login.invalid_mobile_error')),
           backgroundColor: Colors.orange.shade800,
           behavior: SnackBarBehavior.floating,
         ),
@@ -361,13 +355,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
       String displayText;
       if (firebaseSuccess) {
-        displayText = 'Firebase SMS OTP dispatched to $maskedPhone.';
+        displayText = 'SMS OTP sent to $maskedPhone.';
         _citizenOtpController.clear();
       } else {
         // Step 2b: Fallback to PDS DemandSync OTP service
         final fallbackRes = await _apiService.sendCitizenOtp(cardId, phoneNumber: phoneNumber);
         final mockOtp = (fallbackRes['mock_otp'] ?? fallbackRes['demo_otp_code'] ?? fallbackRes['otp'] ?? '123456').toString();
-        displayText = 'OTP dispatched to $maskedPhone. (Test code: $mockOtp)';
+        displayText = 'OTP sent to $maskedPhone.';
         _citizenOtpController.text = mockOtp;
       }
 
@@ -389,15 +383,16 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           ),
           backgroundColor: _govGreen,
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 8),
+          duration: const Duration(seconds: 5),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(tr('login.otp_send_failed', params: {'error': _cleanErrorMessage(e)})),
+          content: Text(tr('login.mismatch_error')),
           backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
@@ -960,66 +955,186 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   // CITIZEN OTP TAB (Mobile Responsive with Voice Guidance)
   // ================================================================
   Widget _buildCitizenOtpTab(bool isSmall) {
-    return Column(
-      key: const ValueKey('citizen_otp'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                tr('login.citizen_portal_credentials'),
-                style: TextStyle(fontSize: isSmall ? 12 : 13, fontWeight: FontWeight.w700, color: _slate900),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: _govGreenBg,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: _govGreenBorder),
-              ),
-              child: Text(
-                tr('login.three_factor_auth'),
-                style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: _govGreen),
-              ),
-            ),
-          ],
-        ),
-        // Anti-Fraud & Dataset Verification Banner
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEFF6FF),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFBFDBFE)),
+    final cardText = _citizenCardController.text.trim();
+    final phoneDigits = _citizenPhoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final isInputValid = cardText.isNotEmpty && phoneDigits.length >= 10;
+
+    if (_otpSent) {
+      // Clean, Dedicated OTP Verification View
+      final maskedPhone = _validatedNormalizedPhone != null && _validatedNormalizedPhone!.length >= 10
+          ? '+91 •••••• ${_validatedNormalizedPhone!.substring(_validatedNormalizedPhone!.length - 4)}'
+          : (phoneDigits.length >= 4 ? '+91 •••••• ${phoneDigits.substring(phoneDigits.length - 4)}' : 'your phone');
+
+      return Column(
+        key: const ValueKey('citizen_otp'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title & Subtitle
+          Text(
+            tr('login.otp_verify_title'),
+            style: TextStyle(fontSize: isSmall ? 18 : 20, fontWeight: FontWeight.w800, color: _slate900),
           ),
-          child: const Row(
+          const SizedBox(height: 4),
+          Text(
+            tr('login.otp_verify_subtitle'),
+            style: TextStyle(fontSize: isSmall ? 11.5 : 12.5, color: _slate500, height: 1.3),
+          ),
+          const SizedBox(height: 12),
+
+          // Masked Phone Pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: _slate100,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _slate200),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.phone_android_rounded, size: 14, color: _govNavy),
+                const SizedBox(width: 6),
+                Text(
+                  maskedPhone,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _govNavy),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 6-Digit OTP Input
+          TextField(
+            controller: _citizenOtpController,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: isSmall ? 20 : 24,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 8,
+              color: _slate900,
+            ),
+            decoration: InputDecoration(
+              hintText: '••••••',
+              counterText: '',
+              hintStyle: const TextStyle(letterSpacing: 8, color: _slate400),
+              prefixIcon: const Icon(Icons.lock_outline_rounded, color: _slate400, size: 18),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.mic_rounded, color: Color(0xFF15803D), size: 20),
+                tooltip: 'Use microphone to enter',
+                onPressed: _listenForOtp,
+              ),
+              filled: true,
+              fillColor: _slate50,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _slate200)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _govGreen, width: 1.5)),
+              contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Verify & Login Button
+          ElevatedButton(
+            onPressed: _isVerifyingOtp ? null : _handleVerifyOtpAndLogin,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _govGreen,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 46),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            child: _isVerifyingOtp
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: isSmall ? 16 : 18),
+                      const SizedBox(width: 6),
+                      Text(tr('login.verify_login_btn'), style: TextStyle(fontSize: isSmall ? 13.5 : 14.5, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+          ),
+          const SizedBox(height: 14),
+
+          // Resend OTP section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.shield_outlined, size: 18, color: Color(0xFF1D4ED8)),
-              SizedBox(width: 8),
-              Expanded(
+              Text(
+                tr('login.didnt_receive_otp'),
+                style: TextStyle(fontSize: isSmall ? 11 : 12, color: _slate500),
+              ),
+              InkWell(
+                onTap: (_isSendingOtp || _otpCountdownSeconds > 270) ? null : _handleSendOtp,
                 child: Text(
-                  'Anti-Fraud Enforcement Active: Ration Card Number and Registered Mobile Number are cross-verified against official records.',
-                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF1E40AF), height: 1.3),
+                  _otpCountdownSeconds > 0
+                      ? tr('login.resend_countdown', params: {'time': _formatTimer(_otpCountdownSeconds)})
+                      : tr('login.resend_otp_btn'),
+                  style: TextStyle(
+                    fontSize: isSmall ? 11 : 12,
+                    fontWeight: FontWeight.w700,
+                    color: _otpCountdownSeconds > 270 ? _slate400 : _govNavy,
+                  ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 12),
+
+          // Change mobile number link
+          Align(
+            alignment: Alignment.centerLeft,
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _otpSent = false;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  tr('login.change_mobile'),
+                  style: TextStyle(fontSize: isSmall ? 11.5 : 12.5, fontWeight: FontWeight.w600, color: _slate700),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Login Input Step
+    return Column(
+      key: const ValueKey('citizen_otp'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Welcome Header
+        Text(
+          tr('login.welcome_title'),
+          style: TextStyle(fontSize: isSmall ? 17 : 19, fontWeight: FontWeight.w800, color: _slate900, letterSpacing: -0.3),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 2),
+        Text(
+          tr('login.welcome_subtitle'),
+          style: TextStyle(fontSize: isSmall ? 11.5 : 12.5, fontWeight: FontWeight.w600, color: _govGreen),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          tr('login.instruction'),
+          style: TextStyle(fontSize: isSmall ? 11 : 12, color: _slate500, height: 1.3),
+        ),
+        const SizedBox(height: 16),
 
         // Field 1: Ration Card Number
-        Text(tr('login.ration_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
+        Text(tr('login.ration_card_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
         const SizedBox(height: 4),
         TextField(
           controller: _citizenCardController,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'e.g. RC-KA-000001',
+            hintText: tr('login.ration_card_placeholder'),
             prefixIcon: Icon(Icons.credit_card_rounded, size: isSmall ? 16 : 18, color: _slate500),
             suffixIcon: IconButton(
               icon: const Icon(Icons.mic_rounded, color: Color(0xFF15803D), size: 20),
@@ -1034,18 +1149,17 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
           ),
         ),
-
         const SizedBox(height: 12),
 
-        // Field 2: Registered Mobile / Phone Number
-        Text(tr('login.phone_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
+        // Field 2: Registered Mobile Number
+        Text(tr('login.mobile_num_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
         const SizedBox(height: 4),
         TextField(
           controller: _citizenPhoneController,
           keyboardType: TextInputType.phone,
           style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'e.g. +91 98450 12345 or 9845012345',
+            hintText: tr('login.mobile_num_placeholder'),
             prefixIcon: Icon(Icons.phone_android_rounded, size: isSmall ? 16 : 18, color: _slate500),
             suffixIcon: IconButton(
               icon: const Icon(Icons.mic_rounded, color: Color(0xFF15803D), size: 20),
@@ -1060,129 +1174,47 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmall ? 8 : 10),
           ),
         ),
-
         const SizedBox(height: 14),
 
-        if (!_otpSent)
-          ElevatedButton(
-            onPressed: _isSendingOtp ? null : _handleSendOtp,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _govNavy,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 44),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-            child: _isSendingOtp
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Text(tr('login.get_otp_sms'), style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
-          )
-        else ...[
-          // OTP Received Input Section
-          Container(
-            padding: EdgeInsets.all(isSmall ? 10 : 14),
-            decoration: BoxDecoration(
-              color: _govGreenBg,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _govGreenBorder),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.sms_outlined, size: isSmall ? 13 : 14, color: _govGreen),
-                        const SizedBox(width: 4),
-                        Text(
-                          tr('login.enter_sms_code'),
-                          style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700, color: _govGreen),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      _formatTimer(_otpCountdownSeconds),
-                      style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w700, color: _govGreen),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-
-                TextField(
-                  controller: _citizenOtpController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: isSmall ? 18 : 22,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 8,
-                    color: _slate900,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: '••••••',
-                    counterText: '',
-                    hintStyle: const TextStyle(letterSpacing: 8, color: _slate400),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.mic_rounded, color: Color(0xFF15803D), size: 20),
-                      tooltip: 'Speak OTP Digits',
-                      onPressed: _listenForOtp,
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _slate200)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _govGreenBorder)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _govGreen, width: 2)),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      tr('login.sms_dispatched'),
-                      style: TextStyle(fontSize: isSmall ? 9.5 : 10.5, color: _slate500),
-                    ),
-                    InkWell(
-                      onTap: _isSendingOtp ? null : _handleSendOtp,
-                      child: Text(
-                        tr('login.resend_otp'),
-                        style: TextStyle(fontSize: isSmall ? 10 : 11, fontWeight: FontWeight.w700, color: _govNavy),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+        // Security Reassurance Note
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0FDF4),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFBBF7D0)),
           ),
-
-          const SizedBox(height: 14),
-
-          ElevatedButton(
-            onPressed: _isVerifyingOtp ? null : _handleVerifyOtpAndLogin,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _govGreen,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 44),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-            child: _isVerifyingOtp
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check_circle_rounded, size: isSmall ? 15 : 16),
-                      const SizedBox(width: 6),
-                      Text(tr('login.verify_login_btn'), style: TextStyle(fontSize: isSmall ? 13 : 14, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
+          child: Row(
+            children: [
+              const Icon(Icons.lock_outline_rounded, size: 16, color: Color(0xFF15803D)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  tr('login.security_note'),
+                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF166534), height: 1.25),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
+        const SizedBox(height: 16),
+
+        // Primary Action: Get OTP
+        ElevatedButton(
+          onPressed: (_isSendingOtp || !isInputValid) ? null : _handleSendOtp,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _govNavy,
+            disabledBackgroundColor: _slate200,
+            foregroundColor: Colors.white,
+            disabledForegroundColor: _slate500,
+            minimumSize: const Size(double.infinity, 46),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            elevation: 0,
+          ),
+          child: _isSendingOtp
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : Text(tr('login.get_otp_btn'), style: TextStyle(fontSize: isSmall ? 13.5 : 14.5, fontWeight: FontWeight.w700)),
+        ),
       ],
     );
   }
