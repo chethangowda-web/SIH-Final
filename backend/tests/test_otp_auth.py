@@ -208,3 +208,50 @@ async def test_real_otp_mode_fallback(monkeypatch):
         assert data["status"] == "success"
         # Fallback demo OTP is returned when live SMS provider is unavailable
         assert "demo_otp" in data
+
+
+@pytest.mark.asyncio
+async def test_citizen_validate_household_success_and_failures():
+    """Verify pre-flight validation endpoint checks card and phone properly."""
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Success: Valid card + registered phone
+        res_ok = await client.post("/api/auth/citizen/validate-household", json={
+            "card_id": "RC-KA-000001",
+            "phone_number": "9845012345"
+        })
+        assert res_ok.status_code == 200
+        data = res_ok.json()
+        assert data["status"] == "verified"
+        assert data["canonical_card_id"] == "RC-KA-000001"
+        assert data["normalized_phone"] == "+919845012345"
+
+        # 2. Failure: Invalid / non-matching phone for this household
+        res_bad_phone = await client.post("/api/auth/citizen/validate-household", json={
+            "card_id": "RC-KA-000001",
+            "phone_number": "9999999999"
+        })
+        assert res_bad_phone.status_code == 403
+
+        # 3. Failure: Non-existent card
+        res_no_card = await client.post("/api/auth/citizen/validate-household", json={
+            "card_id": "RC-NONEXISTENT",
+            "phone_number": "9845012345"
+        })
+        assert res_no_card.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_citizen_firebase_login_flow():
+    """Verify session creation after Firebase phone verification."""
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.post("/api/auth/citizen/firebase-login", json={
+            "card_id": "RC-KA-000001",
+            "phone_number": "9845012345",
+            "firebase_id_token": "mock_firebase_id_token_123"
+        })
+        assert res.status_code == 200
+        data = res.json()
+        assert data["role"] == "BENEFICIARY"
+        assert data["beneficiary_id"] == "RC-KA-000001"
+        assert "access_token" in data
+

@@ -224,6 +224,73 @@ class ApiService {
     }
   }
 
+  /// Step 1: Pre-flight check before triggering Firebase Phone Auth.
+  /// Checks if the Ration Card exists and if the mobile number belongs to a household member.
+  Future<Map<String, dynamic>> validateHouseholdCredentials(
+    String cardId,
+    String phoneNumber, {
+    String? homeFpsId,
+  }) async {
+    final Map<String, dynamic> body = {
+      'card_id': cardId.trim(),
+      'phone_number': phoneNumber.trim(),
+    };
+    if (homeFpsId != null && homeFpsId.trim().isNotEmpty) {
+      body['home_fps_id'] = homeFpsId.trim();
+    }
+
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/auth/citizen/validate-household'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(body),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw parseError(response, 'Household validation failed');
+    }
+  }
+
+  /// Step 4: Finalize Firebase authenticated session and obtain official PDS session token.
+  Future<Map<String, dynamic>> firebaseCitizenLogin(
+    String cardId,
+    String phoneNumber, {
+    String? firebaseIdToken,
+    String? firebaseUid,
+  }) async {
+    authSession.clear();
+    final response = await client.post(
+      Uri.parse('${AppConstants.apiBaseUrl}/auth/citizen/firebase-login'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'card_id': cardId.trim(),
+        'phone_number': phoneNumber.trim(),
+        'firebase_id_token': firebaseIdToken,
+        'firebase_uid': firebaseUid,
+      }),
+    ).timeout(AppConstants.apiTimeout);
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final token = data['access_token'] as String;
+      final role = (data['role'] ?? 'BENEFICIARY') as String;
+      final beneficiaryId = data['beneficiary_id'] as String?;
+      final expiresIn = (data['expires_in'] ?? 36000) as int;
+
+      authSession.setSession(
+        token: token,
+        username: data['username'] ?? cardId,
+        role: role,
+        beneficiaryId: beneficiaryId,
+        expiresInSeconds: expiresIn,
+      );
+      return data;
+    } else {
+      throw parseError(response, 'Firebase session establishment failed');
+    }
+  }
+
   /// Verify citizen OTP and establish authenticated session.
   Future<Map<String, dynamic>> verifyCitizenOtp(String cardId, String otpCode) async {
     authSession.clear();

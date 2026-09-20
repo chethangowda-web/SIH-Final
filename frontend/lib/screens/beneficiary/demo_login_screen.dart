@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/localization.dart';
 import '../../services/api_service.dart';
+import '../../services/firebase_auth_service.dart';
 import '../../services/voice_assistant_service.dart';
 import 'beneficiary_home_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
@@ -34,6 +35,13 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
   bool _isVerifyingOtp = false;
   int _otpCountdownSeconds = 300;
   Timer? _countdownTimer;
+
+  // Firebase Phone Auth Session Variables
+  String? _firebaseVerificationId;
+  dynamic _firebaseConfirmationResult;
+  int? _firebaseResendToken;
+  String? _validatedNormalizedPhone;
+  bool _isFirebaseOtpSession = false;
 
   // Controllers for Department / Admin Login
   final TextEditingController _adminUsernameController = TextEditingController();
@@ -272,7 +280,10 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     });
   }
 
-  // Action: Send Real OTP to Citizen via Twilio SMS (Strict Dual-Input Dataset Verification)
+  // Action: Multi-Stage Citizen Authentication:
+  // 1. Pre-flight Dataset Verification: Ration card exists + Phone belongs to household
+  // 2. Firebase Phone Auth: SMS OTP delivered to citizen's phone
+  // 3. Fallback Demo OTP for offline / hackathon testing
   Future<void> _handleSendOtp() async {
     final cardId = _citizenCardController.text.trim();
     final phoneNumber = _citizenPhoneController.text.trim();
@@ -316,7 +327,41 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
     setState(() => _isSendingOtp = true);
     try {
-      final res = await _apiService.sendCitizenOtp(cardId, phoneNumber: phoneNumber.isNotEmpty ? phoneNumber : null);
+      // Step 1: Pre-flight check against official NFSA Government Master Dataset
+      final householdValidation = await _apiService.validateHouseholdCredentials(cardId, phoneNumber);
+      final normalizedPhone = householdValidation['normalized_phone'] as String? ?? '+91$digitsOnly';
+      final maskedPhone = householdValidation['masked_phone'] as String? ?? '+91 ******${digitsOnly.substring(digitsOnly.length - 4)}';
+      _validatedNormalizedPhone = normalizedPhone;
+
+      bool firebaseSuccess = false;
+
+      // Step 2: Attempt Firebase Phone Authentication SMS delivery
+      try {
+        final fbResult = await FirebaseAuthService.instance.sendOtp(
+          phoneNumber: normalizedPhone,
+          forceResendingToken: _firebaseResendToken,
+          onCodeSent: (verificationId, resendToken) {
+            _firebaseVerificationId = verificationId;
+            _firebaseResendToken = resendToken;
+          },
+          onVerificationFailed: (errorMsg) {
+            debugPrint('[Login] Firebase Phone Auth Notice: $errorMsg');
+          },
+          onAutoVerified: (idToken) {
+            debugPrint('[Login] Firebase Auto-verified phone');
+          },
+        );
+
+        if (fbResult.isSuccess) {
+          firebaseSuccess = true;
+          _isFirebaseOtpSession = true;
+          _firebaseVerificationId = fbResult.verificationId;
+          _firebaseConfirmationResult = fbResult.confirmationResult;
+        }
+      } catch (fbErr) {
+        debugPrint('[Login] Firebase Auth fallback notice: $fbErr');
+      }
+
       if (!mounted) return;
 
       setState(() {
@@ -324,17 +369,17 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       });
       _startOtpTimer();
 
-      final mode = res['mode'] ?? 'DEMO';
-      final phone = res['masked_phone'] ?? res['phone'] ?? '+91 98450*****';
-      final mockOtp = (res['mock_otp'] ?? res['demo_otp_code'] ?? res['otp'] ?? '123456').toString();
-
       String displayText;
-      if (mode == 'TWILIO_LIVE' || mode == 'LIVE') {
-        displayText = 'SMS OTP sent to $phone. (Demo test code: $mockOtp)';
+      if (firebaseSuccess) {
+        displayText = 'Firebase SMS OTP dispatched to $maskedPhone.';
+        _citizenOtpController.clear();
       } else {
-        displayText = 'Demo Mode: OTP sent to $phone (Test code: $mockOtp)';
+        // Step 2b: Fallback to PDS DemandSync OTP service
+        final fallbackRes = await _apiService.sendCitizenOtp(cardId, phoneNumber: phoneNumber);
+        final mockOtp = (fallbackRes['mock_otp'] ?? fallbackRes['demo_otp_code'] ?? fallbackRes['otp'] ?? '123456').toString();
+        displayText = 'OTP dispatched to $maskedPhone. (Test code: $mockOtp)';
+        _citizenOtpController.text = mockOtp;
       }
-      _citizenOtpController.text = mockOtp;
 
       // Spoken guidance step 3: OTP Requested
       if (_selectedTabIndex == 0 && VoiceAssistantService.instance.isVoiceAssistantMode) {
@@ -370,10 +415,12 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     }
   }
 
-  // Action: Verify OTP & Login
+  // Action: Verify OTP with Firebase & establish Backend PDS Session
   Future<void> _handleVerifyOtpAndLogin() async {
     final cardId = _citizenCardController.text.trim();
     final otp = _citizenOtpController.text.trim();
+    final phoneNumber = _citizenPhoneController.text.trim();
+
     if (otp.isEmpty || otp.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(tr('login.enter_valid_otp'))),
@@ -383,7 +430,25 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
     setState(() => _isVerifyingOtp = true);
     try {
-      await _apiService.verifyCitizenOtp(cardId, otp);
+      if (_isFirebaseOtpSession && (_firebaseVerificationId != null || _firebaseConfirmationResult != null)) {
+        // 1. Verify OTP with Firebase Auth and retrieve verified ID Token
+        final idToken = await FirebaseAuthService.instance.verifyOtpAndGetToken(
+          smsCode: otp,
+          verificationId: _firebaseVerificationId,
+          confirmationResult: _firebaseConfirmationResult,
+        );
+
+        // 2. Exchange Firebase identity with Backend PDS Security Authority
+        await _apiService.firebaseCitizenLogin(
+          cardId,
+          _validatedNormalizedPhone ?? phoneNumber,
+          firebaseIdToken: idToken,
+        );
+      } else {
+        // Fallback standard PDS OTP verification
+        await _apiService.verifyCitizenOtp(cardId, otp);
+      }
+
       if (!mounted) return;
 
       // Crucial: Keep Voice Assistant enabled for authenticated Beneficiary Portal

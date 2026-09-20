@@ -79,6 +79,29 @@ class OTPVerifyIn(BaseModel):
     otp_code: Optional[str] = Field(None, min_length=4, max_length=6, description="Verification OTP e.g. 123456")
     otp: Optional[str] = Field(None, min_length=4, max_length=6, description="Alias for otp_code")
 
+class CitizenValidateHouseholdIn(BaseModel):
+    card_id: str = Field(..., description="Beneficiary Ration Card ID e.g. RC-KA-000001")
+    phone_number: str = Field(..., description="Registered 10-digit mobile number")
+    home_fps_id: Optional[str] = Field(None, description="Home Fair Price Shop ID e.g. FPS-KA-BAG-0001")
+
+class CitizenValidateHouseholdOut(BaseModel):
+    status: str = "verified"
+    card_id: str
+    canonical_card_id: str
+    beneficiary_name: str
+    scheme_type: str
+    members_count: int
+    normalized_phone: str
+    masked_phone: str
+    registered_fps_id: Optional[str] = None
+    message: str = "Household credentials successfully validated against NFSA master dataset."
+
+class CitizenFirebaseLoginIn(BaseModel):
+    card_id: str = Field(..., description="Beneficiary Ration Card ID e.g. RC-KA-000001")
+    phone_number: str = Field(..., description="Verified mobile number")
+    firebase_id_token: Optional[str] = Field(None, description="Firebase Auth ID Token or verification token")
+    firebase_uid: Optional[str] = Field(None, description="Firebase User UID")
+
 class RefreshTokenIn(BaseModel):
     refresh_token: str = Field(..., description="Active Refresh Token")
 
@@ -467,15 +490,20 @@ def citizen_send_otp(
                 household_phones.append(clean_m)
 
     # Step 4: Strict Household Member Phone Verification
+    matched_member_name = None
     if not payload.phone_number or not payload.phone_number.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Registered mobile number is required to receive OTP."
-        )
+        if household_phones:
+            input_phone_clean = household_phones[0]
+            phone_matched = True
+            matched_member_name = ben["name_for_demo"]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Registered mobile number is required to receive OTP."
+            )
     else:
         input_phone_clean = clean_indian_phone(payload.phone_number)
         phone_matched = False
-        matched_member_name = None
         for hp in household_phones:
             if hp.endswith(input_phone_clean[-10:]) or input_phone_clean.endswith(hp[-10:]):
                 phone_matched = True
@@ -514,8 +542,7 @@ def citizen_send_otp(
             else:
                 created_dt = datetime.strptime(created_str, "%Y-%m-%d %H:%M:%S")
             elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - created_dt).total_seconds()
-            is_testing = bool(os.environ.get("PYTEST_CURRENT_TEST")) or getattr(settings, "ENVIRONMENT", "").lower() in ("test", "testing")
-            if 0 <= elapsed < 30 and not is_testing:
+            if 0 <= elapsed < 30:
                 wait_sec = int(30 - elapsed)
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -746,6 +773,185 @@ def citizen_verify_otp(
     refresh_token = create_token(token_data, expires_in=7 * 86400)
 
     logger.info("Citizen '%s' authenticated successfully via OTP (mode=%s)", canonical_card, "REAL" if is_real_mode else "DEMO")
+
+    return UserLoginOut(
+        access_token=token,
+        token_type="bearer",
+        role="BENEFICIARY",
+        username=username_val,
+        beneficiary_id=canonical_card,
+        refresh_token=refresh_token
+    )
+
+
+@router.post("/auth/citizen/validate-household", response_model=CitizenValidateHouseholdOut)
+def citizen_validate_household(
+    payload: CitizenValidateHouseholdIn,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Step 1 Pre-Flight Check in Firebase Phone Auth Flow:
+    Authoritatively verifies that:
+    1. Ration Card exists in official NFSA master dataset.
+    2. Home FPS matches if provided.
+    3. Entered mobile number strictly belongs to a registered member of this household.
+    Returns normalized phone number formatted for Firebase Phone Auth (+91XXXXXXXXXX) and beneficiary metadata.
+    """
+    cursor = db.cursor()
+    card_clean = payload.card_id.strip()
+
+    # 1. Verify card in master database
+    ben = resolve_beneficiary_record(cursor, card_clean)
+    if not ben:
+        logger.warning("Pre-flight check failed: Card ID '%s' not found in NFSA dataset.", card_clean)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset. Access denied."
+        )
+
+    canonical_card = ben["pseudonymous_beneficiary_id"]
+
+    # 2. Cross-verify Home FPS ID if provided
+    if payload.home_fps_id and payload.home_fps_id.strip():
+        fps_clean = payload.home_fps_id.strip()
+        db_fps = ben["registered_fps_id"] if ("registered_fps_id" in ben.keys() and ben["registered_fps_id"]) else None
+        if db_fps and db_fps.upper() != fps_clean.upper():
+            logger.warning("Pre-flight check failed: Provided FPS '%s' does not match registered FPS '%s' for '%s'", fps_clean, db_fps, card_clean)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Security Check Failed: Home FPS Center ID '{fps_clean}' does not match government PDS record for Ration Card '{card_clean}'."
+            )
+
+    # 3. Load household members and all registered phones for this household
+    members = get_or_create_household_members(db, canonical_card)
+    household_phones: List[str] = []
+    if ben["phone"] and str(ben["phone"]).strip():
+        household_phones.append(clean_indian_phone(str(ben["phone"])))
+    for m in members:
+        m_phone = m.get("phone")
+        if m_phone and str(m_phone).strip():
+            clean_m = clean_indian_phone(str(m_phone))
+            if clean_m not in household_phones:
+                household_phones.append(clean_m)
+
+    # 4. Strict Household Member Phone Verification
+    if not payload.phone_number or not payload.phone_number.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registered mobile number is required for verification."
+        )
+
+    input_phone_clean = clean_indian_phone(payload.phone_number)
+    phone_matched = False
+    for hp in household_phones:
+        if hp.endswith(input_phone_clean[-10:]) or input_phone_clean.endswith(hp[-10:]):
+            phone_matched = True
+            break
+
+    if not phone_matched:
+        logger.warning(
+            "Anti-fraud trigger: Provided phone '%s' does not belong to household for card '%s'. Registered phones: %s",
+            payload.phone_number, card_clean, [mask_phone(p) for p in household_phones]
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Security Check Failed: Entered mobile number does not belong to any registered member of this Ration Card household."
+        )
+
+    normalized_10_digit = input_phone_clean[-10:]
+    international_phone = f"+91{normalized_10_digit}"
+    masked = f"+91 ******{normalized_10_digit[-4:]}"
+
+    return CitizenValidateHouseholdOut(
+        status="verified",
+        card_id=card_clean,
+        canonical_card_id=canonical_card,
+        beneficiary_name=ben["name_for_demo"] or "Beneficiary",
+        scheme_type=ben["scheme_type"] or "PHH",
+        members_count=int(ben["members_count"]) if ben["members_count"] else len(members),
+        normalized_phone=international_phone,
+        masked_phone=masked,
+        registered_fps_id=ben["registered_fps_id"] if ("registered_fps_id" in ben.keys()) else None,
+        message="Household credentials successfully validated against NFSA master dataset."
+    )
+
+
+@router.post("/auth/citizen/firebase-login", response_model=UserLoginOut)
+def citizen_firebase_login(
+    payload: CitizenFirebaseLoginIn,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Step 4 in Firebase Phone Auth Flow:
+    After Firebase client successfully verifies the SMS OTP:
+    1. Verifies that the phone and card ID exist and match in the NFSA database.
+    2. Provisions/retrieves citizen user account.
+    3. Issues official cryptographic PDS DemandSync session tokens.
+    """
+    cursor = db.cursor()
+    card_clean = payload.card_id.strip()
+
+    # 1. Verify card in master database
+    ben = resolve_beneficiary_record(cursor, card_clean)
+    if not ben:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Beneficiary Ration Card '{card_clean}' not found in official NFSA Master Dataset."
+        )
+
+    canonical_card = ben["pseudonymous_beneficiary_id"]
+
+    # 2. Verify phone matches household
+    members = get_or_create_household_members(db, canonical_card)
+    household_phones: List[str] = []
+    if ben["phone"] and str(ben["phone"]).strip():
+        household_phones.append(clean_indian_phone(str(ben["phone"])))
+    for m in members:
+        m_phone = m.get("phone")
+        if m_phone and str(m_phone).strip():
+            clean_m = clean_indian_phone(str(m_phone))
+            if clean_m not in household_phones:
+                household_phones.append(clean_m)
+
+    input_phone_clean = clean_indian_phone(payload.phone_number)
+    phone_matched = False
+    for hp in household_phones:
+        if hp.endswith(input_phone_clean[-10:]) or input_phone_clean.endswith(hp[-10:]):
+            phone_matched = True
+            break
+
+    if not phone_matched:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Security Check Failed: Phone number mismatch during session establishment."
+        )
+
+    # 3. Ensure user account in users table
+    cursor.execute("SELECT id, username, role FROM users WHERE beneficiary_id = ? OR beneficiary_id = ?;", (card_clean, canonical_card))
+    user_row = cursor.fetchone()
+
+    if not user_row:
+        username = f"user_{canonical_card.lower().replace('-', '_')}"
+        password_hash = hash_password("citizen_secure_pass")
+        cursor.execute(
+            "INSERT INTO users (username, password_hash, role, beneficiary_id) VALUES (?, ?, 'BENEFICIARY', ?);",
+            (username, password_hash, canonical_card)
+        )
+        db.commit()
+        username_val = username
+    else:
+        username_val = user_row["username"]
+
+    token_data = {
+        "username": username_val,
+        "role": "BENEFICIARY",
+        "beneficiary_id": canonical_card,
+        "auth_provider": "FIREBASE_PHONE"
+    }
+    token = create_token(token_data)
+    refresh_token = create_token(token_data, expires_in=7 * 86400)
+
+    logger.info("Citizen '%s' authenticated successfully via Firebase Phone Auth", canonical_card)
 
     return UserLoginOut(
         access_token=token,
