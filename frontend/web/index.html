@@ -155,10 +155,10 @@
   </script>
 
   <script>
-    // Ensure fresh assets on deployments
+    // Force fresh asset loading on every deployment
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for (let r of registrations) { r.update(); }
+        for (let r of registrations) { r.unregister(); }
       });
     }
   </script>
