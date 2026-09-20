@@ -72,28 +72,39 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
   static const Color _slate100 = Color(0xFFF1F5F9);
   static const Color _slate200 = Color(0xFFE2E8F0);
   static const Color _slate300 = Color(0xFFCBD5E1);
+  static const Color _slate400 = Color(0xFF94A3B8);
   static const Color _slate500 = Color(0xFF64748B);
   static const Color _slate700 = Color(0xFF334155);
   static const Color _slate900 = Color(0xFF0F172A);
 
+  static const List<String> _stageShortNames = [
+    'DEMAND',
+    'VALIDATE',
+    'ALLOCATE',
+    'OPTIMIZE',
+    'DISPATCH',
+    'DELIVERY',
+    'EVALUATE',
+  ];
+
   static const List<String> _stageNames = [
-    '01 MONITOR',
-    '02 VALIDATE',
+    '01 MONITOR & TRIAGE',
+    '02 VALIDATE DEMAND',
     '03 ALLOCATE',
     '04 OPTIMIZE',
-    '05 DISPATCH',
-    '06 DELIVERY',
-    '07 EVALUATE',
+    '05 AUTHORIZE DISPATCH',
+    '06 VERIFY DELIVERY',
+    '07 EVALUATE & CLOSE',
   ];
 
   static const List<String> _stageDescriptions = [
-    'District Situation Summary & Operational Attention Queue',
-    'Beneficiary Demand Provenance & Immutable Snapshot Seal',
-    'Central Depot Stock vs Existing FPS Inventory Balance',
-    'Carrier Fleet Corridor Sequencing & Multi-Stop Plan',
-    'Statutory 7-Rule Check & Movement Authorization',
-    'Live Fleet Transit Monitoring & Surprise Inspection Directives',
-    'Closed-Loop Offtake Reconciliation & Statutory Cycle Closure',
+    'District operational state, live intent shifts, and immediate decision queue',
+    'Beneficiary demand provenance, explicit calculations, and cryptographic snapshot freeze',
+    'Central depot stock separation (850 MT) vs FPS inventory allocation & statutory overrides',
+    'Fleet carrier capacities, highway corridors, and multi-drop drop sequences',
+    'Authoritative manifests, gatepass clearance, and statutory 7-point dispatch check',
+    'Fleet movement monitoring, GPS/telemetry verification, and surprise inspection directives',
+    'Forecast evaluation (MAPE/MAE), physical grain reconciliation, and backend cycle closure',
   ];
 
   @override
@@ -398,6 +409,7 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
       );
 
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('$actionLabel completed successfully.'),
@@ -740,34 +752,31 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
           ? const Center(child: CircularProgressIndicator(color: _govNavy))
           : Column(
               children: [
-                // 1. TOP COMMAND BAR
+                // 1. TOP HEADER & DSO COMMAND CENTER BRANDING
                 _buildTopCommandBar(),
                 if (_isActionInProgress)
                   const LinearProgressIndicator(minHeight: 2.5, backgroundColor: _govNavy, color: Color(0xFFFBBF24)),
 
-                // 2. MAIN OPERATIONAL WORKSPACE (Left Stepper + Active Stage Canvas)
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Workflow Navigation Rail (State Machine)
-                      _buildWorkflowNavigationRail(),
+                // 2. HORIZONTAL WORKFLOW STEPPER (WORKFLOW FIRST)
+                _buildHorizontalWorkflowStepper(),
 
-                      // Primary Stage Work Canvas
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildStageHeaderBanner(),
-                              const SizedBox(height: 20),
-                              _buildActiveStageContent(),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                // 3. MAIN WORKFLOW WORKSPACE CANVAS
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // PRIMARY COMMAND AREA: "WHAT NEEDS YOUR DECISION?"
+                        _buildPrimaryDecisionArea(),
+                        const SizedBox(height: 24),
+
+                        // CURRENT CONTEXTUAL STAGE WORKSPACE
+                        _buildStageHeaderBanner(),
+                        const SizedBox(height: 16),
+                        _buildActiveStageContent(),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -801,12 +810,12 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
             Text(
-              'PDS DEMANDSYNC',
-              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 0.8),
+              'PDS DemandSync',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 0.5),
             ),
             Text(
-              'DISTRICT SUPPLY COMMAND • BENGALURU URBAN',
-              style: TextStyle(color: Color(0xFFFBBF24), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+              'DSO Command Center • Bengaluru Urban',
+              style: TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
             ),
           ],
         ),
@@ -828,7 +837,7 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
               const Icon(Icons.calendar_today_outlined, size: 13, color: Color(0xFF93C5FD)),
               const SizedBox(width: 6),
               Text(
-                'CYCLE: $_currentCycle (Day $_planningDay)',
+                'Current cycle: $_currentCycle (Day $_planningDay)',
                 style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
               ),
             ],
@@ -851,7 +860,7 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
               ),
               const SizedBox(width: 6),
               Text(
-                _workflowState,
+                'Workflow: $_workflowState',
                 style: TextStyle(color: _getStateColor(_workflowState), fontSize: 11.5, fontWeight: FontWeight.w800),
               ),
             ],
@@ -954,6 +963,400 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
     );
   }
 
+  // =========================================================================
+  // HORIZONTAL WORKFLOW STEPPER (WORKFLOW AS THE CORE NAVIGATION)
+  // =========================================================================
+  Widget _buildHorizontalWorkflowStepper() {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: _slate200)),
+        boxShadow: [
+          BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 2)),
+        ],
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: List.generate(_stageShortNames.length, (index) {
+            final isLast = index == _stageShortNames.length - 1;
+            final stageName = _stageShortNames[index];
+            final fullStageName = _stageNames[index];
+            final status = _getStageStatus(index);
+            final isSelected = _viewingStageIndex == index;
+            final isCurrentActive = _activeStageIndex == index;
+
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: status == StageStatus.locked
+                      ? () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Stage Locked: ${_getLockReason(index)}'), backgroundColor: _slate700),
+                          );
+                        }
+                      : () => setState(() => _viewingStageIndex = index),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? _govNavy
+                          : (isCurrentActive ? const Color(0xFFEFF6FF) : Colors.transparent),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isSelected
+                            ? _govNavy
+                            : (isCurrentActive ? _govAccent : Colors.transparent),
+                        width: isCurrentActive ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildStepperIndicator(status, isSelected, isCurrentActive),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              stageName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: isSelected
+                                    ? Colors.white
+                                    : (status == StageStatus.locked ? _slate400 : _slate900),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            Text(
+                              status == StageStatus.completed
+                                  ? 'Done'
+                                  : (isCurrentActive ? 'Active' : (status == StageStatus.ready ? 'Ready' : 'Locked')),
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: isSelected
+                                    ? const Color(0xFFFBBF24)
+                                    : (status == StageStatus.completed ? _govGreen : _slate500),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (!isLast) ...[
+                  const SizedBox(width: 6),
+                  const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: _slate300),
+                  const SizedBox(width: 6),
+                ],
+              ],
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepperIndicator(StageStatus status, bool isSelected, bool isCurrentActive) {
+    if (status == StageStatus.completed) {
+      return Container(
+        width: 22,
+        height: 22,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: _govGreen,
+        ),
+        child: const Center(
+          child: Text(
+            '✓',
+            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900),
+          ),
+        ),
+      );
+    } else if (isCurrentActive) {
+      return Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isSelected ? const Color(0xFFFBBF24) : _govAccent,
+        ),
+        child: Center(
+          child: Text(
+            '●',
+            style: TextStyle(color: isSelected ? _govNavy : Colors.white, fontSize: 14),
+          ),
+        ),
+      );
+    } else {
+      return Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: status == StageStatus.ready ? _govAccent : _slate400, width: 1.5),
+        ),
+        child: Center(
+          child: Text(
+            '○',
+            style: TextStyle(color: status == StageStatus.ready ? _govAccent : _slate400, fontSize: 14),
+          ),
+        ),
+      );
+    }
+  }
+
+  // =========================================================================
+  // PRIMARY COMMAND AREA: "WHAT NEEDS YOUR DECISION?"
+  // =========================================================================
+  Widget _buildPrimaryDecisionArea() {
+    final forecastDemand = _adminSummary?.totalForecastDemandKg ?? 276732.0;
+    final forecastDemandMt = (forecastDemand / 1000.0).toStringAsFixed(1);
+    final isCycleClosed = _workflowState == 'CYCLE_CLOSED';
+
+    // Contextual values based on current active workflow stage
+    String stageLabel;
+    String recordId;
+    String primaryMetric;
+    String statusDesc;
+    String buttonLabel;
+    VoidCallback onPrimaryAction;
+    IconData actionIcon;
+    Color actionColor;
+
+    switch (_activeStageIndex) {
+      case 0: // MONITOR & TRIAGE / PLANNING_OPEN
+        stageLabel = 'DEMAND SITUATION TRIAGE';
+        recordId = 'Operational Cycle: $_currentCycle';
+        primaryMetric = '20 Fair Price Shops • $forecastDemandMt MT Forecast • ${_adminSummary?.activeIntentsCount ?? 2000} Declarations';
+        statusDesc = 'Awaiting DSO statutory situation triage & demand baseline lock.';
+        buttonLabel = 'REVIEW & VALIDATE DEMAND';
+        actionIcon = Icons.arrow_forward_rounded;
+        actionColor = _govNavy;
+        onPrimaryAction = () => setState(() => _viewingStageIndex = 1);
+        break;
+
+      case 1: // VALIDATE DEMAND
+        stageLabel = 'DEMAND VALIDATION';
+        recordId = 'Demand Snapshot: ${_demandSnapshot?['snapshot']?['snapshot_id'] ?? "DS-$_currentCycle"}';
+        primaryMetric = '20 Fair Price Shops • $forecastDemandMt MT Forward Demand';
+        statusDesc = 'Aggregated citizen intent and historical baseline awaiting DSO cryptographic seal.';
+        buttonLabel = _isDemandLocked ? 'VIEW SEALED SNAPSHOT' : 'VALIDATE & FREEZE DEMAND';
+        actionIcon = _isDemandLocked ? Icons.visibility_outlined : Icons.lock_outline_rounded;
+        actionColor = _isDemandLocked ? _govNavy : _govGreen;
+        onPrimaryAction = _isDemandLocked
+            ? () => setState(() => _viewingStageIndex = 2)
+            : _handleValidateDemandAction;
+        break;
+
+      case 2: // ALLOCATE
+        stageLabel = 'STATUTORY STOCK ALLOCATION';
+        recordId = 'Allocation Plan: AL-$_currentCycle';
+        primaryMetric = 'Central Depot Stock: ${_dsoAllocationData?['available_depot_stock_mt'] ?? '850.0'} MT • Net Requirement: $forecastDemandMt MT';
+        statusDesc = 'Central Godown inventory balancing across 20 Fair Price Shops ready for DSO sign-off.';
+        buttonLabel = 'APPROVE ALLOCATION PLAN';
+        actionIcon = Icons.check_circle_outline_rounded;
+        actionColor = _govGreen;
+        onPrimaryAction = () async {
+          await _advanceStage(
+            targetState: 'ALLOCATED',
+            actionLabel: 'Statutory Allocation Plan Approved',
+            reason: 'DSO formally signed off grain allocation matrix across 20 FPS centers.',
+            preTransitionHook: () async {
+              await _apiService.approveDsoAllocationPlan(cycleId: _currentCycle);
+            },
+          );
+        };
+        break;
+
+      case 3: // OPTIMIZE
+        stageLabel = 'FLEET CORRIDOR SEQUENCING';
+        recordId = 'Corridor Plan: OPT-$_currentCycle';
+        primaryMetric = '${_dsoRoutes.length} Corridors • 20 Fair Price Shops • 4 Heavy Fleet Carriers';
+        statusDesc = 'Carrier sequencing, axle capacity constraints, and delivery routes awaiting DSO approval.';
+        buttonLabel = 'APPROVE OPTIMIZATION PLAN';
+        actionIcon = Icons.alt_route_rounded;
+        actionColor = _govNavy;
+        onPrimaryAction = () async {
+          await _advanceStage(
+            targetState: 'OPTIMIZED',
+            actionLabel: 'Fleet Corridor Plan Approved',
+            reason: 'DSO validated vehicle capacities, highway corridors, and multi-drop delivery sequences.',
+          );
+        };
+        break;
+
+      case 4: // DISPATCH
+        stageLabel = 'MANIFEST MOVEMENT CLEARANCE';
+        recordId = 'Manifests: ${_manifestData?.records.length ?? 4} Authoritative Records';
+        primaryMetric = '${_manifestData?.records.length ?? 4} Heavy Carriers • Digital Gatepasses Ready • 7-Rule Check Passed';
+        statusDesc = 'Statutory pre-authorization checks verified. Ready for movement sign-off.';
+        buttonLabel = 'AUTHORIZE DISPATCH MOVEMENT';
+        actionIcon = Icons.verified_rounded;
+        actionColor = _govGreen;
+        onPrimaryAction = () async {
+          final manifestId = _manifestData?.records.isNotEmpty == true
+              ? _manifestData!.records.first.id.toString()
+              : 'MAN-2026-0912';
+          await _advanceStage(
+            targetState: 'DISPATCHED',
+            actionLabel: 'Movement Authorized for Manifest $manifestId',
+            reason: 'DSO authorized physical movement and gatepass clearance for manifest $manifestId.',
+            preTransitionHook: () async {
+              await _apiService.authorizeDsoDispatch(
+                manifestId: manifestId,
+                cycleId: _currentCycle,
+                officerName: widget.username ?? 'District Supply Officer',
+                notes: 'Statutory dispatch movement clearance signed off by DSO.',
+              );
+            },
+          );
+        };
+        break;
+
+      case 5: // DELIVERY
+        stageLabel = 'FLEET TRANSIT & SURPRISE INSPECTION';
+        recordId = 'Tracking: ${_truckTrackings.length} In-Transit Carriers';
+        primaryMetric = '${_truckTrackings.length} Active Corridors • ${_inspectionsOrders.length} Directives Issued • ${_completedInspections.length} Reports';
+        statusDesc = 'Live transit monitoring active. DSO surprise inspection directives enabled.';
+        buttonLabel = 'ISSUE SURPRISE INSPECTION DIRECTIVE';
+        actionIcon = Icons.notification_important_rounded;
+        actionColor = _amber;
+        onPrimaryAction = _showSurpriseInspectionDialog;
+        break;
+
+      case 6: // EVALUATE & CLOSE
+      default:
+        stageLabel = 'EVALUATION & STATUTORY CLOSURE';
+        recordId = 'Closure Dossier: CL-$_currentCycle';
+        primaryMetric = 'MAPE: ${_evaluationData?.mapePct.toStringAsFixed(2) ?? '2.48'}% • Reconciliation: 276.7 MT Clean Closed-Loop';
+        statusDesc = isCycleClosed
+            ? 'Planning cycle $_currentCycle is formally closed and cryptographically archived.'
+            : 'All operational stages verified. Statutory closure checklist awaiting DSO authorization.';
+        buttonLabel = isCycleClosed ? 'CYCLE FORMALLY CLOSED' : 'FORMALLY CLOSE PLANNING CYCLE';
+        actionIcon = isCycleClosed ? Icons.lock_rounded : Icons.lock_open_rounded;
+        actionColor = isCycleClosed ? _govGreen : _govNavy;
+        onPrimaryAction = isCycleClosed
+            ? () {}
+            : () async {
+                await _advanceStage(
+                  targetState: 'CYCLE_CLOSED',
+                  actionLabel: 'Planning Cycle $_currentCycle Formally Closed',
+                  reason: 'DSO completed all statutory workflow stages. Ledger transitioned to permanent archive.',
+                  preTransitionHook: () async {
+                    await _apiService.closeWorkflowCycle(cycleId: _currentCycle);
+                  },
+                );
+              };
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _govAccent.withValues(alpha: 0.3), width: 1.5),
+        boxShadow: const [
+          BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 3)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _govAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: _govAccent.withValues(alpha: 0.3)),
+                ),
+                child: const Text(
+                  'WHAT NEEDS YOUR DECISION?',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: _govAccent,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _slate100,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  stageLabel,
+                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: _slate700),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Cycle: $_currentCycle',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _slate500),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recordId,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _govNavy),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      primaryMetric,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _slate900),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      statusDesc,
+                      style: const TextStyle(fontSize: 12, color: _slate700),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: actionColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                icon: Icon(actionIcon, size: 16),
+                label: Text(
+                  buttonLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5, letterSpacing: 0.3),
+                ),
+                onPressed: onPrimaryAction,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Color _getStateColor(String state) {
     switch (state.toUpperCase()) {
       case 'PLANNING_OPEN':
@@ -976,174 +1379,11 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
   }
 
   // =========================================================================
-  // WORKFLOW NAVIGATION RAIL (State Machine)
-  // =========================================================================
-  Widget _buildWorkflowNavigationRail() {
-    return Container(
-      width: 240,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(right: BorderSide(color: _slate200)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
-            child: Row(
-              children: const [
-                Icon(Icons.alt_route_rounded, size: 16, color: _govNavy),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'OPERATIONAL STAGES',
-                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: _slate500, letterSpacing: 0.5),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _stageNames.length,
-              itemBuilder: (context, index) {
-                final stageTitle = _stageNames[index];
-                final status = _getStageStatus(index);
-                final isSelected = _viewingStageIndex == index;
-
-                return InkWell(
-                  onTap: status == StageStatus.locked
-                      ? () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Stage Locked: ${_getLockReason(index)}'), backgroundColor: _slate700),
-                          );
-                        }
-                      : () => setState(() => _viewingStageIndex = index),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: isSelected ? _govNavy : Colors.transparent,
-                      border: Border(
-                        bottom: const BorderSide(color: _slate100),
-                        left: isSelected ? const BorderSide(color: Color(0xFFFBBF24), width: 4) : BorderSide.none,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        _buildStageStatusIcon(status, isSelected),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                stageTitle,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : (status == StageStatus.locked ? _slate400 : _slate900),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                status == StageStatus.completed
-                                    ? 'Completed'
-                                    : (status == StageStatus.current
-                                        ? 'Active Decision'
-                                        : (status == StageStatus.ready ? 'Ready to Execute' : 'Locked')),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: isSelected
-                                      ? const Color(0xFFFBBF24)
-                                      : (status == StageStatus.completed ? _govGreen : _slate500),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              color: _slate50,
-              border: Border(top: BorderSide(color: _slate200)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.security_rounded, size: 16, color: _govGreen),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'DSO: ${widget.username ?? "dso_user"}\nAuthority: Section 3 EC Act',
-                    style: const TextStyle(fontSize: 10, color: _slate700, height: 1.3),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static const Color _slate400 = Color(0xFF94A3B8);
-
-  Widget _buildStageStatusIcon(StageStatus status, bool isSelected) {
-    switch (status) {
-      case StageStatus.completed:
-        return Container(
-          width: 22,
-          height: 22,
-          decoration: const BoxDecoration(shape: BoxShape.circle, color: _govGreen),
-          child: const Icon(Icons.check, size: 14, color: Colors.white),
-        );
-      case StageStatus.current:
-        return Container(
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isSelected ? const Color(0xFFFBBF24) : _govNavy,
-          ),
-          child: Icon(Icons.play_arrow_rounded, size: 15, color: isSelected ? _govNavy : Colors.white),
-        );
-      case StageStatus.ready:
-        return Container(
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: _govAccent, width: 2),
-          ),
-          child: const Icon(Icons.circle, size: 8, color: _govAccent),
-        );
-      case StageStatus.locked:
-      case StageStatus.blocked:
-        return const SizedBox(
-          width: 22,
-          height: 22,
-          child: Icon(Icons.lock_outline_rounded, size: 16, color: _slate400),
-        );
-    }
-  }
-
-  // =========================================================================
   // STAGE HEADER CONTEXT BANNER
   // =========================================================================
   Widget _buildStageHeaderBanner() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
@@ -1153,11 +1393,11 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(color: _govNavy, borderRadius: BorderRadius.circular(6)),
             child: Text(
-              '${_viewingStageIndex + 1}',
-              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900),
+              'STAGE 0${_viewingStageIndex + 1}',
+              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900),
             ),
           ),
           const SizedBox(width: 14),
@@ -1167,12 +1407,12 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
               children: [
                 Text(
                   _stageNames[_viewingStageIndex],
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _govNavy),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _govNavy),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   _stageDescriptions[_viewingStageIndex],
-                  style: const TextStyle(fontSize: 12, color: _slate700),
+                  style: const TextStyle(fontSize: 11.5, color: _slate700),
                 ),
               ],
             ),
@@ -1465,55 +1705,55 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-        columnSpacing: 20,
-        headingRowColor: WidgetStateProperty.all(_slate100),
-        columns: const [
-          DataColumn(label: Text('FPS CODE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          DataColumn(label: Text('SHOP NAME', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          DataColumn(label: Text('BASELINE (H)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          DataColumn(label: Text('INTENT (I)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          DataColumn(label: Text('FORECAST (D̂)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          DataColumn(label: Text('NET SHIFT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          DataColumn(label: Text('PROVENANCE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-        ],
-        rows: rows.take(6).map((r) {
-          final shift = r.forecastKg - r.historicalDemandKg;
-          return DataRow(
-            cells: [
-              DataCell(Text(r.fpsId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: _govNavy))),
-              DataCell(Text(r.name, style: const TextStyle(fontSize: 11.5))),
-              DataCell(Text('${r.historicalDemandKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 11.5))),
-              DataCell(Text('${r.declaredIntentKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 11.5))),
-              DataCell(Text('${r.forecastKg.toStringAsFixed(0)} kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5))),
-              DataCell(
-                Text(
-                  '${shift >= 0 ? "+" : ""}${shift.toStringAsFixed(0)} kg',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: shift >= 0 ? _govGreen : _dangerRed),
-                ),
-              ),
-              DataCell(
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: const Size(60, 26),
+          columnSpacing: 20,
+          headingRowColor: WidgetStateProperty.all(_slate100),
+          columns: const [
+            DataColumn(label: Text('FPS CODE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+            DataColumn(label: Text('SHOP NAME', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+            DataColumn(label: Text('BASELINE (H)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+            DataColumn(label: Text('INTENT (I)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+            DataColumn(label: Text('FORECAST (D̂)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+            DataColumn(label: Text('NET SHIFT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+            DataColumn(label: Text('PROVENANCE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          ],
+          rows: rows.take(6).map((r) {
+            final shift = r.forecastKg - r.historicalDemandKg;
+            return DataRow(
+              cells: [
+                DataCell(Text(r.fpsId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: _govNavy))),
+                DataCell(Text(r.name, style: const TextStyle(fontSize: 11.5))),
+                DataCell(Text('${r.historicalDemandKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 11.5))),
+                DataCell(Text('${r.declaredIntentKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 11.5))),
+                DataCell(Text('${r.forecastKg.toStringAsFixed(0)} kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5))),
+                DataCell(
+                  Text(
+                    '${shift >= 0 ? "+" : ""}${shift.toStringAsFixed(0)} kg',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: shift >= 0 ? _govGreen : _dangerRed),
                   ),
-                  onPressed: () {
-                    _showProvenanceDialog(
-                      title: '${r.fpsId} Demand',
-                      value: '${r.forecastKg.toStringAsFixed(1)} kg',
-                      sourceTable: 'forecast (SQLite)',
-                      cycle: _currentCycle,
-                      calculation: 'D̂ = (1 - 0.65·${r.confidenceScore})·${r.historicalDemandKg} + (0.65·${r.confidenceScore})·${r.declaredIntentKg}',
-                      recordCount: '${r.registeredBeneficiaries} registered beneficiaries',
-                    );
-                  },
-                  child: const Text('View Source', style: TextStyle(fontSize: 10)),
                 ),
-              ),
-            ],
-          );
-        }).toList(),
-      ),
+                DataCell(
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: const Size(60, 26),
+                    ),
+                    onPressed: () {
+                      _showProvenanceDialog(
+                        title: '${r.fpsId} Demand',
+                        value: '${r.forecastKg.toStringAsFixed(1)} kg',
+                        sourceTable: 'forecast (SQLite)',
+                        cycle: _currentCycle,
+                        calculation: 'D̂ = (1 - 0.65·${r.confidenceScore})·${r.historicalDemandKg} + (0.65·${r.confidenceScore})·${r.declaredIntentKg}',
+                        recordCount: '${r.registeredBeneficiaries} registered beneficiaries',
+                      );
+                    },
+                    child: const Text('View Source', style: TextStyle(fontSize: 10)),
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -1623,49 +1863,49 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
-            columnSpacing: 16,
-            headingRowColor: WidgetStateProperty.all(_slate100),
-            columns: const [
-              DataColumn(label: Text('FPS ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('SHOP NAME', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('HISTORICAL (H)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('INTENT (I)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('FORECAST (D̂)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('CONFIDENCE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('SOURCE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-            ],
-            rows: rows.map((r) {
-              return DataRow(
-                cells: [
-                  DataCell(Text(r.fpsId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: _govNavy))),
-                  DataCell(Text(r.name, style: const TextStyle(fontSize: 11))),
-                  DataCell(Text('${r.historicalDemandKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 11))),
-                  DataCell(Text('${r.declaredIntentKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 11))),
-                  DataCell(Text('${r.forecastKg.toStringAsFixed(0)} kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                  DataCell(Text('${(r.confidenceScore * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 11))),
-                  DataCell(
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        minimumSize: const Size(60, 24),
+              columnSpacing: 16,
+              headingRowColor: WidgetStateProperty.all(_slate100),
+              columns: const [
+                DataColumn(label: Text('FPS ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('SHOP NAME', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('HISTORICAL (H)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('INTENT (I)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('FORECAST (D̂)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('CONFIDENCE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('SOURCE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+              ],
+              rows: rows.map((r) {
+                return DataRow(
+                  cells: [
+                    DataCell(Text(r.fpsId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: _govNavy))),
+                    DataCell(Text(r.name, style: const TextStyle(fontSize: 11))),
+                    DataCell(Text('${r.historicalDemandKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 11))),
+                    DataCell(Text('${r.declaredIntentKg.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 11))),
+                    DataCell(Text('${r.forecastKg.toStringAsFixed(0)} kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                    DataCell(Text('${(r.confidenceScore * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 11))),
+                    DataCell(
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: const Size(60, 24),
+                        ),
+                        onPressed: () {
+                          _showProvenanceDialog(
+                            title: '${r.fpsId} Forecast',
+                            value: '${r.forecastKg.toStringAsFixed(1)} kg',
+                            sourceTable: 'forecast & intent (SQLite)',
+                            cycle: _currentCycle,
+                            calculation: 'D̂ = (1 - 0.65·${r.confidenceScore})·${r.historicalDemandKg} + (0.65·${r.confidenceScore})·${r.declaredIntentKg}',
+                            recordCount: 'Authoritative cycle $_currentCycle records',
+                          );
+                        },
+                        child: const Text('View Source', style: TextStyle(fontSize: 10)),
                       ),
-                      onPressed: () {
-                        _showProvenanceDialog(
-                          title: '${r.fpsId} Forecast',
-                          value: '${r.forecastKg.toStringAsFixed(1)} kg',
-                          sourceTable: 'forecast & intent (SQLite)',
-                          cycle: _currentCycle,
-                          calculation: 'D̂ = (1 - 0.65·${r.confidenceScore})·${r.historicalDemandKg} + (0.65·${r.confidenceScore})·${r.declaredIntentKg}',
-                          recordCount: 'Authoritative cycle $_currentCycle records',
-                        );
-                      },
-                      child: const Text('View Source', style: TextStyle(fontSize: 10)),
                     ),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
+                  ],
+                );
+              }).toList(),
+            ),
           ),
         ),
       ],
@@ -1780,10 +2020,10 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('STATUTORY STOCK ALLOCATION RULE:', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: _slate500)),
-                  const SizedBox(height: 2),
-                  const Text(
+                children: const [
+                  Text('STATUTORY STOCK ALLOCATION RULE:', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: _slate500)),
+                  SizedBox(height: 2),
+                  Text(
                     'Net Requirement = Validated Demand − Existing FPS Stock',
                     style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: _slate900),
                   ),
@@ -1831,60 +2071,60 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
-            columnSpacing: 14,
-            headingRowColor: WidgetStateProperty.all(_slate100),
-            columns: const [
-              DataColumn(label: Text('FPS ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('COMMODITY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('VALIDATED (kg)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('EXISTING (kg)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('NET REQ (kg)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('PROPOSED (kg)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('PRIORITY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              DataColumn(label: Text('OVERRIDE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-            ],
-            rows: items.take(10).map((item) {
-              final isOverridden = item['is_overridden'] == true;
-              return DataRow(
-                cells: [
-                  DataCell(Text(item['fps_id'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: _govNavy))),
-                  DataCell(Text(item['commodity'] ?? '', style: const TextStyle(fontSize: 11))),
-                  DataCell(Text('${item['validated_requirement_kg']}', style: const TextStyle(fontSize: 11))),
-                  DataCell(Text('${item['existing_stock_kg']}', style: const TextStyle(fontSize: 11))),
-                  DataCell(Text('${item['net_requirement_kg']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
-                  DataCell(Text('${item['proposed_allocation_kg']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-                  DataCell(
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: item['priority'] == 'CRITICAL' ? _dangerRedBg : _slate100,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        item['priority'] ?? 'NORMAL',
-                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: item['priority'] == 'CRITICAL' ? _dangerRed : _slate700),
+              columnSpacing: 14,
+              headingRowColor: WidgetStateProperty.all(_slate100),
+              columns: const [
+                DataColumn(label: Text('FPS ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('COMMODITY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('VALIDATED (kg)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('EXISTING (kg)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('NET REQ (kg)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('PROPOSED (kg)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('PRIORITY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                DataColumn(label: Text('OVERRIDE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+              ],
+              rows: items.take(10).map((item) {
+                final isOverridden = item['is_overridden'] == true;
+                return DataRow(
+                  cells: [
+                    DataCell(Text(item['fps_id'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: _govNavy))),
+                    DataCell(Text(item['commodity'] ?? '', style: const TextStyle(fontSize: 11))),
+                    DataCell(Text('${item['validated_requirement_kg']}', style: const TextStyle(fontSize: 11))),
+                    DataCell(Text('${item['existing_stock_kg']}', style: const TextStyle(fontSize: 11))),
+                    DataCell(Text('${item['net_requirement_kg']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                    DataCell(Text('${item['proposed_allocation_kg']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: item['priority'] == 'CRITICAL' ? _dangerRedBg : _slate100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          item['priority'] ?? 'NORMAL',
+                          style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: item['priority'] == 'CRITICAL' ? _dangerRed : _slate700),
+                        ),
                       ),
                     ),
-                  ),
-                  DataCell(
-                    isOverridden
-                        ? Row(
-                            children: [
-                              const Icon(Icons.warning_amber_rounded, size: 14, color: _amber),
-                              const SizedBox(width: 4),
-                              Text('Modified', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _amber)),
-                            ],
-                          )
-                        : OutlinedButton(
-                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: const Size(60, 24)),
-                            onPressed: () => _showAllocationOverrideModal(item),
-                            child: const Text('Override', style: TextStyle(fontSize: 10)),
-                          ),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
+                    DataCell(
+                      isOverridden
+                          ? Row(
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, size: 14, color: _amber),
+                                const SizedBox(width: 4),
+                                Text('Modified', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _amber)),
+                              ],
+                            )
+                          : OutlinedButton(
+                              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: const Size(60, 24)),
+                              onPressed: () => _showAllocationOverrideModal(item),
+                              child: const Text('Override', style: TextStyle(fontSize: 10)),
+                            ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
           ),
         ),
       ],
@@ -2328,7 +2568,7 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // A. FORECAST EVALUATION
-        const Text('A. FORECAST EVALUATION METRICS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _slate700, letterSpacing: 0.6)),
+        const Text('A. FORECAST EVALUATION METRICS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _slate700, letterSpacing: 0.6),),
         const SizedBox(height: 10),
         Row(
           children: [

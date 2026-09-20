@@ -75,17 +75,19 @@ class MockDsoApiService extends ApiService {
     );
   }
 
-  Future<Map<String, dynamic>> fetchWorkflowState({String cycleId = '2026-09'}) async {
+  @override
+  Future<Map<String, dynamic>> fetchWorkflowStatus({String cycleId = '2026-09'}) async {
     return {
       'cycle_id': cycleId,
       'current_state': 'FORECASTED',
       'active_stage_index': 0,
+      'blocking_conditions': [],
       'is_terminal': false,
     };
   }
 
   @override
-  Future<List<FpsShop>> fetchFpsList() async {
+  Future<List<FpsShop>> fetchFPSList() async {
     return [
       FpsShop(
         id: 1,
@@ -104,21 +106,22 @@ class MockDsoApiService extends ApiService {
   Future<Map<String, dynamic>> fetchDsoAllocationPlan({String cycleId = '2026-09'}) async {
     return {
       'cycle_id': cycleId,
-      'central_depot_available_stock_mt': 850.0,
-      'total_fps_inventory_mt': 24.5,
+      'available_depot_stock_mt': 850.0,
+      'total_existing_fps_stock_mt': 24.5,
       'total_validated_demand_mt': 276.7,
       'proposed_allocation_mt': 276.7,
       'statutory_reserve_buffer_mt': 573.3,
-      'allocations': [
+      'items': [
         {
           'fps_id': 'FPS-KA-BAG-0001',
           'fps_name': 'Fair Price Shop 1 (Bagalur)',
           'commodity': 'Rice',
-          'validated_demand_kg': 14200.0,
-          'existing_inventory_kg': 1200.0,
+          'validated_requirement_kg': 14200.0,
+          'existing_stock_kg': 1200.0,
+          'net_requirement_kg': 13000.0,
           'proposed_allocation_kg': 13000.0,
-          'allocated_quantity_kg': 13000.0,
-          'central_depot_stock_mt': 850.0,
+          'priority': 'NORMAL',
+          'is_overridden': false,
         }
       ]
     };
@@ -150,6 +153,118 @@ class MockDsoApiService extends ApiService {
           ]
         }
       ]
+    };
+  }
+
+  @override
+  Future<DispatchManifestData> fetchDispatchManifest({String cycleId = '2026-09'}) async {
+    return DispatchManifestData(
+      status: 'success',
+      workflowStatus: 'MANIFEST_GENERATED',
+      cycleId: cycleId,
+      totalDispatchKg: 2850.0,
+      totalRiceDispatchKg: 1750.0,
+      totalWheatDispatchKg: 1100.0,
+      totalFpsCount: 1,
+      totalVehiclesCount: 1,
+      vehicles: [],
+      records: [
+        DispatchRecord(
+          id: 101,
+          fpsId: 'FPS-KA-BAG-0001',
+          fpsName: 'Fair Price Shop 1 (Bagalur)',
+          cycleId: cycleId,
+          commodity: 'Rice',
+          quantityKg: 2850.0,
+          sourceGodown: 'FCI Central Godown (Hebbal)',
+          demoTruckId: 'TRK-KA-0032',
+          status: 'SEALED',
+          createdAt: '2026-09-20 08:30:00',
+        ),
+      ],
+      message: 'Manifests loaded successfully',
+    );
+  }
+
+  @override
+  Future<List<DigitalGatepass>> fetchAllGatepasses({String cycleId = '2026-09'}) async {
+    return [
+      DigitalGatepass(
+        gatepassId: 'GP-2026-101',
+        cycleId: cycleId,
+        manifestId: '101',
+        truckId: 'TRK-KA-0032',
+        corridor: 'East Corridor / IT Belt',
+        status: 'VALID',
+        sourceDepotId: 'DEPOT-01',
+        depotName: 'FCI Central Godown',
+        depotLocation: 'Hebbal, Bengaluru',
+        loadingBay: 'Bay 2',
+        driverName: 'Venkatesh Gowda',
+        driverPhone: '+91 98765 43210',
+        securityToken: 'SEC-TOKEN-8819',
+        approvingOfficer: 'DSO Officer',
+        totalRiceKg: 1750.0,
+        totalWheatKg: 1100.0,
+        totalPayloadKg: 2850.0,
+        deliveryStops: [],
+        eventTimeline: [],
+        qrVerificationString: 'VERIFIED-QR-2026-09',
+        demoDisclaimer: 'Official pass',
+      ),
+    ];
+  }
+
+  @override
+  Future<List<TruckRouteTracking>> fetchActiveTruckTrackings({String cycleId = '2026-09'}) async {
+    return [
+      TruckRouteTracking(
+        truckId: 'TRK-KA-0032',
+        driverName: 'Venkatesh Gowda',
+        gatepassId: 'GP-2026-101',
+        originGodown: 'FCI Central Godown (Hebbal)',
+        destinationFps: 'FPS-KA-BAG-0001',
+        assignedRoute: 'East Corridor / IT Belt',
+        currentStatus: 'IN_TRANSIT',
+        currentCheckpoint: 'Hebbal Flyover',
+        nextCheckpoint: 'Bagalur Main Road',
+        totalDistanceKm: 18.5,
+        distanceTravelledKm: 8.0,
+        distanceRemainingKm: 10.5,
+        eta: '09:45 AM',
+        lastLocation: 'Hebbal Flyover Junction (13.0358° N, 77.5970° E)',
+        lastUpdated: 'Just now',
+        delayMinutes: 0,
+        delayStatus: 'ON_TIME',
+        routeDeviationStatus: 'NORMAL',
+        checkpoints: [],
+      ),
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchFpsInspections({String? fpsId}) async {
+    return {
+      'orders': [
+        {
+          'order_id': 'DIR-2026-001',
+          'fps_id': 'FPS-KA-BAG-0001',
+          'priority': 'HIGH',
+          'reason': 'DSO Surprise Stock Audit & Physical Inventory Verification',
+          'status': 'ASSIGNED',
+        }
+      ],
+      'completed_inspections': [
+        {
+          'inspection_id': 'INSP-2026-0081',
+          'fps_id': 'FPS-KA-BAG-0001',
+          'inspector_id': 'INSP-OFFICER-04',
+          'inspection_type': 'SURPRISE',
+          'compliance_score': 98.5,
+          'remarks': 'Physical grain bags count strictly matched e-PoS ledger balance.',
+          'created_at': '2026-09-20 11:20:00',
+        }
+      ],
     };
   }
 
@@ -222,7 +337,7 @@ class MockDsoApiService extends ApiService {
 }
 
 void main() {
-  testWidgets('DSO Command Workflow: Renders top command bar, workflow navigation rail, and operational stages', (tester) async {
+  testWidgets('DSO Command Workflow: Renders top command bar, horizontal workflow stepper, and primary decision area', (tester) async {
     final mockApi = MockDsoApiService();
 
     tester.view.physicalSize = const Size(1920, 1080);
@@ -242,28 +357,32 @@ void main() {
     await tester.pumpAndSettle();
 
     // 1. Verify Top Command Bar
-    expect(find.text('PDS DEMANDSYNC'), findsOneWidget);
-    expect(find.text('DISTRICT SUPPLY COMMAND • BENGALURU URBAN'), findsOneWidget);
-    expect(find.textContaining('CYCLE: 2026-09'), findsOneWidget);
+    expect(find.text('PDS DemandSync'), findsOneWidget);
+    expect(find.text('DSO Command Center • Bengaluru Urban'), findsOneWidget);
+    expect(find.textContaining('Current cycle: 2026-09'), findsOneWidget);
     expect(find.text('WAL ACTIVE • INTEGRITY VERIFIED'), findsOneWidget);
     expect(find.text('DECISION TRACE'), findsOneWidget);
 
-    // 2. Verify Workflow Navigation Rail (All 7 stages)
-    expect(find.text('01 MONITOR'), findsWidgets);
-    expect(find.text('02 VALIDATE'), findsWidgets);
-    expect(find.text('03 ALLOCATE'), findsWidgets);
-    expect(find.text('04 OPTIMIZE'), findsWidgets);
-    expect(find.text('05 DISPATCH'), findsWidgets);
-    expect(find.text('06 DELIVERY'), findsWidgets);
-    expect(find.text('07 EVALUATE'), findsWidgets);
+    // 2. Verify Horizontal Workflow Stepper (All 7 workflow stages)
+    expect(find.text('DEMAND'), findsWidgets);
+    expect(find.text('VALIDATE'), findsWidgets);
+    expect(find.text('ALLOCATE'), findsWidgets);
+    expect(find.text('OPTIMIZE'), findsWidgets);
+    expect(find.text('DISPATCH'), findsWidgets);
+    expect(find.text('DELIVERY'), findsWidgets);
+    expect(find.text('EVALUATE'), findsWidgets);
 
-    // 3. Verify Stage 01 Operational Metrics and Formulas
+    // 3. Verify Primary Decision Area ("WHAT NEEDS YOUR DECISION?")
+    expect(find.text('WHAT NEEDS YOUR DECISION?'), findsOneWidget);
+    expect(find.text('REVIEW & VALIDATE DEMAND'), findsWidgets);
+
+    // 4. Verify Stage 01 Operational Metrics and Formulas
     expect(find.text('WHAT REQUIRES ATTENTION'), findsOneWidget);
     expect(find.text('DEMAND OVERVIEW & STATUTORY FORMULAS'), findsOneWidget);
-    expect(find.textContaining('Intent'), findsWidgets);
-    expect(find.textContaining('Forecast'), findsWidgets);
+    expect(find.textContaining('Intent − Forecast = Difference'), findsOneWidget);
+    expect(find.textContaining('Forecast − Baseline = Difference'), findsOneWidget);
 
-    // 4. Verify Decision Trace Drawer
+    // 5. Verify Decision Trace Drawer
     final decisionTraceBtn = find.text('DECISION TRACE');
     await tester.ensureVisible(decisionTraceBtn);
     await tester.pumpAndSettle();
