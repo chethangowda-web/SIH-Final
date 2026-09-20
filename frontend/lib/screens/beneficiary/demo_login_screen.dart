@@ -234,50 +234,114 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     };
   }
 
+  void _showVoiceInputModal({
+    required String title,
+    required String prompt,
+    required String fieldType, // 'card', 'phone', 'otp'
+    required void Function(String result) onValueRecognized,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return _VoiceInputListeningSheet(
+          title: title,
+          prompt: prompt,
+          fieldType: fieldType,
+          onApply: (val) {
+            Navigator.pop(ctx);
+            onValueRecognized(val);
+          },
+        );
+      },
+    );
+  }
+
   void _listenForRationCard() {
-    final voice = VoiceAssistantService.instance;
-    voice.startListening(onFinalResult: (transcript) {
-      if (!mounted) return;
-      final digits = VoiceAssistantService.normalizeSpokenDigits(transcript).replaceAll(RegExp(r'[^0-9]'), '');
-      if (digits.isNotEmpty) {
+    final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
+    final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
+
+    final title = isKn
+        ? 'ಪಡಿತರ ಚೀಟಿ ಸಂಖ್ಯೆ ಹೇಳಿ'
+        : isHi
+            ? 'राशन कार्ड नंबर बोलें'
+            : 'Speak Ration Card Number';
+
+    final prompt = isKn
+        ? 'ಉದಾಹರಣೆಗೆ: ಆರ್ ಸಿ ಕೆ ಎ 0 0 0 0 0 1 ಅಥವಾ 1 ರಿಂದ 8000'
+        : isHi
+            ? 'उदाहरण के लिए: आर सी के ए 0 0 0 0 0 1 या 1 से 8000'
+            : 'Say digits or card number e.g., RC-KA-000001 or 1 to 8000';
+
+    _showVoiceInputModal(
+      title: title,
+      prompt: prompt,
+      fieldType: 'card',
+      onValueRecognized: (val) {
         setState(() {
-          _citizenCardController.text = 'RC-KA-${digits.padLeft(6, '0')}';
+          _citizenCardController.text = val;
         });
-        voice.guideLoginStepPhone();
-      } else if (transcript.trim().isNotEmpty) {
-        setState(() {
-          _citizenCardController.text = transcript.trim().toUpperCase().replaceAll(' ', '-');
-        });
-        voice.guideLoginStepPhone();
-      }
-    });
+        VoiceAssistantService.instance.guideLoginStepPhone();
+      },
+    );
   }
 
   void _listenForPhone() {
-    final voice = VoiceAssistantService.instance;
-    voice.startListening(onFinalResult: (transcript) {
-      if (!mounted) return;
-      final phone = VoiceAssistantService.extractPhoneNumber(transcript);
-      if (phone.isNotEmpty) {
+    final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
+    final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
+
+    final title = isKn
+        ? 'ನೋಂದಾಯಿತ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ಹೇಳಿ'
+        : isHi
+            ? 'पंजीकृत मोबाइल नंबर बोलें'
+            : 'Speak Registered Mobile Number';
+
+    final prompt = isKn
+        ? 'ನಿಮ್ಮ 10-ಅಂಕಿಯ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ಸ್ಪಷ್ಟವಾಗಿ ಹೇಳಿ'
+        : isHi
+            ? 'अपना 10-अंकीय मोबाइल नंबर स्पष्ट रूप से बोलें'
+            : 'Speak your 10-digit registered mobile number';
+
+    _showVoiceInputModal(
+      title: title,
+      prompt: prompt,
+      fieldType: 'phone',
+      onValueRecognized: (val) {
         setState(() {
-          _citizenPhoneController.text = phone;
+          _citizenPhoneController.text = val;
         });
-      }
-    });
+      },
+    );
   }
 
   void _listenForOtp() {
-    final voice = VoiceAssistantService.instance;
-    voice.startListening(onFinalResult: (transcript) {
-      if (!mounted) return;
-      final digits = VoiceAssistantService.normalizeSpokenDigits(transcript).replaceAll(RegExp(r'[^0-9]'), '');
-      if (digits.isNotEmpty) {
+    final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
+    final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
+
+    final title = isKn
+        ? 'ಒಟಿಪಿ ಕೋಡ್ ಹೇಳಿ'
+        : isHi
+            ? 'ओटीपी कोड बोलें'
+            : 'Speak 6-Digit OTP Code';
+
+    final prompt = isKn
+        ? 'ಎಸ್ಎಂಎಸ್ ಮೂಲಕ ಬಂದ 6-ಅಂಕಿಯ ಒಟಿಪಿ ಹೇಳಿ'
+        : isHi
+            ? 'एसएमएस से प्राप्त 6-अंकीय ओटीपी बोलें'
+            : 'Speak the 6 digits of your SMS OTP';
+
+    _showVoiceInputModal(
+      title: title,
+      prompt: prompt,
+      fieldType: 'otp',
+      onValueRecognized: (val) {
         setState(() {
-          _citizenOtpController.text = digits.length > 6 ? digits.substring(0, 6) : digits;
+          _citizenOtpController.text = val;
         });
-        voice.guideLoginStepOtpEntered();
-      }
-    });
+        VoiceAssistantService.instance.guideLoginStepOtpEntered();
+      },
+    );
   }
 
   // Action: Multi-Stage Citizen Authentication:
@@ -1460,4 +1524,271 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     );
   }
 }
+
+/// Interactive Voice Listening Sheet providing instant audio & visual waveform feedback
+class _VoiceInputListeningSheet extends StatefulWidget {
+  final String title;
+  final String prompt;
+  final String fieldType; // 'card', 'phone', 'otp'
+  final void Function(String result) onApply;
+
+  const _VoiceInputListeningSheet({
+    required this.title,
+    required this.prompt,
+    required this.fieldType,
+    required this.onApply,
+  });
+
+  @override
+  State<_VoiceInputListeningSheet> createState() => _VoiceInputListeningSheetState();
+}
+
+class _VoiceInputListeningSheetState extends State<_VoiceInputListeningSheet> with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  String _liveTranscript = '';
+  String _formattedPreview = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+
+    VoiceAssistantService.instance.addListener(_onVoiceServiceUpdate);
+    _startRecording();
+  }
+
+  @override
+  void dispose() {
+    VoiceAssistantService.instance.removeListener(_onVoiceServiceUpdate);
+    _animController.dispose();
+    super.dispose();
+  }
+
+  void _onVoiceServiceUpdate() {
+    if (!mounted) return;
+    final text = VoiceAssistantService.instance.recognizedSpeech;
+    if (text != _liveTranscript && text.isNotEmpty) {
+      setState(() {
+        _liveTranscript = text;
+        _formattedPreview = _formatResult(text);
+      });
+    }
+  }
+
+  String _formatResult(String raw) {
+    if (raw.trim().isEmpty) return '';
+    if (widget.fieldType == 'card') {
+      final digits = VoiceAssistantService.normalizeSpokenDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
+      if (digits.isNotEmpty) {
+        return 'RC-KA-${digits.padLeft(6, '0')}';
+      }
+      return raw.trim().toUpperCase().replaceAll(' ', '-');
+    } else if (widget.fieldType == 'phone') {
+      final phone = VoiceAssistantService.extractPhoneNumber(raw);
+      if (phone.isNotEmpty) return phone;
+      final digits = VoiceAssistantService.normalizeSpokenDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
+      return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+    } else if (widget.fieldType == 'otp') {
+      final digits = VoiceAssistantService.normalizeSpokenDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
+      return digits.length > 6 ? digits.substring(0, 6) : digits;
+    }
+    return raw.trim();
+  }
+
+  void _startRecording() {
+    setState(() {
+      _liveTranscript = '';
+      _formattedPreview = '';
+    });
+    VoiceAssistantService.instance.startListening(
+      onFinalResult: (transcript) {
+        if (!mounted) return;
+        final formatted = _formatResult(transcript);
+        setState(() {
+          _liveTranscript = transcript;
+          _formattedPreview = formatted;
+        });
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final voice = VoiceAssistantService.instance;
+    final isListening = voice.isListening;
+    final isKn = LanguageController.instance.currentLanguage == AppLanguage.kannada;
+    final isHi = LanguageController.instance.currentLanguage == AppLanguage.hindi;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Top grab handle
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 16),
+
+            // Header Title
+            Text(
+              widget.title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF0F2942)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.prompt,
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+
+            // Animated Mic Button
+            AnimatedBuilder(
+              animation: _animController,
+              builder: (context, child) {
+                final scale = isListening ? (1.0 + _animController.value * 0.15) : 1.0;
+                return Transform.scale(
+                  scale: scale,
+                  child: GestureDetector(
+                    onTap: _startRecording,
+                    child: Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isListening ? const Color(0xFF15803D) : const Color(0xFF0F2942),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isListening ? const Color(0x6615803D) : Colors.black12,
+                            blurRadius: isListening ? (12 + _animController.value * 10) : 6,
+                            spreadRadius: isListening ? (_animController.value * 6) : 0,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                        color: Colors.white,
+                        size: 38,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // Listening status
+            Text(
+              isListening
+                  ? (isKn ? '🎙️ ಕೇಳಿಸಿಕೊಳ್ಳಲಾಗುತ್ತಿದೆ... ಮಾತನಾಡಿ' : isHi ? '🎙️ सुन रहे हैं... बोलिए' : '🎙️ Listening... Speak now')
+                  : (isKn ? 'ಧ್ವನಿ ದಾಖಲಿಸಲು ಮೈಕ್ ಒತ್ತಿ' : isHi ? 'माइक पर टैप करके बोलें' : 'Tap mic to speak'),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: isListening ? const Color(0xFF15803D) : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Live Speech / Formatted Result Card
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _formattedPreview.isNotEmpty ? const Color(0xFF86EFAC) : const Color(0xFFE2E8F0),
+                  width: _formattedPreview.isNotEmpty ? 1.5 : 1.0,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    _formattedPreview.isNotEmpty ? _formattedPreview : (_liveTranscript.isNotEmpty ? _liveTranscript : (isKn ? '...' : isHi ? '...' : '...')),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: widget.fieldType == 'otp' ? 6 : 1,
+                      color: _formattedPreview.isNotEmpty ? const Color(0xFF0F2942) : Colors.grey.shade400,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (_liveTranscript.isNotEmpty && _formattedPreview.isNotEmpty && _liveTranscript != _formattedPreview) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Spoken: "$_liveTranscript"',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      side: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    child: Text(
+                      isKn ? 'ರದ್ದುಮಾಡಿ' : isHi ? 'रद्द करें' : 'Cancel',
+                      style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: _formattedPreview.isNotEmpty
+                        ? () => widget.onApply(_formattedPreview)
+                        : (_liveTranscript.isNotEmpty ? () => widget.onApply(_liveTranscript) : null),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF15803D),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.check_rounded, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          isKn ? 'ಅನ್ವಯಿಸಿ' : isHi ? 'लागू करें' : 'Apply & Fill',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 

@@ -187,47 +187,88 @@ void platformStartListening({
             window._pdsSpeechRecognition = null;
           }
 
-          var recognition = new SpeechRec();
-          window._pdsSpeechRecognition = recognition;
+          window.__pdsLastCapturedTranscript = '';
+          window.__pdsFinalDispatched = false;
 
-          var targetLang = '$langCode'.replace('_', '-');
-          recognition.lang = targetLang;
-          recognition.continuous = false;
-          recognition.interimResults = true;
-          recognition.maxAlternatives = 1;
+          function initAndStartRecognition() {
+            try {
+              var recognition = new SpeechRec();
+              window._pdsSpeechRecognition = recognition;
 
-          recognition.onstart = function() {
-            if (window.__pdsOnSpeechStatus) window.__pdsOnSpeechStatus('listening', null);
-          };
+              var targetLang = '$langCode'.replace('_', '-');
+              recognition.lang = targetLang;
+              recognition.continuous = true;
+              recognition.interimResults = true;
+              recognition.maxAlternatives = 1;
 
-          recognition.onresult = function(event) {
-            var fullTranscript = '';
-            var isFinal = false;
-            for (var i = event.resultIndex; i < event.results.length; ++i) {
-              fullTranscript += event.results[i][0].transcript;
-              if (event.results[i].isFinal) isFinal = true;
+              recognition.onstart = function() {
+                window.__pdsLastCapturedTranscript = '';
+                window.__pdsFinalDispatched = false;
+                if (window.__pdsOnSpeechStatus) window.__pdsOnSpeechStatus('listening', null);
+              };
+
+              recognition.onresult = function(event) {
+                var fullTranscript = '';
+                var hasFinal = false;
+                for (var i = 0; i < event.results.length; ++i) {
+                  fullTranscript += event.results[i][0].transcript + ' ';
+                  if (event.results[i].isFinal) hasFinal = true;
+                }
+                fullTranscript = fullTranscript.trim();
+                window.__pdsLastCapturedTranscript = fullTranscript;
+
+                if (window.__pdsOnSpeechResult && fullTranscript.length > 0) {
+                  window.__pdsOnSpeechResult(fullTranscript, hasFinal);
+                  if (hasFinal) window.__pdsFinalDispatched = true;
+                }
+              };
+
+              recognition.onerror = function(event) {
+                var err = event.error || 'error';
+                if (err === 'no-speech') {
+                  // Ignore harmless transient no-speech if we already captured text
+                  if (!window.__pdsLastCapturedTranscript) {
+                    if (window.__pdsOnSpeechStatus) window.__pdsOnSpeechStatus('no_speech', 'No speech detected');
+                  }
+                  return;
+                }
+                if (window.__pdsOnSpeechStatus) {
+                  if (err === 'not-allowed' || err === 'service-not-allowed' || err === 'audio-capture') {
+                    window.__pdsOnSpeechStatus('permission_denied', 'Microphone access required');
+                  } else if (err !== 'aborted') {
+                    window.__pdsOnSpeechStatus('error', err);
+                  }
+                }
+              };
+
+              recognition.onend = function() {
+                if (window.__pdsLastCapturedTranscript && !window.__pdsFinalDispatched) {
+                  if (window.__pdsOnSpeechResult) {
+                    window.__pdsOnSpeechResult(window.__pdsLastCapturedTranscript, true);
+                    window.__pdsFinalDispatched = true;
+                  }
+                }
+                if (window.__pdsOnSpeechStatus) window.__pdsOnSpeechStatus('idle', null);
+              };
+
+              recognition.start();
+            } catch(startErr) {
+              if (window.__pdsOnSpeechStatus) window.__pdsOnSpeechStatus('error', String(startErr));
             }
-            if (window.__pdsOnSpeechResult) window.__pdsOnSpeechResult(fullTranscript, isFinal);
-          };
+          }
 
-          recognition.onerror = function(event) {
-            var err = event.error || 'error';
-            if (window.__pdsOnSpeechStatus) {
-              if (err === 'not-allowed') {
-                window.__pdsOnSpeechStatus('permission_denied', 'Microphone permission denied');
-              } else if (err === 'no-speech') {
-                window.__pdsOnSpeechStatus('no_speech', 'No speech detected');
-              } else {
-                window.__pdsOnSpeechStatus('error', err);
-              }
-            }
-          };
+          // Request mic access explicitly first if supported, then start SpeechRecognition
+          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+              try { stream.getTracks().forEach(function(t) { t.stop(); }); } catch(e) {}
+              initAndStartRecognition();
+            }).catch(function(permErr) {
+              initAndStartRecognition();
+            });
+          } else {
+            initAndStartRecognition();
+          }
 
-          recognition.onend = function() {
-            if (window.__pdsOnSpeechStatus) window.__pdsOnSpeechStatus('idle', null);
-          };
-
-          recognition.start();
         } catch(err) {
           if (window.__pdsOnSpeechStatus) window.__pdsOnSpeechStatus('error', String(err));
         }
