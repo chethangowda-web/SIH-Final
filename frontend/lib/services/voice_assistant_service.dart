@@ -318,34 +318,68 @@ class VoiceAssistantService extends ChangeNotifier {
     return clean;
   }
 
-  /// Extracts combined Ration Card and/or Phone Number from a single multilingual spoken sentence
+  /// Extracts combined Ration Card Number and Registered Mobile Number from a single multilingual spoken sentence
   static Map<String, String?> extractLoginCredentials(String spokenText) {
-    final normalized = normalizeSpokenDigits(spokenText);
+    if (spokenText.trim().isEmpty) {
+      return {'card': null, 'phone': null, 'raw': spokenText};
+    }
+
+    String lower = spokenText.toLowerCase();
+
+    // 1. Normalize spoken words for dashes, letters, words
+    lower = lower
+        .replaceAll('dash', '-')
+        .replaceAll('hyphen', '-')
+        .replaceAll('डैश', '-')
+        .replaceAll('ಡ್ಯಾಶ್', '-')
+        .replaceAll(RegExp(r'\br\s*c\b'), 'rc')
+        .replaceAll(RegExp(r'\bk\s*a\b'), 'ka');
+
+    final normalized = normalizeSpokenDigits(lower);
+
     String? foundPhone;
     String? foundCard;
 
-    // Look for 10-digit mobile number
-    final phoneMatch = RegExp(r'[6-9]\d{9}').firstMatch(normalized.replaceAll(RegExp(r'[^0-9]'), ''));
+    // 2. Extract 10-digit mobile number starting with 6-9
+    final digitsOnlyNoSpaces = normalized.replaceAll(RegExp(r'[^0-9]'), '');
+    final phoneRegex = RegExp(r'[6-9]\d{9}');
+    final phoneMatch = phoneRegex.firstMatch(digitsOnlyNoSpaces);
+
     if (phoneMatch != null) {
       foundPhone = phoneMatch.group(0);
     }
 
-    // Look for Ration Card
-    final lower = spokenText.toLowerCase();
-    if (lower.contains('rc') || lower.contains('card') || lower.contains('ಕಾರ್ಡ್') || lower.contains('कार्ड') || lower.contains('ಪಡಿತರ') || lower.contains('राशन') || foundPhone == null) {
-      final digits = normalized.replaceAll(RegExp(r'[^0-9]'), '');
+    // 3. Extract Ration Card Number
+    final rcPattern = RegExp(r'(?:RC|BEN)[-\s]?(?:KA)?[-\s]?(\d{4,6})', caseSensitive: false);
+    final rcMatch = rcPattern.firstMatch(lower.toUpperCase());
+
+    if (rcMatch != null) {
+      final digits = rcMatch.group(1)!;
+      final prefix = lower.toUpperCase().contains('BEN') ? 'BEN-KA' : 'RC-KA';
+      foundCard = '$prefix-${digits.padLeft(6, '0')}';
+    } else {
+      // Check remaining digits after removing phone number if present
       if (foundPhone != null) {
-        final remainingDigits = digits.replaceFirst(foundPhone, '');
-        if (remainingDigits.isNotEmpty) {
-          foundCard = 'RC-KA-${remainingDigits.padLeft(6, '0')}';
+        final remaining = digitsOnlyNoSpaces.replaceFirst(foundPhone, '');
+        if (remaining.isNotEmpty) {
+          if (remaining.length <= 6) {
+            foundCard = 'RC-KA-${remaining.padLeft(6, '0')}';
+          } else {
+            foundCard = 'RC-KA-${remaining.substring(0, 6)}';
+          }
         }
-      } else if (digits.isNotEmpty) {
-        if (digits.length <= 6) {
-          foundCard = 'RC-KA-${digits.padLeft(6, '0')}';
-        } else if (digits.length == 10) {
-          foundPhone = digits;
-        } else {
-          foundCard = 'RC-KA-${digits.substring(0, 6)}';
+      } else {
+        if (digitsOnlyNoSpaces.length >= 10) {
+          final pPart = digitsOnlyNoSpaces.substring(digitsOnlyNoSpaces.length - 10);
+          if (RegExp(r'^[6-9]\d{9}$').hasMatch(pPart)) {
+            foundPhone = pPart;
+            final cPart = digitsOnlyNoSpaces.substring(0, digitsOnlyNoSpaces.length - 10);
+            if (cPart.isNotEmpty) {
+              foundCard = 'RC-KA-${cPart.padLeft(6, '0')}';
+            }
+          }
+        } else if (digitsOnlyNoSpaces.length >= 1 && digitsOnlyNoSpaces.length <= 6) {
+          foundCard = 'RC-KA-${digitsOnlyNoSpaces.padLeft(6, '0')}';
         }
       }
     }

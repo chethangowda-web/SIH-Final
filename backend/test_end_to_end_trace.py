@@ -34,7 +34,7 @@ comm = intent['commodity']
 qty = intent['declared_quantity_kg']
 b_name = intent['name_for_demo']
 print(f'1. BENEFICIARY ID     : {b_id} ({b_name} | Scheme: {intent["scheme_type"]})')
-print(f'2. INTENT ID          : INTENT-REC-{i_id} (Declared: {qty} kg {comm} -> Target FPS: {fps_id})')
+print(f'2. INTENT ID : INTENT-REC-{i_id} (Declared: {qty} kg {comm} -> Target FPS: {fps_id})')
 
 # 2. Demand Snapshot
 cur.execute('''

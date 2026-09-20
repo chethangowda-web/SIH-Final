@@ -627,7 +627,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('PDS DemandSync'), findsWidgets);
-    expect(find.textContaining('Get OTP Code'), findsOneWidget);
+    expect(find.textContaining('Get OTP'), findsOneWidget);
     expect(find.text('Citizen OTP'), findsOneWidget);
     expect(find.text('Department Official'), findsOneWidget);
 

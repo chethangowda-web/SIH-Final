@@ -11,6 +11,8 @@ import '../admin/field_food_inspector_dashboard_screen.dart';
 import '../admin/fps_owner_dashboard_screen.dart';
 import '../admin/auditor_dashboard_screen.dart';
 
+enum VoiceAssistState { idle, listening, processing, success, error }
+
 class DemoLoginScreen extends StatefulWidget {
   final ApiService? apiService;
   final String? sessionExpiredMessage;
@@ -150,6 +152,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
     voice.stopListening();
     voice.stopVoiceAssistantMode();
     voice.onCommandRecognized = null;
+    _voiceAssistState = VoiceAssistState.idle;
   }
 
   void _handleTabSelection(int index) {
@@ -234,6 +237,375 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
         });
       },
     );
+  }
+
+  VoiceAssistState _voiceAssistState = VoiceAssistState.idle;
+  String? _voiceCardResult;
+  String? _voicePhoneResult;
+
+  void _startCompactVoiceAssistant() {
+    final voice = VoiceAssistantService.instance;
+    if (voice.isListening && _voiceAssistState == VoiceAssistState.listening) {
+      voice.stopListening();
+      setState(() => _voiceAssistState = VoiceAssistState.idle);
+      return;
+    }
+
+    setState(() {
+      _voiceAssistState = VoiceAssistState.listening;
+      _voiceCardResult = null;
+      _voicePhoneResult = null;
+    });
+
+    voice.speakLocalized(
+      enText: 'Please say your ration card number and registered mobile number.',
+      hiText: 'कृपया अपना राशन कार्ड नंबर और मोबाइल नंबर बोलें।',
+      knText: 'ದಯವಿಟ್ಟು ನಿಮ್ಮ ಪಡಿತರ ಚೀಟಿ ಸಂಖ್ಯೆ ಮತ್ತು ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ಹೇಳಿ.',
+    );
+
+    final lang = LanguageController.instance.currentLanguage;
+    final langCode = lang == AppLanguage.hindi ? 'hi-IN' : (lang == AppLanguage.kannada ? 'kn-IN' : 'en-IN');
+
+    voice.startListening(
+      overrideLangCode: langCode,
+      onFinalResult: (transcript) {
+        if (!mounted) return;
+        setState(() => _voiceAssistState = VoiceAssistState.processing);
+
+        final creds = VoiceAssistantService.extractLoginCredentials(transcript);
+        final card = creds['card'];
+        final phone = creds['phone'];
+
+        if (card != null && card.isNotEmpty && phone != null && phone.length >= 10) {
+          setState(() {
+            _voiceCardResult = card;
+            _voicePhoneResult = phone;
+            _citizenCardController.text = card;
+            _citizenPhoneController.text = phone;
+            _voiceAssistState = VoiceAssistState.success;
+          });
+
+          voice.speakLocalized(
+            enText: 'Please check the details I heard.',
+            hiText: 'कृपया मेरे द्वारा सुने गए विवरण की जाँच करें।',
+            knText: 'ದಯವಿಟ್ಟು ನಾನು ಕೇಳಿದ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.',
+          );
+        } else {
+          // Speech recognition result is uncertain: DO NOT GUESS!
+          setState(() {
+            _voiceAssistState = VoiceAssistState.error;
+          });
+
+          voice.speakLocalized(
+            enText: "I couldn't understand the details clearly. Please try again.",
+            hiText: 'मैं विवरण स्पष्ट रूप से नहीं समझ सका। कृपया पुनः प्रयास करें।',
+            knText: 'ನನಗೆ ವಿವರಗಳು ಸ್ಪಷ್ಟವಾಗಿ ಅರ್ಥವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+          );
+        }
+      },
+    );
+  }
+
+  void _resetCompactVoiceAssistant() {
+    VoiceAssistantService.instance.stopListening();
+    setState(() {
+      _voiceAssistState = VoiceAssistState.idle;
+    });
+  }
+
+  Widget _buildCompactVoiceAssistantCard(bool isSmall) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: EdgeInsets.all(isSmall ? 10 : 12),
+      decoration: BoxDecoration(
+        color: _voiceAssistState == VoiceAssistState.listening
+            ? const Color(0xFFF0FDF4)
+            : (_voiceAssistState == VoiceAssistState.error
+                ? const Color(0xFFFEF2F2)
+                : const Color(0xFFF8FAFC)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _voiceAssistState == VoiceAssistState.listening
+              ? const Color(0xFF15803D)
+              : (_voiceAssistState == VoiceAssistState.error
+                  ? Colors.red.shade300
+                  : const Color(0xFFE2E8F0)),
+          width: _voiceAssistState == VoiceAssistState.listening ? 1.8 : 1.2,
+        ),
+      ),
+      child: _buildVoiceCardBody(isSmall),
+    );
+  }
+
+  Widget _buildVoiceCardBody(bool isSmall) {
+    switch (_voiceAssistState) {
+      case VoiceAssistState.idle:
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFDCFCE7),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.mic_rounded, color: Color(0xFF15803D), size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('voice_assist.title'),
+                    style: TextStyle(
+                      fontSize: isSmall ? 11.5 : 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0F2942),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    tr('voice_assist.subtitle'),
+                    style: TextStyle(
+                      fontSize: isSmall ? 9.5 : 10.5,
+                      color: const Color(0xFF64748B),
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: _startCompactVoiceAssistant,
+              icon: const Icon(Icons.mic_rounded, size: 14),
+              label: Text(
+                tr('voice_assist.btn_speak'),
+                style: TextStyle(fontSize: isSmall ? 11 : 12, fontWeight: FontWeight.w700),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF15803D),
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: isSmall ? 8 : 12, vertical: isSmall ? 6 : 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+              ),
+            ),
+          ],
+        );
+
+      case VoiceAssistState.listening:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF15803D)),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  tr('voice_assist.listening'),
+                  style: TextStyle(
+                    fontSize: isSmall ? 12 : 13,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF15803D),
+                  ),
+                ),
+                const Spacer(),
+                InkWell(
+                  onTap: _resetCompactVoiceAssistant,
+                  child: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF64748B)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              tr('voice_assist.speak_prompt'),
+              style: TextStyle(fontSize: isSmall ? 10.5 : 11.5, color: const Color(0xFF334155)),
+            ),
+            if (VoiceAssistantService.instance.recognizedSpeech.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFF86EFAC)),
+                ),
+                child: Text(
+                  '"${VoiceAssistantService.instance.recognizedSpeech}"',
+                  style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF166534)),
+                ),
+              ),
+            ],
+          ],
+        );
+
+      case VoiceAssistState.processing:
+        return Row(
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F2942)),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              tr('voice_assist.processing'),
+              style: TextStyle(
+                fontSize: isSmall ? 11.5 : 12.5,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF0F2942),
+              ),
+            ),
+          ],
+        );
+
+      case VoiceAssistState.success:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Color(0xFF15803D), size: 18),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    tr('voice_assist.success'),
+                    style: TextStyle(
+                      fontSize: isSmall ? 11.5 : 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF166534),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBBF7D0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        '${tr('login.ration_card_label')}: ',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                      ),
+                      Text(
+                        _voiceCardResult ?? '',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF0F2942)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        '${tr('login.mobile_num_label')}: ',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                      ),
+                      Text(
+                        _voicePhoneResult ?? '',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF0F2942)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _voiceAssistState = VoiceAssistState.idle;
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF15803D),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(90, 32),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  elevation: 0,
+                ),
+                child: Text(
+                  tr('voice_assist.continue'),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        );
+
+      case VoiceAssistState.error:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 18),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    tr('voice_assist.error'),
+                    style: TextStyle(
+                      fontSize: isSmall ? 11.5 : 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.red.shade800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton(
+                  onPressed: _resetCompactVoiceAssistant,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF334155),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    minimumSize: const Size(100, 32),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  child: Text(
+                    tr('voice_assist.enter_manually'),
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _startCompactVoiceAssistant,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade700,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(90, 32),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    tr('voice_assist.try_again'),
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+    }
   }
 
   // Action: Multi-Stage Citizen Authentication:
@@ -1078,7 +1450,12 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
           tr('login.instruction'),
           style: TextStyle(fontSize: isSmall ? 11 : 12, color: _slate500, height: 1.3),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
+
+        // Compact Accessibility Voice Assistant Card
+        _buildCompactVoiceAssistantCard(isSmall),
+
+        const SizedBox(height: 14),
 
         // Field 1: Ration Card Number
         Text(tr('login.ration_card_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
