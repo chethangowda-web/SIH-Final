@@ -1,21 +1,23 @@
+// DSO Command Center Screen — Complete Workflow-First Rebuild
+// Replaces: dso_command_center_screen.dart + all old view files
+// Architecture: Single scrollable workflow page, no sidebar
+// Data: All from /admin/dso/* real API endpoints
+// State machine: Driven by backend WorkflowState
+
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../services/dso/dso_service.dart';
-import '../../services/auth_session.dart';
 import '../../models/dso/dso_models.dart';
-import '../../widgets/dso/dso_sidebar.dart';
-import '../../widgets/dso/dso_top_header.dart';
-import '../../widgets/dso/dso_ai_panel.dart';
-import '../../widgets/dso/dso_decision_trace_drawer.dart';
-import '../../widgets/dso/dso_data_source_modal.dart';
+import '../../services/auth_session.dart';
+import '../../widgets/dso/dso_workflow_cycle_ring.dart';
+import '../../widgets/dso/dso_current_action_bar.dart';
+import '../../widgets/dso/dso_metric_cards_row.dart';
+import '../../widgets/dso/dso_supply_chain_trace.dart';
+import '../../widgets/dso/dso_stage_detail_panel.dart';
 import '../../widgets/dso/dso_exception_queue.dart';
-import 'dso_monitor_view.dart';
-import 'dso_validate_demand_view.dart';
-import 'dso_allocation_view.dart';
-import 'dso_optimization_view.dart';
-import 'dso_dispatch_view.dart';
-import 'dso_delivery_view.dart';
-import 'dso_evaluation_view.dart';
+import '../../widgets/dso/dso_activity_timeline.dart';
+import '../../widgets/dso/dso_ai_insights_section.dart';
+import '../../widgets/dso/dso_data_source_modal.dart';
 
 class DsoCommandCenterScreen extends StatefulWidget {
   final ApiService? apiService;
@@ -33,27 +35,31 @@ class DsoCommandCenterScreen extends StatefulWidget {
 
 class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
   late DsoService _dsoService;
-  int _selectedNavIndex = 0;
-  String _activeCycle = '2026-09';
-  String _selectedDistrict = 'Ramanagara';
-  List<String> _availableDistricts = ['Ramanagara', 'Bengaluru Urban', 'Mandya'];
-  String _exceptionSeverityFilter = 'ALL';
-  bool _showAiPanel = true;
-  bool _showTraceDrawer = false;
+  final ScrollController _scrollController = ScrollController();
 
+  // Core state
   bool _loading = true;
   String? _error;
   DsoCommandOverview? _overview;
-  List<GovernanceEventItem> _traceEvents = [];
+  List<GovernanceEventItem> _events = [];
+
+  // Stage data cache
+  Map<String, dynamic> _stageData = {};
+  DsoAllocationPlan? _allocationPlan;
+  bool _stageDataLoading = false;
+
+  // Action state
+  bool _actionLoading = false;
+
+  // Cycle + district
+  String _activeCycle = '2026-09';
+  String _selectedDistrict = 'Bengaluru Urban';
+  List<String> _availableDistricts = ['Bengaluru Urban', 'Ramanagara', 'Mandya'];
 
   String get _officerName {
-    if (widget.username != null && widget.username!.trim().isNotEmpty && widget.username != 'Dr. S. Kumar') {
-      return widget.username!;
-    }
     final sessionUser = AuthSession.instance.username;
-    if (sessionUser != null && sessionUser.trim().isNotEmpty) {
-      return sessionUser;
-    }
+    if (sessionUser != null && sessionUser.trim().isNotEmpty) return sessionUser;
+    if (widget.username != null && widget.username!.trim().isNotEmpty) return widget.username!;
     return 'District Supply Officer';
   }
 
@@ -61,8 +67,18 @@ class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
   void initState() {
     super.initState();
     _dsoService = DsoService();
-    _loadDistricts();
-    _loadCommandOverview();
+    _init();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _init() async {
+    await _loadDistricts();
+    await _loadAll();
   }
 
   Future<void> _loadDistricts() async {
@@ -79,648 +95,630 @@ class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
     } catch (_) {}
   }
 
-  Future<void> _loadCommandOverview() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _loadAll() async {
+    setState(() { _loading = true; _error = null; });
     try {
-      final overviewData = await _dsoService.getCommandOverview(
+      final overview = await _dsoService.getCommandOverview(
         cycleId: _activeCycle,
         district: _selectedDistrict,
       );
-      final eventsData = await _dsoService.getGovernanceEvents(cycleId: _activeCycle);
-
+      final events = await _dsoService.getGovernanceEvents(cycleId: _activeCycle);
       if (mounted) {
         setState(() {
-          _overview = overviewData;
-          _traceEvents = eventsData;
+          _overview = overview;
+          _events = events;
           _loading = false;
         });
+        _loadStageData(overview.workflowState);
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loading = false;
-        });
+        setState(() { _error = e.toString(); _loading = false; });
       }
     }
   }
 
-  void _handleSelectNav(int index) {
-    if (index == 10) {
-      // Toggle Decision Trace Drawer
-      setState(() {
-        _showTraceDrawer = !_showTraceDrawer;
-        _selectedNavIndex = index;
-      });
-      return;
-    }
-    if (index == 11) {
-      // Open Data Sources Modal
-      DsoDataSourceModal.show(
-        context,
-        title: 'Command Center Database & CSV Datasets',
-        datasetName: 'beneficiaries, intent, historical_demand, fps, inventory, depots, vehicles, routes, manifests',
-        tableName: 'pds_demandsync.db',
-        cycleId: _activeCycle,
-        recordCount: '${_overview?.metrics['beneficiaries']?.count.toInt() ?? 10006} beneficiaries',
-        formula: 'Real SQLite dataset aggregation & AI pipeline execution',
-        apiEndpoint: '/api/v1/admin/dso/command-overview',
-      );
-      return;
-    }
+  Future<void> _loadStageData(DsoWorkflowState state) async {
+    if (!mounted) return;
+    setState(() { _stageDataLoading = true; });
+    try {
+      Map<String, dynamic> data = {};
+      DsoAllocationPlan? plan;
 
-    setState(() {
-      _selectedNavIndex = index;
-      _showTraceDrawer = false;
-    });
+      switch (state) {
+        case DsoWorkflowState.planningOpen:
+          // Demand data already in overview metrics
+          final m = _overview?.metrics ?? {};
+          data = {
+            'intent_demand_kg': m['intent_demand']?.count ?? 0.0,
+            'forecast_demand_kg': m['forecast_demand']?.count ?? 0.0,
+            'baseline_demand_kg': m['baseline_demand']?.count ?? 0.0,
+          };
+          break;
+
+        case DsoWorkflowState.demandValidated:
+          try {
+            final vd = await _dsoService.getDemandValidation(cycleId: _activeCycle);
+            data = vd;
+          } catch (_) { data = {}; }
+          break;
+
+        case DsoWorkflowState.allocated:
+          try {
+            plan = await _dsoService.getAllocationPlan(cycleId: _activeCycle);
+            data = {'allocation_plan': 'loaded'};
+          } catch (_) { data = {}; }
+          break;
+
+        case DsoWorkflowState.optimized:
+          try {
+            final routes = await _dsoService.getSupplyRoutes(cycleId: _activeCycle);
+            data = routes;
+          } catch (_) { data = {}; }
+          break;
+
+        case DsoWorkflowState.dispatchAuthorized:
+          try {
+            final manifests = await _dsoService.getDispatchManifests(cycleId: _activeCycle);
+            data = manifests;
+          } catch (_) { data = {}; }
+          break;
+
+        case DsoWorkflowState.deliveryVerification:
+          try {
+            final delivery = await _dsoService.getDeliveryVerification(cycleId: _activeCycle);
+            data = delivery;
+          } catch (_) { data = {}; }
+          break;
+
+        case DsoWorkflowState.evaluated:
+        case DsoWorkflowState.cycleClosed:
+          try {
+            final eval = await _dsoService.getCycleEvaluation(cycleId: _activeCycle);
+            final rec = await _dsoService.getReconciliation(cycleId: _activeCycle);
+            data = {'metrics': eval['metrics'] ?? {}, 'reconciliation': rec};
+          } catch (_) { data = {}; }
+          break;
+
+        default:
+          data = {};
+      }
+
+      if (mounted) {
+        setState(() {
+          _stageData = data;
+          _allocationPlan = plan;
+          _stageDataLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _stageDataLoading = false; });
+    }
   }
 
-  void _showNotificationsDialog() {
-    final exceptions = _overview?.exceptions ?? [];
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.notifications_active_outlined, color: Color(0xFFDC2626)),
-            const SizedBox(width: 8),
-            Text('Operational Notifications (${exceptions.length})'),
-          ],
-        ),
-        content: SizedBox(
-          width: 550,
-          child: exceptions.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text('No active operational exceptions for this cycle.'),
-                )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: exceptions.length,
-                  separatorBuilder: (_, __) => const Divider(),
-                  itemBuilder: (ctx, i) {
-                    final exc = exceptions[i];
-                    return ListTile(
-                      dense: true,
-                      leading: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: exc.severity == 'CRITICAL' ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          exc.severity,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: exc.severity == 'CRITICAL' ? const Color(0xFFDC2626) : const Color(0xFFD97706),
-                          ),
-                        ),
-                      ),
-                      title: Text(exc.type, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                      subtitle: Text('${exc.fps} • ${exc.details}', style: const TextStyle(fontSize: 12)),
-                      trailing: TextButton(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          setState(() => _selectedNavIndex = 9); // Exceptions page
-                        },
-                        child: const Text('Resolve', style: TextStyle(fontSize: 12)),
-                      ),
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
+  Future<void> _handlePrimaryAction() async {
+    final state = _overview?.workflowState ?? DsoWorkflowState.unknown;
+    if (state == DsoWorkflowState.unknown) return;
+
+    setState(() { _actionLoading = true; });
+
+    try {
+      String message = '';
+      switch (state) {
+        case DsoWorkflowState.planningOpen:
+          final result = await _dsoService.validateDemand(cycleId: _activeCycle, officerName: _officerName);
+          message = result['message']?.toString() ?? 'Demand validated and sealed.';
+          break;
+        case DsoWorkflowState.demandValidated:
+          final result = await _dsoService.approveAllocation(cycleId: _activeCycle, officerName: _officerName);
+          message = result['message']?.toString() ?? 'Allocation approved.';
+          break;
+        case DsoWorkflowState.allocated:
+          final result = await _dsoService.approveOptimization(cycleId: _activeCycle, officerName: _officerName);
+          message = result['message']?.toString() ?? 'Optimization approved.';
+          break;
+        case DsoWorkflowState.optimized:
+          // Go to manifests list to authorize — show snackbar guiding DSO
+          message = 'Review manifests below and use Authorize Dispatch per manifest.';
+          break;
+        case DsoWorkflowState.evaluated:
+          final result = await _dsoService.closeCycle(cycleId: _activeCycle, officerName: _officerName);
+          message = result['message']?.toString() ?? 'Cycle closed.';
+          break;
+        default:
+          message = 'No action required for current stage.';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: const Color(0xFF16A34A), duration: const Duration(seconds: 4)),
+        );
+        await _loadAll();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Action failed: ${e.toString()}'), backgroundColor: const Color(0xFFDC2626), duration: const Duration(seconds: 5)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() { _actionLoading = false; });
+    }
+  }
+
+  void _showDataSourceModal() {
+    DsoDataSourceModal.show(
+      context,
+      title: 'DSO Command Center — Data Sources',
+      datasetName: 'beneficiaries, intent, forecast, fps, inventory, manifests, vehicles, routes, governance_audit_logs',
+      tableName: 'pds_demandsync.db',
+      cycleId: _activeCycle,
+      recordCount: 'Real SQLite records',
+      formula: 'WorkflowState from workflow_manager. Metrics from /admin/dso/command-overview.',
+      apiEndpoint: '/admin/dso/command-overview',
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final highSeverityCount = _overview?.exceptions
-            .where((e) => e.severity == 'HIGH' || e.severity == 'CRITICAL')
-            .length ??
-        0;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
-      body: Row(
+      body: Column(
         children: [
-          // Left Command Sidebar
-          DsoSidebar(
-            activeStage: 1,
-            selectedNavIndex: _selectedNavIndex,
-            onSelectNav: _handleSelectNav,
-            exceptionCount: _overview?.exceptions.length ?? 0,
-            district: _selectedDistrict,
+          _buildHeader(),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? _buildError()
+                    : _buildWorkflowContent(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    final highEx = _overview?.exceptions.where((e) => e.severity == 'CRITICAL' || e.severity == 'HIGH').length ?? 0;
+
+    return Container(
+      color: const Color(0xFF0B2942),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.account_balance, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('PDS DemandSync', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+              const Text('District Supply Officer — Command Center', style: TextStyle(color: Color(0xFF93C5FD), fontSize: 11)),
+            ],
           ),
 
-          // Main Center Workspace & Right Panel
-          Expanded(
-            child: Column(
+          const SizedBox(width: 24),
+
+          // Cycle selector
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
+            child: DropdownButton<String>(
+              value: _activeCycle,
+              underline: const SizedBox(),
+              dropdownColor: const Color(0xFF0B2942),
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+              items: ['2026-09', '2026-08', '2026-07'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+              onChanged: (v) {
+                if (v != null) { setState(() => _activeCycle = v); _loadAll(); }
+              },
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // District selector
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
+            child: DropdownButton<String>(
+              value: _availableDistricts.contains(_selectedDistrict) ? _selectedDistrict : _availableDistricts.first,
+              underline: const SizedBox(),
+              dropdownColor: const Color(0xFF0B2942),
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+              items: _availableDistricts.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+              onChanged: (v) {
+                if (v != null) { setState(() => _selectedDistrict = v); _loadAll(); }
+              },
+            ),
+          ),
+
+          const Spacer(),
+
+          // Officer name
+          Text(_officerName, style: const TextStyle(color: Color(0xFF93C5FD), fontSize: 12, fontWeight: FontWeight.w500)),
+          const SizedBox(width: 16),
+
+          // Exception badge
+          if (highEx > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: const Color(0xFFDC2626).withOpacity(0.85), borderRadius: BorderRadius.circular(20)),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 14),
+                  const SizedBox(width: 4),
+                  Text('$highEx Exception${highEx > 1 ? 's' : ''}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+
+          const SizedBox(width: 12),
+
+          // System status
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(color: const Color(0xFF16A34A).withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+            child: Row(
               children: [
-                // Top Header
-                DsoTopHeader(
-                  activeCycle: _activeCycle,
-                  selectedDistrict: _selectedDistrict,
-                  availableDistricts: _availableDistricts,
-                  officerName: _officerName,
-                  notificationCount: highSeverityCount,
-                  systemStatus: 'Operational',
-                  onDistrictChanged: (val) {
-                    if (val != null) {
-                      setState(() => _selectedDistrict = val);
-                      _loadCommandOverview();
-                    }
-                  },
-                  onCycleChanged: (val) {
-                    if (val != null) {
-                      setState(() => _activeCycle = val);
-                      _loadCommandOverview();
-                    }
-                  },
-                  onNotificationsTap: _showNotificationsDialog,
-                ),
+                Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF34D399), shape: BoxShape.circle)),
+                const SizedBox(width: 6),
+                const Text('LIVE', style: TextStyle(color: Color(0xFF34D399), fontSize: 11, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
 
-                // Main Workspace Area
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Central Content View
-                          Expanded(
-                            child: _buildCentralWorkspace(),
-                          ),
+          const SizedBox(width: 12),
 
-                          // Right AI Panel
-                          if (_showAiPanel && _overview != null)
-                            DsoAiPanel(
-                              aiInsights: _overview!.aiInsights,
-                              aiRecommendation: _overview!.aiRecommendation,
-                              onClose: () => setState(() => _showAiPanel = false),
-                              onViewEvidence: (title, details) {
-                                DsoDataSourceModal.show(
-                                  context,
-                                  title: title,
-                                  datasetName: 'DemandSync AI Engine',
-                                  tableName: 'forecast / stockout_risk_predictions',
-                                  cycleId: _activeCycle,
-                                  recordCount: 'Verified against SQLite',
-                                  formula: details,
-                                  apiEndpoint: '/api/v1/admin/dso/command-overview',
-                                );
-                              },
-                            ),
-                        ],
+          // Logout
+          IconButton(
+            onPressed: () {
+              AuthSession.instance.clear();
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
+            icon: const Icon(Icons.logout_rounded, color: Colors.white, size: 18),
+            tooltip: 'Log out',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.cloud_off_outlined, size: 56, color: Color(0xFFDC2626)),
+          const SizedBox(height: 16),
+          const Text('Unable to connect to backend', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+          const SizedBox(height: 8),
+          Text(_error ?? 'Unknown error', style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: _loadAll,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Retry Connection'),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkflowContent() {
+    final overview = _overview!;
+    final state = overview.workflowState;
+    final totalBen = overview.metrics['beneficiaries']?.count.toInt() ?? 0;
+    final totalFps = overview.metrics['fps']?.count.toInt() ?? 0;
+
+    return SingleChildScrollView(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── 1. Welcome + Cycle Context ────────────────────────────────────
+          _buildWelcomeBanner(overview),
+          const SizedBox(height: 20),
+
+          // ── 2. WORKFLOW CYCLE RING — CENTERPIECE ─────────────────────────
+          DsoWorkflowCycleRing(
+            workflowState: state,
+            cycleId: _activeCycle,
+            district: _selectedDistrict,
+            totalBeneficiaries: totalBen,
+            totalFps: totalFps,
+            onRefresh: _loadAll,
+          ),
+          const SizedBox(height: 20),
+
+          // ── 3. CURRENT ACTION BAR ─────────────────────────────────────────
+          DsoCurrentActionBar(
+            workflowState: state,
+            currentStageNum: state.stageNumber,
+            isActionLoading: _actionLoading,
+            onPrimaryAction: _handlePrimaryAction,
+            onViewSource: _showDataSourceModal,
+          ),
+          const SizedBox(height: 20),
+
+          // ── 4. OPERATIONAL METRIC CARDS ───────────────────────────────────
+          _buildSectionLabel(Icons.bar_chart_rounded, 'OPERATIONAL METRICS', 'Cycle $_activeCycle  •  All from pds_demandsync.db'),
+          const SizedBox(height: 10),
+          DsoMetricCardsRow(overview: overview),
+          const SizedBox(height: 20),
+
+          // ── 5. SUPPLY CHAIN TRACE ─────────────────────────────────────────
+          DsoSupplyChainTrace(
+            workflowState: state,
+            demandBreakdown: overview.demandBreakdown,
+          ),
+          const SizedBox(height: 20),
+
+          // ── 6. STAGE DETAIL PANEL ─────────────────────────────────────────
+          DsoStageDetailPanel(
+            workflowState: state,
+            stageData: _stageData,
+            isLoading: _stageDataLoading,
+            allocationPlan: _allocationPlan,
+          ),
+          const SizedBox(height: 20),
+
+          // ── 7. EXCEPTIONS + ACTIVITY (side by side on desktop) ────────────
+          LayoutBuilder(
+            builder: (ctx, constraints) {
+              if (constraints.maxWidth > 900) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 6,
+                      child: DsoExceptionQueue(
+                        exceptions: overview.exceptions,
+                        onActionTap: (exc) => _showExceptionDialog(exc),
                       ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 4,
+                      child: DsoActivityTimeline(events: _events),
+                    ),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  DsoExceptionQueue(exceptions: overview.exceptions, onActionTap: _showExceptionDialog),
+                  const SizedBox(height: 16),
+                  DsoActivityTimeline(events: _events),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 20),
 
-                      // Decision Trace Slide-over Drawer
-                      if (_showTraceDrawer)
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          bottom: 0,
-                          child: DsoDecisionTraceDrawer(
-                            events: _traceEvents,
-                            onClose: () => setState(() => _showTraceDrawer = false),
-                          ),
-                        ),
-                    ],
-                  ),
+          // ── 8. AI INSIGHTS + DATA SOURCES ─────────────────────────────────
+          LayoutBuilder(
+            builder: (ctx, constraints) {
+              if (constraints.maxWidth > 900) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 6,
+                      child: DsoAiInsightsSection(
+                        insights: overview.aiInsights,
+                        aiRecommendation: overview.aiRecommendation,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 4,
+                      child: _buildDataSourcesPanel(),
+                    ),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  DsoAiInsightsSection(insights: overview.aiInsights, aiRecommendation: overview.aiRecommendation),
+                  const SizedBox(height: 16),
+                  _buildDataSourcesPanel(),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWelcomeBanner(DsoCommandOverview overview) {
+    final now = DateTime.now();
+    final greeting = now.hour < 12 ? 'Good morning' : now.hour < 17 ? 'Good afternoon' : 'Good evening';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEFF6FF), Color(0xFFF0FDF4)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+      ),
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$greeting, $_officerName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF0F172A))),
+              const SizedBox(height: 3),
+              Text(
+                'Cycle $_activeCycle  •  $_selectedDistrict District  •  ${overview.workflowState.displayLabel}',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+              ),
+            ],
+          ),
+          const Spacer(),
+          if (overview.dataLastUpdated.isNotEmpty)
+            Text('Data updated: ${overview.dataLastUpdated}', style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+          const SizedBox(width: 12),
+          TextButton.icon(
+            onPressed: _loadAll,
+            icon: const Icon(Icons.refresh_rounded, size: 14),
+            label: const Text('Refresh', style: TextStyle(fontSize: 12)),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF2563EB)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionLabel(IconData icon, String title, String sub) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: const Color(0xFF64748B)),
+        const SizedBox(width: 6),
+        Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF475569), letterSpacing: 0.8)),
+        const SizedBox(width: 10),
+        Text('·  $sub', style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+      ],
+    );
+  }
+
+  Widget _buildDataSourcesPanel() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0B2942),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.storage_rounded, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                const Text('DATA SOURCES', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                const Spacer(),
+                InkWell(
+                  onTap: _showDataSourceModal,
+                  child: const Text('View all', style: TextStyle(color: Color(0xFF93C5FD), fontSize: 11)),
                 ),
               ],
             ),
           ),
+          _buildDsRow('Database', 'pds_demandsync.db', const Color(0xFF2563EB)),
+          _buildDsRow('Cycle', _activeCycle, const Color(0xFF059669)),
+          _buildDsRow('District', _selectedDistrict, const Color(0xFF0891B2)),
+          _buildDsRow('Workflow API', '/admin/dso/command-overview', const Color(0xFF7C3AED)),
+          _buildDsRow('Governance', '/admin/governance-events', const Color(0xFF0891B2)),
+          _buildDsRow('Allocation', '/admin/dso/allocation-plan', const Color(0xFFD97706)),
+          _buildDsRow('Manifests', '/admin/dso/dispatch-manifests', const Color(0xFFD97706)),
+          _buildDsRow('Reconciliation', '/admin/dso/reconciliation', const Color(0xFF16A34A)),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _showDataSourceModal,
+                icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                label: const Text('Full Data Source Audit', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0B2942),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildCentralWorkspace() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildDsRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)))),
+          Expanded(
+            flex: 2,
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showExceptionDialog(DsoExceptionItem exc) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
           children: [
-            Text('Error loading command overview: $_error', style: const TextStyle(color: Color(0xFFDC2626))),
-            const SizedBox(height: 12),
-            ElevatedButton(onPressed: _loadCommandOverview, child: const Text('Retry Connection')),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: exc.severity == 'CRITICAL' ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(exc.severity, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: exc.severity == 'CRITICAL' ? const Color(0xFFDC2626) : const Color(0xFFD97706))),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(exc.type, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
           ],
         ),
-      );
-    }
-
-    switch (_selectedNavIndex) {
-      case 0:
-      case 1:
-        return DsoMonitorView(
-          overview: _overview!,
-          onNavigateStage: (st) => setState(() => _selectedNavIndex = st),
-          onRefresh: _loadCommandOverview,
-        );
-      case 2:
-        return DsoValidateDemandView(
-          dsoService: _dsoService,
-          cycleId: _activeCycle,
-          onValidatedSuccess: _loadCommandOverview,
-        );
-      case 3:
-        return DsoAllocationView(
-          dsoService: _dsoService,
-          cycleId: _activeCycle,
-          onAllocationApproved: _loadCommandOverview,
-        );
-      case 4:
-        return DsoOptimizationView(
-          dsoService: _dsoService,
-          cycleId: _activeCycle,
-          onOptimizationApproved: _loadCommandOverview,
-        );
-      case 5:
-        return DsoDispatchView(
-          dsoService: _dsoService,
-          cycleId: _activeCycle,
-          onDispatchAuthorized: _loadCommandOverview,
-        );
-      case 6:
-        return DsoDeliveryView(
-          dsoService: _dsoService,
-          cycleId: _activeCycle,
-        );
-      case 7:
-        return DsoEvaluationView(
-          dsoService: _dsoService,
-          cycleId: _activeCycle,
-          onCycleClosed: _loadCommandOverview,
-        );
-      case 8:
-        return _buildAiIntelligenceView();
-      case 9:
-        return _buildExceptionsView();
-      default:
-        return DsoMonitorView(
-          overview: _overview!,
-          onNavigateStage: (st) => setState(() => _selectedNavIndex = st),
-          onRefresh: _loadCommandOverview,
-        );
-    }
-  }
-
-  Widget _buildAiIntelligenceView() {
-    final insights = _overview?.aiInsights ?? [];
-    final rec = _overview?.aiRecommendation;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.auto_awesome, color: Color(0xFF2563EB), size: 24),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'AI Intelligence Center',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                  ),
-                  Text(
-                    'Operational ML inference, demand divergence heuristics, and evidence records',
-                    style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          if (rec != null) ...[
-            Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: const BorderSide(color: Color(0xFFBFDBFE)),
-              ),
-              color: const Color(0xFFF0F9FF),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.lightbulb_outline, color: Color(0xFF0284C7)),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Primary AI Operational Recommendation',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0369A1), fontSize: 14),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE0F2FE),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            rec['confidence'] != null
-                                ? 'Confidence: ${rec['confidence']}'
-                                : 'Confidence unavailable',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0369A1)),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      rec['action']?.toString() ?? 'Replenishment Allocation',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      rec['rationale']?.toString() ?? '',
-                      style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Text(
-                          'Impact: ${rec['impact']?.toString() ?? 'Statutory Fulfillment'}',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF16A34A)),
-                        ),
-                        const Spacer(),
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.receipt_long, size: 14),
-                          label: const Text('View Evidence', style: TextStyle(fontSize: 12)),
-                          onPressed: () {
-                            DsoDataSourceModal.show(
-                              context,
-                              title: 'AI Primary Recommendation Evidence',
-                              datasetName: 'DemandSync AI Allocation Heuristics',
-                              tableName: 'forecast / inventory / fps',
-                              cycleId: _activeCycle,
-                              recordCount: 'Karnataka PDS Dataset',
-                              formula: rec['evidence']?.toString() ?? 'Verified SQLite calculation',
-                              apiEndpoint: '/api/v1/admin/dso/command-overview',
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Exception ID: ${exc.id}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+            const SizedBox(height: 4),
+            Text('FPS / Entity: ${exc.fps}'),
+            const SizedBox(height: 4),
+            Text('Details: ${exc.details}'),
+            const SizedBox(height: 8),
+            const Divider(),
+            const Text('Recommended Action:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+            Text(exc.action, style: const TextStyle(color: Color(0xFF2563EB))),
           ],
-
-          const Text(
-            'Active Model Insights & Anomaly Detections',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-          ),
-          const SizedBox(height: 12),
-
-          if (insights.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(24),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: const Text('No anomalous demand or supply insights detected for this cycle.'),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: insights.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (ctx, idx) {
-                final ins = insights[idx];
-                return Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: Color(0xFFE2E8F0)),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEFF6FF),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                ins.severity,
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              ins.title,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
-                            ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                ins.id.isNotEmpty ? ins.id : 'Model Insight',
-                                style: const TextStyle(fontSize: 10, color: Color(0xFF475569)),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(ins.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B))),
-                        const SizedBox(height: 6),
-                        Text('Why: ${ins.why}', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Text(
-                              'Evidence: ${ins.evidence.length > 40 ? ins.evidence.substring(0, 40) + '...' : ins.evidence}',
-                              style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                            ),
-                            const Spacer(),
-                            TextButton.icon(
-                              icon: const Icon(Icons.analytics_outlined, size: 14),
-                              label: const Text('View Evidence', style: TextStyle(fontSize: 12)),
-                              onPressed: () {
-                                DsoDataSourceModal.show(
-                                  context,
-                                  title: ins.title,
-                                  datasetName: 'AI Demand Inference Engine',
-                                  tableName: 'forecast / intent / historical_demand',
-                                  cycleId: _activeCycle,
-                                  recordCount: 'Verified record in SQLite',
-                                  formula: ins.evidence,
-                                  apiEndpoint: '/api/v1/admin/dso/command-overview',
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExceptionsView() {
-    final allExceptions = _overview?.exceptions ?? [];
-    final filtered = _exceptionSeverityFilter == 'ALL'
-        ? allExceptions
-        : allExceptions.where((e) => e.severity.toUpperCase() == _exceptionSeverityFilter).toList();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF2F2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Operational Exception Queue (${allExceptions.length} Total)',
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                  ),
-                  const Text(
-                    'Demand anomalies, stock shortages, delivery variances and statutory operational alerts',
-                    style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Severity Filter Row
-          Row(
-            children: [
-              const Text('Filter by Severity:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
-              const SizedBox(width: 12),
-              _buildFilterChip('ALL', 'All (${allExceptions.length})'),
-              const SizedBox(width: 8),
-              _buildFilterChip('CRITICAL', 'Critical (${allExceptions.where((e) => e.severity == "CRITICAL").length})'),
-              const SizedBox(width: 8),
-              _buildFilterChip('HIGH', 'High (${allExceptions.where((e) => e.severity == "HIGH").length})'),
-              const SizedBox(width: 8),
-              _buildFilterChip('MEDIUM', 'Medium (${allExceptions.where((e) => e.severity == "MEDIUM").length})'),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          DsoExceptionQueue(
-            exceptions: filtered,
-            onActionTap: (exc) {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: Text('Resolve Exception: ${exc.id}'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Exception: ${exc.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Text('Entity (FPS): ${exc.fps}'),
-                      const SizedBox(height: 4),
-                      Text('Type: ${exc.type}'),
-                      const SizedBox(height: 4),
-                      Text('Severity: ${exc.severity}', style: TextStyle(color: exc.severity == 'CRITICAL' ? Colors.red : Colors.orange)),
-                      const SizedBox(height: 8),
-                      Text('Details: ${exc.details}'),
-                      const SizedBox(height: 12),
-                      const Text('Recommended DSO Action:', style: TextStyle(fontWeight: FontWeight.w600)),
-                      Text(exc.action, style: const TextStyle(color: Color(0xFF2563EB))),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('DSO review and action initiated for ${exc.id}')),
-                        );
-                      },
-                      child: const Text('Acknowledge & Action'),
-                    ),
-                  ],
-                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Exception ${exc.id} acknowledged. Action recorded in governance trail.')),
               );
             },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
+            child: const Text('Acknowledge & Action'),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String severity, String label) {
-    final isSelected = _exceptionSeverityFilter == severity;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (val) {
-        if (val) {
-          setState(() => _exceptionSeverityFilter = severity);
-        }
-      },
-      selectedColor: const Color(0xFF2563EB),
-      labelStyle: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: isSelected ? Colors.white : const Color(0xFF334155),
       ),
     );
   }

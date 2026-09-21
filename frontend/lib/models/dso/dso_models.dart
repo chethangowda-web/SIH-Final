@@ -1,3 +1,185 @@
+// DSO Models — Extended for Workflow-First Command Center
+// Source of truth: pds_demandsync.db via /admin/dso/* API endpoints
+
+enum DsoWorkflowState {
+  planningOpen,
+  demandValidated,
+  allocated,
+  optimized,
+  dispatchAuthorized,
+  deliveryVerification,
+  evaluated,
+  cycleClosed,
+  unknown;
+
+  static DsoWorkflowState fromString(String? s) {
+    switch (s?.toUpperCase()) {
+      case 'PLANNING_OPEN':
+        return DsoWorkflowState.planningOpen;
+      case 'DEMAND_VALIDATED':
+        return DsoWorkflowState.demandValidated;
+      case 'ALLOCATED':
+        return DsoWorkflowState.allocated;
+      case 'OPTIMIZED':
+        return DsoWorkflowState.optimized;
+      case 'DISPATCH_AUTHORIZED':
+        return DsoWorkflowState.dispatchAuthorized;
+      case 'DELIVERY_VERIFICATION':
+        return DsoWorkflowState.deliveryVerification;
+      case 'EVALUATED':
+        return DsoWorkflowState.evaluated;
+      case 'CYCLE_CLOSED':
+        return DsoWorkflowState.cycleClosed;
+      default:
+        return DsoWorkflowState.unknown;
+    }
+  }
+
+  int get stageNumber {
+    switch (this) {
+      case DsoWorkflowState.planningOpen:
+        return 1;
+      case DsoWorkflowState.demandValidated:
+        return 2;
+      case DsoWorkflowState.allocated:
+        return 3;
+      case DsoWorkflowState.optimized:
+        return 4;
+      case DsoWorkflowState.dispatchAuthorized:
+        return 5;
+      case DsoWorkflowState.deliveryVerification:
+        return 6;
+      case DsoWorkflowState.evaluated:
+      case DsoWorkflowState.cycleClosed:
+        return 7;
+      default:
+        return 1;
+    }
+  }
+
+  String get displayLabel {
+    switch (this) {
+      case DsoWorkflowState.planningOpen:
+        return 'Plan & Forecast';
+      case DsoWorkflowState.demandValidated:
+        return 'Validate Demand';
+      case DsoWorkflowState.allocated:
+        return 'Approve Allocation';
+      case DsoWorkflowState.optimized:
+        return 'Optimize Supply';
+      case DsoWorkflowState.dispatchAuthorized:
+        return 'Authorize Dispatch';
+      case DsoWorkflowState.deliveryVerification:
+        return 'Verify Delivery';
+      case DsoWorkflowState.evaluated:
+        return 'Evaluate & Close';
+      case DsoWorkflowState.cycleClosed:
+        return 'Cycle Closed';
+      default:
+        return 'Loading...';
+    }
+  }
+
+  String get currentActionMessage {
+    switch (this) {
+      case DsoWorkflowState.planningOpen:
+        return 'Citizen intent signals are being collected. Review forecast vs baseline demand and validate when ready.';
+      case DsoWorkflowState.demandValidated:
+        return 'Demand snapshot validated and sealed. Review stock allocation plan before approving.';
+      case DsoWorkflowState.allocated:
+        return 'Stock allocation approved. Review supply route optimization plan before authorizing.';
+      case DsoWorkflowState.optimized:
+        return 'Route optimization approved. Review dispatch manifests and authorize truck movements.';
+      case DsoWorkflowState.dispatchAuthorized:
+        return 'Dispatch authorized. Monitor truck movements and verify deliveries at FPS locations.';
+      case DsoWorkflowState.deliveryVerification:
+        return 'Delivery verification in progress. Review FPS receipts and reconciliation data.';
+      case DsoWorkflowState.evaluated:
+        return 'Cycle evaluation complete. Review reconciliation summary and close the cycle when satisfied.';
+      case DsoWorkflowState.cycleClosed:
+        return 'Planning cycle officially closed and archived. All records sealed.';
+      default:
+        return 'Loading workflow state from backend...';
+    }
+  }
+
+  String get primaryActionLabel {
+    switch (this) {
+      case DsoWorkflowState.planningOpen:
+        return 'Validate Demand';
+      case DsoWorkflowState.demandValidated:
+        return 'Approve Allocation';
+      case DsoWorkflowState.allocated:
+        return 'Approve Optimization';
+      case DsoWorkflowState.optimized:
+        return 'Authorize Dispatch';
+      case DsoWorkflowState.dispatchAuthorized:
+        return 'Review Deliveries';
+      case DsoWorkflowState.deliveryVerification:
+        return 'Review Reconciliation';
+      case DsoWorkflowState.evaluated:
+        return 'Close Cycle';
+      case DsoWorkflowState.cycleClosed:
+        return 'View Archive';
+      default:
+        return 'Loading...';
+    }
+  }
+}
+
+enum DsoStageStatus {
+  completed,
+  current,
+  pending,
+  blocked,
+  notStarted;
+
+  String get label {
+    switch (this) {
+      case DsoStageStatus.completed:
+        return 'COMPLETED';
+      case DsoStageStatus.current:
+        return 'IN PROGRESS';
+      case DsoStageStatus.pending:
+        return 'PENDING';
+      case DsoStageStatus.blocked:
+        return 'BLOCKED';
+      case DsoStageStatus.notStarted:
+        return 'NOT STARTED';
+    }
+  }
+}
+
+class DsoStageInfo {
+  final int number;
+  final String title;
+  final String description;
+  final DsoStageStatus status;
+
+  const DsoStageInfo({
+    required this.number,
+    required this.title,
+    required this.description,
+    required this.status,
+  });
+}
+
+class DsoSupplyChainNode {
+  final String id;
+  final String label;
+  final String? value;
+  final String status;
+  final String? subLabel;
+
+  const DsoSupplyChainNode({
+    required this.id,
+    required this.label,
+    this.value,
+    required this.status,
+    this.subLabel,
+  });
+}
+
 class MetricItem {
   final double count;
   final double? changePct;
@@ -93,6 +275,7 @@ class DsoCommandOverview {
   final String district;
   final String cycleId;
   final String currentStage;
+  final DsoWorkflowState workflowState;
   final Map<String, MetricItem> metrics;
   final Map<String, dynamic> demandBreakdown;
   final List<DsoExceptionItem> exceptions;
@@ -105,6 +288,7 @@ class DsoCommandOverview {
     required this.district,
     required this.cycleId,
     required this.currentStage,
+    required this.workflowState,
     required this.metrics,
     required this.demandBreakdown,
     required this.exceptions,
@@ -130,17 +314,20 @@ class DsoCommandOverview {
         .map((e) => DsoAiInsightItem.fromJson(e as Map<String, dynamic>))
         .toList();
 
+    final stageStr = json['current_stage'] as String? ?? 'PLANNING_OPEN';
+
     return DsoCommandOverview(
       status: json['status'] ?? 'success',
-      district: json['district'] ?? 'Ramanagara',
+      district: json['district'] ?? 'Bengaluru Urban',
       cycleId: json['cycle_id'] ?? '2026-09',
-      currentStage: json['current_stage'] ?? 'FORECASTED',
+      currentStage: stageStr,
+      workflowState: DsoWorkflowState.fromString(stageStr),
       metrics: metricsMap,
       demandBreakdown: json['demand_breakdown'] as Map<String, dynamic>? ?? {},
       exceptions: excList,
       aiInsights: aiList,
       aiRecommendation: json['ai_recommendation'] as Map<String, dynamic>? ?? {},
-      dataLastUpdated: json['data_last_updated'] ?? 'Today 12:32 PM',
+      dataLastUpdated: json['data_last_updated'] ?? '',
     );
   }
 }
