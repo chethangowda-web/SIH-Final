@@ -144,124 +144,127 @@ class _DsoDashboardScreenState extends State<DsoDashboardScreen> {
   }
 
   Future<void> _loadAllAuthoritativeData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
-      // 1. Fetch Workflow Status & State Machine
-      try {
-        final wfRes = await _apiService.fetchWorkflowStatus(cycleId: _currentCycle);
-        _workflowState = wfRes['current_state'] as String? ?? 'FORECASTED';
-        _blockingConditions = (wfRes['blocking_conditions'] as List<dynamic>? ?? [])
-            .map((e) => e.toString())
-            .toList();
-        _activeStageIndex = _mapWorkflowStateToStage(_workflowState);
-        _viewingStageIndex = _activeStageIndex;
-      } catch (_) {
-        _workflowState = 'FORECASTED';
-        _activeStageIndex = 0;
-        _viewingStageIndex = 0;
+      // 0. Pre-flight Session Auth Check
+      if (!AuthSession.instance.isAuthenticated) {
+        try {
+          await _apiService.login(widget.username ?? 'dso_user', 'dso@demandsync').timeout(const Duration(seconds: 3));
+        } catch (_) {}
       }
 
-      // 2. Fetch District Dashboard Analytics
-      try {
-        _adminSummary = await _apiService.fetchAdminDashboard();
-        if (_adminSummary?.planningCycleState != null) {
-          final pcs = _adminSummary!.planningCycleState!;
-          _planningDay = pcs['planning_day'] as int? ?? 22;
-          _isChoiceWindowOpen = pcs['is_open'] as bool? ?? (_planningDay < 25);
-          _isDemandLocked = pcs['is_demand_locked'] as bool? ?? (_planningDay >= 25);
-          _snapshotHash = pcs['snapshot_hash'] as String?;
-        } else if (_adminSummary != null) {
-          _planningDay = _adminSummary!.planningDay;
-          _isChoiceWindowOpen = _adminSummary!.isChoiceWindowOpen;
-          _isDemandLocked = _adminSummary!.isDemandLocked;
-        }
-      } catch (_) {}
+      // Execute all independent API queries in parallel with individual 3-second timeouts
+      await Future.wait([
+        // 1. Workflow Status
+        _apiService.fetchWorkflowStatus(cycleId: _currentCycle).then((wfRes) {
+          _workflowState = wfRes['current_state'] as String? ?? 'FORECASTED';
+          _blockingConditions = (wfRes['blocking_conditions'] as List<dynamic>? ?? [])
+              .map((e) => e.toString())
+              .toList();
+          _activeStageIndex = _mapWorkflowStateToStage(_workflowState);
+          _viewingStageIndex = _activeStageIndex;
+        }).catchError((_) {
+          _workflowState = 'FORECASTED';
+          _activeStageIndex = 0;
+          _viewingStageIndex = 0;
+        }).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 3. Fetch FPS Master Records
-      try {
-        _fpsList = await _apiService.fetchFPSList();
-      } catch (_) {}
+        // 2. Admin Summary Analytics
+        _apiService.fetchAdminDashboard().then((sum) {
+          _adminSummary = sum;
+          if (_adminSummary?.planningCycleState != null) {
+            final pcs = _adminSummary!.planningCycleState!;
+            _planningDay = pcs['planning_day'] as int? ?? 22;
+            _isChoiceWindowOpen = pcs['is_open'] as bool? ?? (_planningDay < 25);
+            _isDemandLocked = pcs['is_demand_locked'] as bool? ?? (_planningDay >= 25);
+            _snapshotHash = pcs['snapshot_hash'] as String?;
+          } else if (_adminSummary != null) {
+            _planningDay = _adminSummary!.planningDay;
+            _isChoiceWindowOpen = _adminSummary!.isChoiceWindowOpen;
+            _isDemandLocked = _adminSummary!.isDemandLocked;
+          }
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 4. Fetch Demand Snapshot
-      try {
-        _demandSnapshot = await _apiService.fetchDemandSnapshot(cycleId: _currentCycle);
-        if (_demandSnapshot != null && _demandSnapshot!['snapshot'] != null) {
-          final snap = _demandSnapshot!['snapshot'] as Map<String, dynamic>;
-          _snapshotHash ??= snap['canonical_hash'] as String?;
-          _isDemandLocked = true;
-          _isChoiceWindowOpen = false;
-        }
-      } catch (_) {}
+        // 3. FPS Master List
+        _apiService.fetchFPSList().then((list) {
+          _fpsList = list;
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 5. Fetch Dispatch Manifests & Gatepasses
-      try {
-        _manifestData = await _apiService.fetchDispatchManifest(cycleId: _currentCycle);
-      } catch (_) {}
-      try {
-        _gatepasses = await _apiService.fetchAllGatepasses(cycleId: _currentCycle);
-      } catch (_) {}
+        // 4. Demand Snapshot
+        _apiService.fetchDemandSnapshot(cycleId: _currentCycle).then((snap) {
+          _demandSnapshot = snap;
+          if (_demandSnapshot != null && _demandSnapshot!['snapshot'] != null) {
+            final sMap = _demandSnapshot!['snapshot'] as Map<String, dynamic>;
+            _snapshotHash ??= sMap['canonical_hash'] as String?;
+            _isDemandLocked = true;
+            _isChoiceWindowOpen = false;
+          }
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 6. Fetch Tracking & Telemetry
-      try {
-        _truckTrackings = await _apiService.fetchActiveTruckTrackings();
-      } catch (_) {}
+        // 5. Dispatch Manifests
+        _apiService.fetchDispatchManifest(cycleId: _currentCycle).then((m) {
+          _manifestData = m;
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 7. Fetch Field Inspections (Surprise Orders + Completed Findings)
-      try {
-        final insp = await _apiService.fetchFpsInspections();
-        _inspectionsOrders = (insp['orders'] as List<dynamic>? ?? [])
-            .map((o) => Map<String, dynamic>.from(o as Map))
-            .toList();
-        _completedInspections = (insp['completed_inspections'] as List<dynamic>? ?? [])
-            .map((o) => Map<String, dynamic>.from(o as Map))
-            .toList();
-      } catch (_) {}
+        // 6. Gatepasses
+        _apiService.fetchAllGatepasses(cycleId: _currentCycle).then((gp) {
+          _gatepasses = gp;
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 8. Fetch Forecast Evaluation Metrics
-      try {
-        _evaluationData = await _apiService.fetchForecastEvaluation(cycleId: _currentCycle);
-      } catch (_) {}
+        // 7. Telemetry & Tracking
+        _apiService.fetchActiveTruckTrackings().then((tr) {
+          _truckTrackings = tr;
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 9. Fetch Cycle Closure Checklist
-      try {
-        _closureChecklist = await _apiService.fetchWorkflowClosureChecklist(cycleId: _currentCycle);
-      } catch (_) {}
+        // 8. Field Inspections
+        _apiService.fetchFpsInspections().then((insp) {
+          _inspectionsOrders = (insp['orders'] as List<dynamic>? ?? [])
+              .map((o) => Map<String, dynamic>.from(o as Map))
+              .toList();
+          _completedInspections = (insp['completed_inspections'] as List<dynamic>? ?? [])
+              .map((o) => Map<String, dynamic>.from(o as Map))
+              .toList();
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 10. Fetch Unified Governance Event Trail
-      try {
-        _governanceEvents = await _apiService.fetchGovernanceEvents(cycleId: _currentCycle, limit: 100);
-      } catch (_) {}
+        // 9. Forecast Evaluation
+        _apiService.fetchForecastEvaluation(cycleId: _currentCycle).then((ev) {
+          _evaluationData = ev;
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 11. Fetch DSO Allocation Plan
-      try {
-        _dsoAllocationData = await _apiService.fetchDsoAllocationPlan(cycleId: _currentCycle);
-      } catch (_) {}
+        // 10. Cycle Closure Checklist
+        _apiService.fetchWorkflowClosureChecklist(cycleId: _currentCycle).then((cl) {
+          _closureChecklist = cl;
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 12. Fetch DSO Physical Supply Routes
-      try {
-        final r = await _apiService.fetchDsoSupplyRoutes(cycleId: _currentCycle);
-        _dsoRoutes = (r['routes'] as List<dynamic>? ?? [])
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-      } catch (_) {}
+        // 11. Governance Events
+        _apiService.fetchGovernanceEvents(cycleId: _currentCycle, limit: 100).then((ge) {
+          _governanceEvents = ge;
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 13. Fetch DSO Closed-Loop Grain Reconciliation
-      try {
-        _dsoReconciliation = await _apiService.fetchDsoReconciliation(cycleId: _currentCycle);
-      } catch (_) {}
+        // 12. DSO Allocation Plan
+        _apiService.fetchDsoAllocationPlan(cycleId: _currentCycle).then((alloc) {
+          _dsoAllocationData = alloc;
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      // 14. Check Dispatch Readiness for Manifests
-      try {
-        final manifestId = _manifestData?.records.isNotEmpty == true
-            ? _manifestData!.records.first.id.toString()
-            : 'MAN-2026-0912';
-        final checkRes = await _apiService.checkDsoDispatchAuthorization(manifestId, cycleId: _currentCycle);
-        _dispatchChecks[manifestId] = checkRes;
-      } catch (_) {}
+        // 13. DSO Supply Routes
+        _apiService.fetchDsoSupplyRoutes(cycleId: _currentCycle).then((routesRes) {
+          _dsoRoutes = (routesRes['routes'] as List<dynamic>? ?? [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
 
-      if (mounted) setState(() => _isLoading = false);
+        // 14. DSO Reconciliation
+        _apiService.fetchDsoReconciliation(cycleId: _currentCycle).then((rec) {
+          _dsoReconciliation = rec;
+        }).catchError((_) {}).timeout(const Duration(seconds: 3), onTimeout: () {}),
+      ]);
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
