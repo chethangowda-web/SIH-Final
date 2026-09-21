@@ -3544,13 +3544,12 @@ def get_dso_command_overview(
 ):
     """
     Stage 01 Command Overview:
-    Aggregates real PDS demand, supply, operations, exceptions, and AI insights.
+    Aggregates real PDS demand, supply, operations, exceptions, and AI insights from SQLite database.
     """
     cursor = db.cursor()
 
-    # 1. Workflow State
-    curr_state_obj = workflow_manager.get_cycle_state(db, cycle_id)
-    curr_state = curr_state_obj.get("current_state", "FORECASTED")
+    # 1. Authoritative Workflow State
+    curr_state = workflow_manager.get_current_state(db, cycle_id)
 
     # 2. Demand Metrics from Real Tables
     cursor.execute("SELECT COUNT(*) FROM beneficiaries;")
@@ -3561,15 +3560,26 @@ def get_dso_command_overview(
     active_intents_count = intent_row[0]
     intent_demand_kg = float(intent_row[1])
 
-    cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
-    forecast_row = cursor.fetchone()
-    forecast_demand_kg = float(forecast_row[0])
+    cursor.execute("SELECT COALESCE(SUM(declared_quantity_kg), 0.0) FROM intent WHERE cycle_id = ? AND commodity = 'Rice';", (cycle_id,))
+    intent_rice_kg = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT COALESCE(SUM(historical_component), 0.0) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
-    baseline_row = cursor.fetchone()
-    baseline_demand_kg = float(baseline_row[0])
-    if baseline_demand_kg == 0:
-        baseline_demand_kg = round(forecast_demand_kg * 0.875, 1)
+    cursor.execute("SELECT COALESCE(SUM(declared_quantity_kg), 0.0) FROM intent WHERE cycle_id = ? AND commodity = 'Wheat';", (cycle_id,))
+    intent_wheat_kg = float(cursor.fetchone()[0])
+
+    cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
+    forecast_demand_kg = float(cursor.fetchone()[0])
+
+    cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ? AND commodity = 'Rice';", (cycle_id,))
+    forecast_rice_kg = float(cursor.fetchone()[0])
+
+    cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ? AND commodity = 'Wheat';", (cycle_id,))
+    forecast_wheat_kg = float(cursor.fetchone()[0])
+
+    cursor.execute("SELECT COALESCE(SUM(monthly_entitlement_kg), 0.0), COALESCE(SUM(monthly_rice_kg), 0.0), COALESCE(SUM(monthly_wheat_kg), 0.0) FROM beneficiaries;")
+    ben_row = cursor.fetchone()
+    baseline_demand_kg = float(ben_row[0])
+    baseline_rice_kg = float(ben_row[1])
+    baseline_wheat_kg = float(ben_row[2])
 
     # 3. Supply Metrics (Godowns / Inventory)
     cursor.execute("""
@@ -3612,7 +3622,7 @@ def get_dso_command_overview(
     cursor.execute("SELECT COUNT(*) FROM manifests WHERE status = 'DELIVERED';")
     delivered_count = cursor.fetchone()[0]
 
-    # 5. Real Exception Queue
+    # 5. Real Exception Queue from Database Forecast Shortfall & Inventory Risk
     cursor.execute("""
     SELECT 'EXC-' || printf('%03d', f.id) as id,
            CASE WHEN f.risk_level = 'CRITICAL' THEN 'Demand Anomaly' ELSE 'Stock Shortage' END as type,
@@ -3658,35 +3668,40 @@ def get_dso_command_overview(
         crit_count = 2
         warn_count = 3
 
-    # 6. AI Operational Intelligence Findings
+    # 6. AI Operational Intelligence Findings grounded on data
     ai_insights = [
         {
             "id": "INS-001",
-            "title": "Demand spike detected at 7 FPS locations",
-            "summary": "+28% vs. historical average. Likely due to seasonal trend.",
-            "severity": "Critical",
-            "why": "Beneficiary intent signal aggregation shows sharp increase in choice window submissions in Ramanagara East zone.",
-            "evidence": "Source: intent_signals.csv (7,420 records evaluated against 14,880 historical demand records)."
+            "title": f"Demand activity recorded across {total_fps} Fair Price Shops",
+            "summary": f"Aggregated {active_intents_count:,} citizen intent declarations for cycle {cycle_id}.",
+            "severity": "Critical" if crit_count > 0 else "Info",
+            "why": f"Citizen demand signals aggregate to {intent_demand_kg:,.1f} kg compared to {baseline_demand_kg:,.1f} kg baseline entitlement.",
+            "evidence": f"Source: intent_signals.csv & beneficiaries_master.csv ({active_intents_count:,} records)."
         },
         {
             "id": "INS-002",
-            "title": "Intent-Forecast divergence",
-            "summary": "Intent is 6.3% higher than forecast for current cycle.",
-            "severity": "Warning",
-            "why": "Citizen declared requirements exceed static baseline projections by +6,330 kg.",
-            "evidence": "Formula: (Intent Demand - Forecast Demand) = 1,24,560 kg - 1,18,230 kg = +6,330 kg divergence."
+            "title": "Intent vs Forecast divergence analysis",
+            "summary": f"Intent is {abs(intent_demand_kg - forecast_demand_kg):,.1f} kg ({'+' if intent_demand_kg >= forecast_demand_kg else '-'}{abs(((intent_demand_kg - forecast_demand_kg) / (forecast_demand_kg or 1.0)) * 100):.1f}%) relative to forecast.",
+            "severity": "Warning" if abs(intent_demand_kg - forecast_demand_kg) > 5000 else "Info",
+            "why": "Citizen declared forward-looking choice window requirements evaluated against time-series model.",
+            "evidence": f"Formula: (Intent Demand - Forecast Demand) = {intent_demand_kg:,.1f} kg - {forecast_demand_kg:,.1f} kg."
         },
         {
             "id": "INS-003",
-            "title": "Low stock risk",
-            "summary": "12 FPS locations may face shortage in next 5 days.",
+            "title": "Central Depot Stock Buffer Evaluation",
+            "summary": f"Central Godowns maintain {depot_stock_kg:,.1f} kg available grain reserves.",
             "severity": "Info",
-            "why": "Current shop inventory below 15% threshold while replenishment transit window is 48 hours.",
-            "evidence": "Source: inventory table joined with stockout_risk_predictions engine."
+            "why": f"Depot buffer stock is {round(depot_stock_kg / (intent_demand_kg or 1.0), 1)}x of monthly district demand.",
+            "evidence": "Source: depots table (godowns_master.csv) available_stock_mt aggregation."
         }
     ]
 
-    return {
+    var_intent_forecast = round(intent_demand_kg - forecast_demand_kg, 1)
+    var_intent_forecast_pct = round((var_intent_forecast / (forecast_demand_kg or 1.0)) * 100, 1)
+    var_forecast_baseline = round(forecast_demand_kg - baseline_demand_kg, 1)
+    var_forecast_baseline_pct = round((var_forecast_baseline / (baseline_demand_kg or 1.0)) * 100, 1)
+
+    res = {
         "status": "success",
         "district": district,
         "cycle_id": cycle_id,
@@ -3705,13 +3720,21 @@ def get_dso_command_overview(
             "open_exceptions": {"count": len(exceptions), "critical": crit_count, "warning": warn_count}
         },
         "demand_breakdown": {
-            "rice": {"intent_kg": 72480.0, "forecast_kg": 68210.0, "baseline_kg": 58630.0},
-            "wheat": {"intent_kg": 52080.0, "forecast_kg": 50020.0, "baseline_kg": 44820.0},
+            "rice": {
+                "intent_kg": intent_rice_kg or round(intent_demand_kg * 0.75, 1),
+                "forecast_kg": forecast_rice_kg or round(forecast_demand_kg * 0.75, 1),
+                "baseline_kg": baseline_rice_kg or round(baseline_demand_kg * 0.75, 1)
+            },
+            "wheat": {
+                "intent_kg": intent_wheat_kg or round(intent_demand_kg * 0.25, 1),
+                "forecast_kg": forecast_wheat_kg or round(forecast_demand_kg * 0.25, 1),
+                "baseline_kg": baseline_wheat_kg or round(baseline_demand_kg * 0.25, 1)
+            },
             "variance": {
-                "intent_minus_forecast_kg": round(intent_demand_kg - forecast_demand_kg, 1),
-                "intent_minus_forecast_pct": round(((intent_demand_kg - forecast_demand_kg) / (forecast_demand_kg or 1.0)) * 100, 1),
-                "forecast_minus_baseline_kg": round(forecast_demand_kg - baseline_demand_kg, 1),
-                "forecast_minus_baseline_pct": round(((forecast_demand_kg - baseline_demand_kg) / (baseline_demand_kg or 1.0)) * 100, 1)
+                "intent_minus_forecast_kg": var_intent_forecast,
+                "intent_minus_forecast_pct": var_intent_forecast_pct,
+                "forecast_minus_baseline_kg": var_forecast_baseline,
+                "forecast_minus_baseline_pct": var_forecast_baseline_pct
             }
         },
         "exceptions": exceptions,
@@ -3726,6 +3749,10 @@ def get_dso_command_overview(
         "data_last_updated": datetime.now().strftime("%I:%M %p"),
         "demo_notice": DEMO_NOTICE
     }
+
+    cursor.close()
+    db.commit()
+    return res
 
 
 @router.get("/admin/dso/demand-validation")
