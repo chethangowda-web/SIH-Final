@@ -1217,6 +1217,7 @@ def _verify_fps_owner_access(current_user: dict, target_fps_id: str):
             )
 
 @router.get("/fps/{fps_id}/operational-session")
+@router.get("/officer/fps/{fps_id}/operational-session")
 def get_fps_operational_session(
     fps_id: str,
     db: sqlite3.Connection = Depends(get_db),
@@ -1276,6 +1277,7 @@ def get_fps_operational_session(
     }
 
 @router.post("/fps/{fps_id}/operational-session")
+@router.post("/officer/fps/{fps_id}/operational-session")
 def save_fps_operational_session(
     fps_id: str,
     payload: FpsOperationalSessionIn,
@@ -1309,6 +1311,7 @@ def save_fps_operational_session(
     return {"status": "SUCCESS", "fps_id": fps_clean, "active_step": payload.active_step, "workflow_status": payload.workflow_status}
 
 @router.post("/epos/verify-beneficiary")
+@router.post("/officer/epos/verify-beneficiary")
 def verify_beneficiary_epos(
     payload: EposVerifyIn,
     db: sqlite3.Connection = Depends(get_db),
@@ -1363,6 +1366,7 @@ def verify_beneficiary_epos(
     }
 
 @router.get("/fps/{fps_id}/inventory")
+@router.get("/officer/fps/{fps_id}/inventory")
 def get_fps_real_stock(
     fps_id: str,
     db: sqlite3.Connection = Depends(get_db),
@@ -1384,6 +1388,7 @@ def get_fps_real_stock(
 
 
 @router.get("/fps/{fps_id}/transactions")
+@router.get("/officer/fps/{fps_id}/transactions")
 def get_fps_digital_register(
     fps_id: str,
     db: sqlite3.Connection = Depends(get_db),
@@ -1406,6 +1411,7 @@ def get_fps_digital_register(
 
 
 @router.post("/epos/dispense", response_model=EposDispenseOut)
+@router.post("/officer/epos/dispense", response_model=EposDispenseOut)
 def dispense_ration_epos(
     payload: EposDispenseIn,
     db: sqlite3.Connection = Depends(get_db),
@@ -1576,6 +1582,7 @@ def dispense_ration_epos(
 
 
 @router.get("/epos/eligibility")
+@router.get("/officer/epos/eligibility")
 def check_epos_eligibility(
     fps_id: str = Query(...),
     beneficiary_id: str = Query(...),
@@ -1631,6 +1638,7 @@ def check_epos_eligibility(
 # =====================================================================
 
 @router.get("/fps/{fps_id}/stock-ledger")
+@router.get("/officer/fps/{fps_id}/stock-ledger")
 def get_fps_stock_ledger(
     fps_id: str,
     cycle_id: str = Query("2026-09"),
@@ -1735,6 +1743,7 @@ def get_fps_stock_ledger(
     }
 
 @router.get("/fps/{fps_id}/consignments")
+@router.get("/officer/fps/{fps_id}/consignments")
 def get_fps_consignments(
     fps_id: str,
     cycle_id: str = Query("2026-09"),
@@ -1816,6 +1825,7 @@ def get_fps_consignments(
     }
 
 @router.post("/fps/{fps_id}/consignments/{gatepass_id}/confirm-receipt")
+@router.post("/officer/fps/{fps_id}/consignments/{gatepass_id}/confirm-receipt")
 def confirm_consignment_receipt(
     fps_id: str,
     gatepass_id: str,
@@ -1876,6 +1886,7 @@ def confirm_consignment_receipt(
     }
 
 @router.get("/fps/{fps_id}/daily-status")
+@router.get("/officer/fps/{fps_id}/daily-status")
 def get_fps_daily_status(
     fps_id: str,
     cycle_id: str = Query("2026-09"),
@@ -1976,6 +1987,7 @@ def get_fps_daily_status(
     }
 
 @router.post("/fps/{fps_id}/open-shop")
+@router.post("/officer/fps/{fps_id}/open-shop")
 def open_fps_shop(
     fps_id: str,
     db: sqlite3.Connection = Depends(get_db),
@@ -2009,6 +2021,7 @@ def open_fps_shop(
     }
 
 @router.post("/fps/{fps_id}/close-shop")
+@router.post("/officer/fps/{fps_id}/close-shop")
 def close_fps_shop(
     fps_id: str,
     payload: Optional[dict] = None,
@@ -2088,6 +2101,7 @@ def close_fps_shop(
     }
 
 @router.get("/fps/{fps_id}/reconciliation")
+@router.get("/officer/fps/{fps_id}/reconciliation")
 def get_fps_reconciliation(
     fps_id: str,
     cycle_id: str = Query("2026-09"),
