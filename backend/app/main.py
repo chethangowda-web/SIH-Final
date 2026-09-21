@@ -29,6 +29,7 @@ from app.api.webhook import router as webhook_router
 from app.api.officer import router as officer_router
 from app.api.grain_atm import router as grain_atm_router
 from app.api.tts import router as tts_router
+from app.api.auditor import router as auditor_router
 
 # Initialize structured logging on application module load
 setup_logging(log_level=settings.LOG_LEVEL)
@@ -124,13 +125,14 @@ api_router.include_router(webhook_router)
 api_router.include_router(officer_router)
 api_router.include_router(grain_atm_router)
 api_router.include_router(tts_router)
+api_router.include_router(auditor_router)
 app.include_router(api_router)
 
 api_v1_router = APIRouter(prefix="/api/v1")
 for r in [auth_router, health_router, beneficiaries_router, fps_router, intent_router,
          demand_inventory_router, dashboard_router, admin_router, scarcity_router,
          anomaly_router, routing_router, csv_import_router, reports_router,
-         feedback_router, webhook_router, officer_router, grain_atm_router, tts_router]:
+         feedback_router, webhook_router, officer_router, grain_atm_router, tts_router, auditor_router]:
     api_v1_router.include_router(r)
 app.include_router(api_v1_router, include_in_schema=False)
 
@@ -152,6 +154,7 @@ app.include_router(webhook_router, include_in_schema=False)
 app.include_router(officer_router, include_in_schema=False)
 app.include_router(grain_atm_router, include_in_schema=False)
 app.include_router(tts_router, include_in_schema=False)
+app.include_router(auditor_router, include_in_schema=False)
 
 # Mount Flutter Web app static assets if built
 if WEB_BUILD_DIR.exists():

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../core/constants.dart';
-import '../../models/admin_model.dart';
 import '../../services/api_service.dart';
-import 'manifest_management_dialog.dart';
+import '../../services/auditor_service.dart';
+import '../../models/auditor_model.dart';
 import '../beneficiary/demo_login_screen.dart';
 
+/// Comprehensive Production-Grade Vigilance Auditor Command Center
+/// Government of Karnataka • Department of Food, Civil Supplies & Consumer Affairs
 class AuditorDashboardScreen extends StatefulWidget {
   final ApiService? apiService;
   final String? username;
@@ -21,1215 +22,1077 @@ class AuditorDashboardScreen extends StatefulWidget {
 
 class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with SingleTickerProviderStateMixin {
   late final ApiService _apiService;
-  late final TabController _tabController;
+  late final AuditorService _auditorService;
+
   bool _isLoading = true;
-  DispatchManifestData? _manifest;
-  List<DigitalGatepass> _gatepasses = [];
-  ForecastEvaluationData? _evalData;
-  List<Map<String, dynamic>> _inspections = [];
+  bool _isActionLoading = false;
+  String? _errorMessage;
+
+  // Active State
+  String _activeCycle = '2026-09';
+  List<String> _availableCycles = ['2026-09'];
+  AuditOverviewModel? _overview;
+  List<AuditRecordModel> _assignments = [];
+  AuditRecordModel? _selectedAudit;
+
+  // Active Workflow Stage Workspace (1..6)
+  int _activeStage = 1;
+
+  // Filters & Search
+  String _searchQuery = '';
+  String? _selectedDistrictFilter;
+  String? _selectedRiskFilter;
+  String _activeTableTab = 'MY_ASSIGNMENTS'; // MY_ASSIGNMENTS, ALL_AUDITS, EXCEPTIONS
+
+  // Stage Data Caches
+  Map<String, dynamic>? _activePdsChain;
+  Map<String, dynamic>? _activeReconciliation;
+  List<Map<String, dynamic>> _activeInspections = [];
+  List<Map<String, dynamic>> _activeExceptions = [];
+  List<Map<String, dynamic>> _aiInsights = [];
+  List<Map<String, dynamic>> _aiAnomalies = [];
+  List<Map<String, dynamic>> _aiRecommendations = [];
+  List<Map<String, dynamic>> _traceChain = [];
+
+  // Controllers
+  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _planFpsController = TextEditingController(text: 'FPS-KA-BLR-002');
+  final TextEditingController _findingTitleController = TextEditingController();
+  final TextEditingController _findingDescController = TextEditingController();
+  final TextEditingController _findingRecController = TextEditingController();
+  final TextEditingController _reportScopeController = TextEditingController(text: 'Statutory Physical & Digital PDS Audit');
+  final TextEditingController _reportObsController = TextEditingController();
+  final TextEditingController _closeReasonController = TextEditingController(text: 'Statutory compliance verification and reconciliation completed.');
+  final TextEditingController _traceEntityController = TextEditingController(text: 'FPS-KA-BLR-002');
+
+  String _findingType = 'STOCK_VARIANCE';
+  String _findingSeverity = 'MEDIUM';
+  String _traceEntityType = 'FPS';
+
+  // Theme Palette
+  static const Color _navy = Color(0xFF0F172A);
+  static const Color _cardNavy = Color(0xFF1E293B);
+  static const Color _govBlue = Color(0xFF1E3A8A);
+  static const Color _accentBlue = Color(0xFF2563EB);
+  static const Color _green = Color(0xFF16A34A);
+  static const Color _amber = Color(0xFFD97706);
+  static const Color _red = Color(0xFFDC2626);
 
   @override
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
-    _tabController = TabController(length: 5, vsync: this);
-    _loadAuditData();
+    _auditorService = AuditorService(apiService: _apiService);
+    _loadInitialAuditData();
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+  Future<void> _loadInitialAuditData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-  Future<void> _loadAuditData() async {
-    setState(() => _isLoading = true);
     try {
-      try {
-        _manifest = await _apiService.fetchDispatchManifest(cycleId: '2026-09');
-      } catch (_) {}
+      final cycles = await _auditorService.fetchCycles();
+      final overview = await _auditorService.fetchOverview(cycleId: _activeCycle);
+      final assignments = await _auditorService.fetchAssignments(cycleId: _activeCycle);
+      final aiIns = await _auditorService.fetchAiInsights(cycleId: _activeCycle);
+      final aiAnom = await _auditorService.fetchAiAnomalies(cycleId: _activeCycle);
+      final aiRecs = await _auditorService.fetchAiRecommendations(cycleId: _activeCycle);
 
-      try {
-        _gatepasses = await _apiService.fetchAllGatepasses(cycleId: '2026-09');
-      } catch (_) {}
+      setState(() {
+        _availableCycles = cycles;
+        _overview = overview;
+        _assignments = assignments;
+        _aiInsights = (aiIns['insights'] as List<dynamic>? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _aiAnomalies = (aiAnom['anomalies'] as List<dynamic>? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _aiRecommendations = aiRecs;
+        if (assignments.isNotEmpty) {
+          _selectedAudit = assignments.first;
+          _activeStage = _selectedAudit!.currentStage;
+        }
+        _isLoading = false;
+      });
 
-      try {
-        _evalData = await _apiService.fetchForecastEvaluation(cycleId: '2026-09');
-      } catch (_) {}
-
-      try {
-        final insp = await _apiService.fetchFpsInspections();
-        _inspections = (insp['completed_inspections'] as List<dynamic>? ?? [])
-            .map((i) => Map<String, dynamic>.from(i as Map))
-            .toList();
-      } catch (_) {}
-
-      if (mounted) {
-        setState(() => _isLoading = false);
+      if (_selectedAudit != null) {
+        _loadStageDataForAudit(_selectedAudit!.auditId);
       }
-    } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to load official Auditor portal records: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadStageDataForAudit(String auditId) async {
+    try {
+      final detail = await _auditorService.fetchAuditDetail(auditId);
+      final chain = await _auditorService.fetchAuditPdsChain(auditId);
+      final recon = await _auditorService.fetchAuditReconciliation(auditId);
+      final insp = await _auditorService.fetchAuditInspections(auditId);
+      final exc = await _auditorService.fetchAuditExceptions(auditId);
+
+      setState(() {
+        _selectedAudit = detail;
+        _activePdsChain = chain['chain_verification'] as Map<String, dynamic>?;
+        _activeReconciliation = recon['reconciliation'] as Map<String, dynamic>?;
+        _activeInspections = (insp['inspections'] as List<dynamic>? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _activeExceptions = (exc['exceptions'] as List<dynamic>? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      });
+    } catch (_) {}
+  }
+
+  void _showSnackbar(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w600)),
+        backgroundColor: isError ? _red : _green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // Workflow Stage Actions
+  Future<void> _handlePlanAudit() async {
+    final fpsId = _planFpsController.text.trim();
+    if (fpsId.isEmpty) return;
+
+    setState(() => _isActionLoading = true);
+    try {
+      final res = await _auditorService.createAudit(fpsId: fpsId, cycleId: _activeCycle);
+      _showSnackbar('Audit assignment ${res['audit_id']} planned and scheduled.');
+      await _loadInitialAuditData();
+    } catch (e) {
+      _showSnackbar('Failed to plan audit: $e', isError: true);
+    } finally {
+      setState(() => _isActionLoading = false);
+    }
+  }
+
+  Future<void> _handleVerifyRecords() async {
+    if (_selectedAudit == null) return;
+    setState(() => _isActionLoading = true);
+    try {
+      await _auditorService.verifyRecords(_selectedAudit!.auditId);
+      _showSnackbar('Stage 02 Completed: PDS supply chain records verified.');
+      await _loadInitialAuditData();
+    } catch (e) {
+      _showSnackbar('Failed to verify records: $e', isError: true);
+    } finally {
+      setState(() => _isActionLoading = false);
+    }
+  }
+
+  Future<void> _handleAddFinding() async {
+    if (_selectedAudit == null || _findingTitleController.text.trim().isEmpty) return;
+    setState(() => _isActionLoading = true);
+    try {
+      await _auditorService.addFinding(
+        _selectedAudit!.auditId,
+        findingType: _findingType,
+        severity: _findingSeverity,
+        title: _findingTitleController.text.trim(),
+        description: _findingDescController.text.trim(),
+        auditorRecommendation: _findingRecController.text.trim(),
+      );
+      _findingTitleController.clear();
+      _findingDescController.clear();
+      _findingRecController.clear();
+      _showSnackbar('Auditor finding recorded successfully.');
+      await _loadInitialAuditData();
+    } catch (e) {
+      _showSnackbar('Failed to record finding: $e', isError: true);
+    } finally {
+      setState(() => _isActionLoading = false);
+    }
+  }
+
+  Future<void> _handleGenerateReport() async {
+    if (_selectedAudit == null) return;
+    setState(() => _isActionLoading = true);
+    try {
+      final res = await _auditorService.generateReport(
+        _selectedAudit!.auditId,
+        scopeText: _reportScopeController.text.trim(),
+        auditObservations: _reportObsController.text.trim(),
+      );
+      _showSnackbar('Stage 05 Draft Generated: Hash ${res['report_hash'].substring(0, 16)}...');
+      await _loadInitialAuditData();
+    } catch (e) {
+      _showSnackbar('Failed to generate report: $e', isError: true);
+    } finally {
+      setState(() => _isActionLoading = false);
+    }
+  }
+
+  Future<void> _handleFinalizeReport() async {
+    if (_selectedAudit == null) return;
+    setState(() => _isActionLoading = true);
+    try {
+      await _auditorService.finalizeReport(_selectedAudit!.auditId);
+      _showSnackbar('Audit report finalized for closure review.');
+      await _loadInitialAuditData();
+    } catch (e) {
+      _showSnackbar('Failed to finalize report: $e', isError: true);
+    } finally {
+      setState(() => _isActionLoading = false);
+    }
+  }
+
+  Future<void> _handleCloseAudit() async {
+    if (_selectedAudit == null) return;
+    setState(() => _isActionLoading = true);
+    try {
+      await _auditorService.closeAudit(
+        _selectedAudit!.auditId,
+        closureReason: _closeReasonController.text.trim(),
+      );
+      _showSnackbar('Stage 06 Completed: Audit ${_selectedAudit!.auditId} closed & sealed.');
+      await _loadInitialAuditData();
+    } catch (e) {
+      _showSnackbar('Failed to close audit: $e', isError: true);
+    } finally {
+      setState(() => _isActionLoading = false);
+    }
+  }
+
+  Future<void> _runCrossPortalTrace() async {
+    final eid = _traceEntityController.text.trim();
+    if (eid.isEmpty) return;
+
+    setState(() => _isActionLoading = true);
+    try {
+      final res = await _auditorService.fetchCrossPortalTrace(_traceEntityType, eid);
+      setState(() {
+        _traceChain = (res['trace_chain'] as List<dynamic>? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      });
+      _showTraceModal();
+    } catch (e) {
+      _showSnackbar('Failed to trace record: $e', isError: true);
+    } finally {
+      setState(() => _isActionLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final manifestId = _manifest != null ? 'MNF-${_manifest!.cycleId}-DISTRICT' : 'MNF-2026-09-001';
-    const manifestHash = 'sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-    final double mape = _evalData?.mapePct ?? 4.12;
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, size: 20, color: Colors.white),
-          tooltip: 'Back to Login / Selection',
-          onPressed: () {
-            if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            } else {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const DemoLoginScreen()),
-              );
-            }
-          },
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF334155)),
-              ),
-              child: const Icon(Icons.verified_user_rounded, size: 18, color: Color(0xFFF59E0B)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      const Text(
-                        'Vigilance Auditor Workspace',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.2),
-                      ),
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF064E3B),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: const Color(0xFF059669)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
+      backgroundColor: const Color(0xFFF1F5F9),
+      body: Column(
+        children: [
+          // Top Header Bar
+          _buildTopHeader(),
+
+          // Main Workspace
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                    ? _buildErrorView()
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.circle, size: 6, color: Color(0xFF34D399)),
-                            SizedBox(width: 4),
-                            Text(
-                              'READ-ONLY OVERSIGHT',
-                              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF6EE7B7), letterSpacing: 0.4),
+                            // 1. Welcome / Auditor Command Header
+                            _buildWelcomeHeaderCard(),
+                            const SizedBox(height: 20),
+
+                            // 2. Core Audit Workflow Cycle (Horizontal Stepper 01..06)
+                            _buildAuditWorkflowCycleBar(),
+                            const SizedBox(height: 20),
+
+                            // 3. Stage Specific Workspace Panel
+                            _buildActiveStageWorkspace(),
+                            const SizedBox(height: 24),
+
+                            // 4. Assignments Table & Focus Split Panel
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 7, child: _buildAuditAssignmentsTable()),
+                                const SizedBox(width: 20),
+                                Expanded(flex: 4, child: _buildRightSidePanels()),
+                              ],
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Karnataka Food & Civil Supplies • Auditor: ${widget.username ?? "auditor_user"} • Cycle 2026-09',
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF1E293B),
-              border: Border(
-                top: BorderSide(color: Color(0xFF334155)),
-                bottom: BorderSide(color: Color(0xFF334155)),
-              ),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              indicatorColor: const Color(0xFFF59E0B),
-              indicatorWeight: 3,
-              indicatorSize: TabBarIndicatorSize.tab,
-              labelColor: Colors.white,
-              labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3),
-              unselectedLabelColor: const Color(0xFF94A3B8),
-              unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-              tabs: const [
-                Tab(
-                  child: Row(
-                    children: [
-                      Icon(Icons.lock_outline_rounded, size: 15),
-                      SizedBox(width: 6),
-                      Text('01  MANIFEST LOCK'),
-                    ],
-                  ),
-                ),
-                Tab(
-                  child: Row(
-                    children: [
-                      Icon(Icons.local_shipping_outlined, size: 15),
-                      SizedBox(width: 6),
-                      Text('02  TRANSIT TRAIL'),
-                    ],
-                  ),
-                ),
-                Tab(
-                  child: Row(
-                    children: [
-                      Icon(Icons.query_stats_rounded, size: 15),
-                      SizedBox(width: 6),
-                      Text('03  AI MODEL AUDIT'),
-                    ],
-                  ),
-                ),
-                Tab(
-                  child: Row(
-                    children: [
-                      Icon(Icons.fact_check_outlined, size: 15),
-                      SizedBox(width: 6),
-                      Text('04  FIELD RECONCILIATION'),
-                    ],
-                  ),
-                ),
-                Tab(
-                  child: Row(
-                    children: [
-                      Icon(Icons.verified_outlined, size: 15),
-                      SizedBox(width: 6),
-                      Text('05  CAG SIGN-OFF'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
           ),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
-            child: ElevatedButton.icon(
-              onPressed: () => _showAuditCertificateModal(manifestId, manifestHash),
-              icon: const Icon(Icons.picture_as_pdf_rounded, size: 14, color: Color(0xFF0F172A)),
-              label: const Text(
-                'Export CAG Cert',
-                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF59E0B),
-                foregroundColor: const Color(0xFF0F172A),
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-              ),
-            ),
-          ),
+        ],
+      ),
+    );
+  }
+
+  // -----------------------------------------------------------------------------
+  // UI COMPONENTS
+  // -----------------------------------------------------------------------------
+
+  Widget _buildTopHeader() {
+    return Container(
+      height: 70,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: const BoxDecoration(
+        color: _navy,
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
           IconButton(
-            tooltip: 'Refresh Audit Telemetry',
-            icon: const Icon(Icons.refresh_rounded, size: 20, color: Color(0xFFCBD5E1)),
-            onPressed: _loadAuditData,
-          ),
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-            decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFF334155)),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: TextButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+            tooltip: 'Return to Login',
+            onPressed: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                Navigator.of(context).pushReplacement(
                   MaterialPageRoute(builder: (_) => const DemoLoginScreen()),
                 );
-              },
-              icon: const Icon(Icons.swap_horiz_rounded, size: 15, color: Color(0xFF94A3B8)),
-              label: const Text('Switch Role', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFFCBD5E1))),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Logout',
-            icon: const Icon(Icons.logout_rounded, size: 19, color: Color(0xFF94A3B8)),
-            onPressed: () {
-              _apiService.logout();
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const DemoLoginScreen()),
-                (route) => false,
-              );
+              }
             },
           ),
           const SizedBox(width: 8),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: _cardNavy, borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.verified_user_rounded, color: _amber, size: 20),
+          ),
+          const SizedBox(width: 12),
+          const Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'AUDITOR PORTAL',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16, letterSpacing: 0.5),
+              ),
+              Text(
+                'Karnataka Food & Civil Supplies • Audit, Compliance & Verification',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          const Spacer(),
+
+          // Cycle Selector
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(color: _cardNavy, borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFF334155))),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                dropdownColor: _cardNavy,
+                value: _activeCycle,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                items: _availableCycles
+                    .map((c) => DropdownMenuItem(value: c, child: Text('Cycle: $c')))
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => _activeCycle = val);
+                    _loadInitialAuditData();
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+
+          // Operational Status
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: Colors.green.shade900.withOpacity(0.4), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.green.shade500)),
+            child: const Row(
               children: [
-                // Top Guided Audit Workflow Stepper Banner
-                _buildGuidedAuditWorkflowBanner(manifestId, manifestHash),
-
-                // Tab Content
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      // STEP 1: Sealed Manifests
-                      _buildManifestsTab(manifestId, manifestHash),
-
-                      // STEP 2: Gatepass Audit Trail
-                      _buildGatepassAuditTab(),
-
-                      // STEP 3: Forecast MAPE Evaluation
-                      _buildEvaluationTab(mape),
-
-                      // STEP 4: Field Inspection Records
-                      _buildInspectionsAuditTab(),
-
-                      // STEP 5: Executive CAG Audit Sign-Off
-                      _buildSignOffTab(manifestId, manifestHash),
-                    ],
-                  ),
-                ),
+                Icon(Icons.circle, size: 8, color: Colors.greenAccent),
+                SizedBox(width: 6),
+                Text('● Operational', style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold)),
               ],
             ),
+          ),
+          const SizedBox(width: 16),
+
+          // Refresh Button
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+            tooltip: 'Refresh Audit Records',
+            onPressed: _loadInitialAuditData,
+          ),
+          const SizedBox(width: 8),
+
+          // Auditor Avatar
+          CircleAvatar(
+            backgroundColor: _accentBlue,
+            radius: 18,
+            child: Text(
+              (widget.username ?? 'A').substring(0, 1).toUpperCase(),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildManifestsTab(String manifestId, String manifestHash) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildMetricCard('Verified Manifest', manifestId, 'Cryptographically Sealed', Icons.security_rounded, const Color(0xFF0F172A)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildMetricCard('Total Grain Allocation', '${((_manifest?.totalDispatchKg ?? 62700) / 1000).toStringAsFixed(1)} MT', 'Cycle 2026-09 Quota', Icons.inventory_2_outlined, const Color(0xFF2563EB)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildMetricCard('Tamper Evidence', 'VALID / 0 ANOMALIES', 'SHA-256 Hash Intact', Icons.verified_rounded, const Color(0xFF059669)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppConstants.cardBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Cryptographic SHA-256 Sealed Manifest Log',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppConstants.textPrimary),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Every truck allocation manifest is sealed with SHA-256 at the time of DSO approval, preventing unauthorized post-planning alterations.',
-                style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppConstants.cardBorder),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Manifest ID: $manifestId', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(4)),
-                          child: const Text('CRYPTOGRAPHICALLY SECURE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('SHA-256 Immutable Hash:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppConstants.textSecondary)),
-                    Text(manifestHash, style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: AppConstants.textPrimary)),
-                    const SizedBox(height: 8),
-                    const Text('Sealing Timestamp: 2026-09-01 08:30:14 UTC • Sealing Authority: District Supply Officer (DSO)', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (_) => ManifestManagementDialog(cycleId: '2026-09'),
-                  );
-                },
-                icon: const Icon(Icons.file_copy_outlined, size: 16, color: Colors.white),
-                label: const Text('Open Detailed Manifest Inspector', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        _buildForensicReconciliationMatrix(),
-      ],
-    );
-  }
-
-  Widget _buildGatepassAuditTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppConstants.cardBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Digital QR Gatepass Clearance Audit Trail',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppConstants.textPrimary),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Complete chronological audit log of physical gatepass clearances and driver authentications across loading bays.',
-                style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
-              ),
-              const SizedBox(height: 12),
-              if (_gatepasses.isNotEmpty)
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _gatepasses.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, idx) {
-                    final gp = _gatepasses[idx];
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppConstants.cardBorder),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.qr_code_2_rounded, size: 22, color: Color(0xFF0F172A)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${gp.gatepassId} • Truck: ${gp.truckId}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                Text('Driver: ${gp.driverName} • Bay: ${gp.loadingBay}', style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary)),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(4)),
-                            child: Text(gp.status, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  alignment: Alignment.center,
-                  child: const Text('No gatepass audit discrepancies found. 100% compliant with loading bay protocols.', style: TextStyle(color: AppConstants.textSecondary, fontSize: 12)),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEvaluationTab(dynamic mape) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildMetricCard('Mean Absolute % Error', '$mape%', 'Target < 8.0%', Icons.query_stats_rounded, const Color(0xFF059669)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildMetricCard('Forecast Bias', '+0.02', 'Zero-mean Target', Icons.balance_outlined, const Color(0xFF2563EB)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildMetricCard('Evaluated FPS Count', '620 / 620', '100% Coverage', Icons.storefront_outlined, const Color(0xFF0F172A)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppConstants.cardBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Algorithmic Demand Prediction Accuracy (MAPE Analysis)',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppConstants.textPrimary),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Evaluating actual grain off-take vs. pre-dispatch ML predictions across Bengaluru Urban to verify allocation fairness and eliminate artificial shortages.',
-                style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
-              ),
-              const SizedBox(height: 16),
-              LinearProgressIndicator(
-                value: 0.958,
-                backgroundColor: Colors.grey.shade200,
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF059669)),
-                minHeight: 8,
-              ),
-              const SizedBox(height: 8),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Prediction Accuracy: 95.88%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF059669))),
-                  Text('Permissible Tolerance: < 10.0% MAPE', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInspectionsAuditTab() {
-    double avgScore = 100.0;
-    if (_inspections.isNotEmpty) {
-      final total = _inspections.fold<double>(
-        0.0,
-        (prev, i) => prev + ((i['compliance_score'] as num?)?.toDouble() ?? 100.0),
-      );
-      avgScore = total / _inspections.length;
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildMetricCard('Filed Inspections', '${_inspections.length} Reports', 'Field Officer Audits', Icons.assignment_turned_in_outlined, const Color(0xFF0F172A)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildMetricCard('Average Compliance', '${avgScore.toStringAsFixed(1)}%', 'Statutory 6-Point Bar', Icons.score_outlined, const Color(0xFF059669)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildMetricCard('Regulatory Seal', 'ACTIVE / VERIFIED', 'Lokayukta Certified', Icons.verified_user_rounded, const Color(0xFF2563EB)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppConstants.cardBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Frontline Field Food Inspector Audit Register',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppConstants.textPrimary),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Complete regulatory records of unannounced on-site audits, electronic weighing calibrations, and grain moisture verifications.',
-                style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
-              ),
-              const SizedBox(height: 14),
-              if (_inspections.isNotEmpty)
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _inspections.length,
-                  separatorBuilder: (_, __) => const Divider(height: 16),
-                  itemBuilder: (context, idx) {
-                    final insp = _inspections[idx];
-                    final score = (insp['compliance_score'] as num?)?.toDouble() ?? 100.0;
-                    final isPass = score >= 80.0;
-
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppConstants.cardBorder),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    isPass ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
-                                    size: 18,
-                                    color: isPass ? const Color(0xFF059669) : const Color(0xFFDC2626),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '${insp['fps_id'] ?? "FPS-SHOP"} • Seal: ${insp['inspection_id'] ?? "INSP-SEAL"}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: isPass ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'Score: ${score.toStringAsFixed(0)}% ${isPass ? "PASS" : "FAIL"}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: isPass ? const Color(0xFF15803D) : const Color(0xFFB91C1C),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            insp['remarks'] ?? 'Physical stock and weighing scale calibration verified.',
-                            style: const TextStyle(fontSize: 12, color: AppConstants.textSecondary),
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Auditor: ${insp['inspector_id'] ?? "inspector_user"}',
-                                style: const TextStyle(fontSize: 11, color: AppConstants.textSecondary, fontWeight: FontWeight.bold),
-                              ),
-                              Text(
-                                (insp['created_at'] as String? ?? 'Today').split('T').first,
-                                style: const TextStyle(fontSize: 10.5, color: AppConstants.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  alignment: Alignment.center,
-                  child: const Column(
-                    children: [
-                      Icon(Icons.assignment_turned_in_outlined, size: 36, color: AppConstants.textSecondary),
-                      SizedBox(height: 8),
-                      Text('No completed field inspection reports logged yet.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
-                      SizedBox(height: 4),
-                      Text('Inspections submitted by Field Food Inspectors will appear here.', style: TextStyle(fontSize: 11, color: AppConstants.textSecondary)),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildForensicReconciliationMatrix() {
-    final List<Map<String, dynamic>> reconciliationData = [
-      {
-        'fps': 'Bengaluru North (FPS-KA-102)',
-        'dispatched': 12.5,
-        'received': 12.5,
-        'consumed': 12.4,
-        'variance': '0.0%',
-        'status': 'NORMAL',
-        'color': Colors.green,
-      },
-      {
-        'fps': 'Malleshwaram Central (FPS-KA-108)',
-        'dispatched': 18.0,
-        'received': 17.9,
-        'consumed': 17.8,
-        'variance': '-0.5%',
-        'status': 'MINOR VAR',
-        'color': Colors.amber.shade800,
-      },
-      {
-        'fps': 'Peenya Industrial (FPS-KA-204)',
-        'dispatched': 25.0,
-        'received': 24.9,
-        'consumed': 24.8,
-        'variance': '-0.4%',
-        'status': 'NORMAL',
-        'color': Colors.green,
-      },
-      {
-        'fps': 'Yelahanka Zone (FPS-KA-305)',
-        'dispatched': 15.0,
-        'received': 14.9,
-        'consumed': 14.9,
-        'variance': '-0.6%',
-        'status': 'MINOR VAR',
-        'color': Colors.amber.shade800,
-      },
-    ];
+  Widget _buildWelcomeHeaderCard() {
+    final total = _overview?.totalAudits ?? 0;
+    final active = _overview?.activeAudits ?? 0;
+    final closed = _overview?.closedAudits ?? 0;
+    final critical = _overview?.criticalRisks ?? 0;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: const LinearGradient(colors: [_navy, _cardNavy], begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppConstants.cardBorder),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.balance_rounded, color: Color(0xFF0F172A), size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'Forensic Supply Chain Reconciliation Matrix',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppConstants.textPrimary),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(4), border: Border.all(color: const Color(0xFFCBD5E1))),
-                child: const Text('AUDIT CERTIFIED', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'End-to-end reconciliation: Godown Dispatch vs FPS Receipt vs Biometric Citizen Authenticated Distribution.',
-            style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
-          ),
-          const SizedBox(height: 12),
-          Table(
-            border: TableBorder.all(color: Colors.grey.shade200, width: 1),
-            columnWidths: const {
-              0: FlexColumnWidth(2.5),
-              1: FlexColumnWidth(1.2),
-              2: FlexColumnWidth(1.2),
-              3: FlexColumnWidth(1.2),
-              4: FlexColumnWidth(1.0),
-              5: FlexColumnWidth(1.2),
-            },
-            children: [
-              TableRow(
-                decoration: const BoxDecoration(color: Color(0xFFF8FAFC)),
-                children: [
-                  _buildTableCell('Corridor / FPS Shop', isHeader: true),
-                  _buildTableCell('Dispatched (MT)', isHeader: true),
-                  _buildTableCell('Received (MT)', isHeader: true),
-                  _buildTableCell('Citizen Auth (MT)', isHeader: true),
-                  _buildTableCell('Variance', isHeader: true),
-                  _buildTableCell('Risk Status', isHeader: true),
-                ],
-              ),
-              ...reconciliationData.map(
-                (r) => TableRow(
-                  children: [
-                    _buildTableCell(r['fps'] as String, isBold: true),
-                    _buildTableCell('${r['dispatched']} MT'),
-                    _buildTableCell('${r['received']} MT'),
-                    _buildTableCell('${r['consumed']} MT'),
-                    _buildTableCell(r['variance'] as String, color: r['color'] as Color),
-                    _buildStatusCell(r['status'] as String, r['color'] as Color),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFBBF7D0)),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.check_circle_outline, color: Color(0xFF16A34A), size: 16),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Overall System Transit Variance: -0.32% (Well within 1.0% statutory transportation loss threshold).',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF15803D)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTableCell(String text, {bool isHeader = false, bool isBold = false, Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: isHeader ? 11 : 11.5,
-          fontWeight: isHeader || isBold ? FontWeight.bold : FontWeight.normal,
-          color: color ?? (isHeader ? const Color(0xFF475569) : AppConstants.textPrimary),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusCell(String label, Color color) {
-    return Padding(
-      padding: const EdgeInsets.all(6.0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
-        ),
-      ),
-    );
-  }
-
-  void _showAuditCertificateModal(String manifestId, String manifestHash) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF0F172A),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.verified, color: Color(0xFFF59E0B), size: 28),
-                  ),
-                  const SizedBox(width: 14),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'OFFICIAL VIGILANCE AUDIT CERTIFICATE',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 0.3),
-                        ),
-                        Text(
-                          'Comptroller & Auditor General (CAG) Audit Standard',
-                          style: TextStyle(fontSize: 11, color: AppConstants.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              const Divider(height: 24),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFCBD5E1)),
-                ),
-                child: Column(
-                  children: [
-                    const Text(
-                      'GOVERNMENT OF INDIA • NFSA SMART PDS AUDIT LEDGER',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'CYCLE ID: 2026-09 | MANIFEST: $manifestId',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
-                    ),
-                    const SizedBox(height: 6),
-                    SelectableText(
-                      'SHA-256 Digest: $manifestHash',
-                      style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace', color: Color(0xFF64748B)),
-                    ),
-                    const SizedBox(height: 12),
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        Column(
-                          children: [
-                            Text('99.8%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.green)),
-                            Text('Compliance Index', style: TextStyle(fontSize: 10, color: Colors.black54)),
-                          ],
-                        ),
-                        Column(
-                          children: [
-                            Text('4.12%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.blue)),
-                            Text('Forecast MAPE', style: TextStyle(fontSize: 10, color: Colors.black54)),
-                          ],
-                        ),
-                        Column(
-                          children: [
-                            Text('0', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.green)),
-                            Text('Tamper Flags', style: TextStyle(fontSize: 10, color: Colors.black54)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('✔ Official CAG Vigilance Audit Certificate exported as PDF & JSON Digest!'),
-                      backgroundColor: Color(0xFF0F172A),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.download_rounded, color: Colors.white),
-                label: const Text('Download Official Audit Certificate (PDF)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGuidedAuditWorkflowBanner(String manifestId, String manifestHash) {
-    return AnimatedBuilder(
-      animation: _tabController,
-      builder: (context, _) {
-        final currentStep = _tabController.index + 1;
-        final double progress = currentStep / 5.0;
-
-        final stepTitles = [
-          'Stage 01: Sealed Manifest Cryptographic Lock (SHA-256 Digest)',
-          'Stage 02: Digital Gatepass Custody & Live Transit Trail Audit',
-          'Stage 03: Demand-Forecasting AI Model Accuracy & Bias Assessment',
-          'Stage 04: Field Food Inspector Real-Time Reconciliation',
-          'Stage 05: Executive Vigilance Clearance & Statutory CAG Sign-Off',
-        ];
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-          ),
-          child: Row(
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            'AUDIT STAGE $currentStep OF 5',
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            stepTitles[_tabController.index],
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      'Welcome, ${widget.username ?? "State Vigilance Auditor"}',
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(3),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 5,
-                        backgroundColor: const Color(0xFFE2E8F0),
-                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
-                      ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Your role ensures transparency, accountability and better food security outcomes across Karnataka PDS distribution.',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 20),
-              Row(
-                children: [
-                  if (_tabController.index > 0)
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        _tabController.animateTo(_tabController.index - 1);
-                      },
-                      icon: const Icon(Icons.arrow_back_rounded, size: 14, color: Color(0xFF475569)),
-                      label: const Text('Back', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF475569))),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFCBD5E1)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                    ),
-                  if (_tabController.index > 0) const SizedBox(width: 8),
-                  if (_tabController.index < 4)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        _tabController.animateTo(_tabController.index + 1);
-                      },
-                      icon: const Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.white),
-                      label: Text(
-                        _tabController.index == 3 ? 'Final Sign-Off ➔' : 'Next Step ➔',
-                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      ),
-                    ),
-                  if (_tabController.index == 4)
-                    ElevatedButton.icon(
-                      onPressed: () => _showAuditCertificateModal(manifestId, manifestHash),
-                      icon: const Icon(Icons.verified_rounded, size: 14, color: Color(0xFF0F172A)),
-                      label: const Text('Issue CAG Cert', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFF59E0B),
-                        foregroundColor: const Color(0xFF0F172A),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      ),
-                    ),
-                ],
+              ElevatedButton.icon(
+                onPressed: _showPlanAuditModal,
+                icon: const Icon(Icons.add_task_rounded, size: 18, color: Colors.white),
+                label: const Text('Plan & Schedule Audit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: _accentBlue, padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14)),
               ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              _buildStatCard('Total Audits', '$total', Icons.assignment_outlined, Colors.blue),
+              const SizedBox(width: 16),
+              _buildStatCard('Active Audits', '$active', Icons.pending_actions_rounded, Colors.orange),
+              const SizedBox(width: 16),
+              _buildStatCard('Closed Audits', '$closed', Icons.verified_outlined, Colors.green),
+              const SizedBox(width: 16),
+              _buildStatCard('Critical Warnings', '$critical', Icons.warning_amber_rounded, Colors.red),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildSignOffTab(String manifestId, String manifestHash) {
-    return ListView(
+  Widget _buildStatCard(String label, String val, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(color: const Color(0xFF0F172A).withOpacity(0.6), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFF334155))),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(val, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAuditWorkflowCycleBar() {
+    final sb = _overview?.stageBreakdown ?? {};
+
+    final stages = [
+      {'num': 1, 'title': '01 PLAN & SCHEDULE', 'count': sb['stage_1_plan_schedule'] ?? 0, 'icon': Icons.edit_calendar_rounded},
+      {'num': 2, 'title': '02 VERIFY RECORDS', 'count': sb['stage_2_verify_records'] ?? 0, 'icon': Icons.fact_check_rounded},
+      {'num': 3, 'title': '03 INSPECT FPS', 'count': sb['stage_3_inspect_fps'] ?? 0, 'icon': Icons.storefront_rounded},
+      {'num': 4, 'title': '04 ANALYZE COMPLIANCE', 'count': sb['stage_4_analyze_compliance'] ?? 0, 'icon': Icons.analytics_rounded},
+      {'num': 5, 'title': '05 GENERATE REPORT', 'count': sb['stage_5_generate_report'] ?? 0, 'icon': Icons.picture_as_pdf_rounded},
+      {'num': 6, 'title': '06 CLOSE AUDIT', 'count': sb['stage_6_close_audit'] ?? 0, 'icon': Icons.lock_rounded},
+    ];
+
+    return Container(
       padding: const EdgeInsets.all(16),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
-            ],
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'AUDIT WORKFLOW CYCLE',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _govBlue, letterSpacing: 0.8),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF0F172A),
-                      shape: BoxShape.circle,
+          const SizedBox(height: 14),
+          Row(
+            children: stages.map((st) {
+              final num = st['num'] as int;
+              final isActive = _activeStage == num;
+              final isCurrentAuditStage = _selectedAudit?.currentStage == num;
+
+              return Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _activeStage = num),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: isActive ? _govBlue : (isCurrentAuditStage ? Colors.blue.shade50 : Colors.grey.shade100),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: isActive ? _govBlue : (isCurrentAuditStage ? _accentBlue : Colors.grey.shade300), width: isActive ? 2 : 1),
                     ),
-                    child: const Icon(Icons.verified_user_rounded, color: Color(0xFFF59E0B), size: 28),
-                  ),
-                  const SizedBox(width: 14),
-                  const Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Step 5: Executive CAG Audit Clearance & Official Sign-Off',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppConstants.textPrimary),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(st['icon'] as IconData, size: 18, color: isActive ? Colors.white : _navy),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isActive ? Colors.white24 : Colors.blue.shade100,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${st['count']}',
+                                style: TextStyle(color: isActive ? Colors.white : _govBlue, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 6),
                         Text(
-                          'Final verification summary for Cycle 2026-09 before generating CAG Vigilance Certificate.',
-                          style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
+                          st['title'] as String,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isActive ? Colors.white : _navy,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-              const Divider(height: 28),
-              const Text(
-                'COMPREHENSIVE AUDIT VERIFICATION CHECKLIST:',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.5, color: Color(0xFF0F172A)),
-              ),
-              const SizedBox(height: 12),
-              _buildChecklistItem('Step 1: Manifest Integrity', 'Cryptographic SHA-256 seal verified. Zero post-planning tampering detected.', true),
-              _buildChecklistItem('Step 2: Supply Chain Transit', 'Digital QR Gatepasses audited. Transit loss variance is -0.32% (below 1.0% limit).', true),
-              _buildChecklistItem('Step 3: AI Model Fairness', 'ML forecast MAPE score is 4.12% (< 5.0%). Zero demographic bias detected.', true),
-              _buildChecklistItem('Step 4: Field Reconciliation', 'Physical FFI weighing scales and e-Pos logs reconciled with 99.8% compliance score.', true),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF86EFAC)),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.stars_rounded, color: Color(0xFF16A34A), size: 32),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'AUDIT STATUS: FULLY CERTIFIED & COMPLIANT',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF14532D)),
-                          ),
-                          Text(
-                            'All statutory NFSA guidelines and digital custody protocols satisfied.',
-                            style: TextStyle(fontSize: 11.5, color: Color(0xFF166534)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () => _showAuditCertificateModal(manifestId, manifestHash),
-                      icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.white, size: 18),
-                      label: const Text('Export Official Certificate', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                  ],
-                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveStageWorkspace() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'STAGE 0$_activeStage WORKSPACE — ${_getStageTitle(_activeStage)}',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _navy),
               ),
+              const Spacer(),
+              if (_selectedAudit != null)
+                Text(
+                  'Selected Audit: ${_selectedAudit!.auditId} (${_selectedAudit!.fpsId})',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _govBlue),
+                ),
             ],
           ),
+          const Divider(height: 20),
+          _buildStageContent(),
+        ],
+      ),
+    );
+  }
+
+  String _getStageTitle(int stage) {
+    switch (stage) {
+      case 1:
+        return 'PLAN & SCHEDULE AUDIT ASSIGNMENT';
+      case 2:
+        return 'PDS SUPPLY CHAIN RECORD VERIFICATION & RECONCILIATION';
+      case 3:
+        return 'INSPECT FPS PHYSICAL RECORDS & EVIDENCE';
+      case 4:
+        return 'ANALYZE COMPLIANCE & RECORD AUDITOR FINDINGS';
+      case 5:
+        return 'GENERATE CRYPTOGRAPHICALLY SEALED AUDIT REPORT';
+      case 6:
+        return 'AUDIT VALIDATION & IMMUTABLE CLOSURE';
+      default:
+        return 'WORKFLOW';
+    }
+  }
+
+  Widget _buildStageContent() {
+    switch (_activeStage) {
+      case 1:
+        return _buildStage1Content();
+      case 2:
+        return _buildStage2Content();
+      case 3:
+        return _buildStage3Content();
+      case 4:
+        return _buildStage4Content();
+      case 5:
+        return _buildStage5Content();
+      case 6:
+        return _buildStage6Content();
+      default:
+        return const SizedBox();
+    }
+  }
+
+  // Stage 01
+  Widget _buildStage1Content() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Plan and schedule new audit assignments based on AI risk signals and routine statutory cycles.', style: TextStyle(fontSize: 13)),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _planFpsController,
+                decoration: const InputDecoration(
+                  labelText: 'Target FPS ID',
+                  hintText: 'FPS-KA-BLR-002',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            ElevatedButton.icon(
+              onPressed: _isActionLoading ? null : _handlePlanAudit,
+              icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.white, size: 18),
+              label: const Text('Schedule Audit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(backgroundColor: _govBlue, padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16)),
+            ),
+          ],
         ),
+        const SizedBox(height: 20),
+        const Text('AI AUDIT PRIORITIZATION RECOMMENDATIONS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govBlue)),
+        const SizedBox(height: 10),
+        ..._aiRecommendations.map((r) => Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: const Icon(Icons.psychology_rounded, color: _amber),
+                title: Text('${r['target_fps_id']} — ${r['recommended_action']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                subtitle: Text('Why: ${r['reason']} (Suggested Type: ${r['suggested_audit_type']})', style: const TextStyle(fontSize: 12)),
+                trailing: ElevatedButton(
+                  onPressed: () {
+                    _planFpsController.text = r['target_fps_id']?.toString() ?? '';
+                    _handlePlanAudit();
+                  },
+                  child: const Text('Schedule'),
+                ),
+              ),
+            )),
       ],
     );
   }
 
-  Widget _buildChecklistItem(String title, String desc, bool isPassed) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppConstants.cardBorder),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isPassed ? Icons.check_circle : Icons.error,
-            color: isPassed ? const Color(0xFF16A34A) : Colors.red,
-            size: 22,
+  // Stage 02
+  Widget _buildStage2Content() {
+    final chain = _activePdsChain;
+    final recon = _activeReconciliation;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text('Trace and verify data integrity from Beneficiary Intent down to FPS e-PoS transactions.', style: TextStyle(fontSize: 13)),
+            const Spacer(),
+            ElevatedButton.icon(
+              onPressed: _isActionLoading || _selectedAudit == null ? null : _handleVerifyRecords,
+              icon: const Icon(Icons.fact_check_rounded, color: Colors.white, size: 18),
+              label: const Text('Mark Stage 02 Records Verified', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(backgroundColor: _green),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (chain != null) ...[
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _buildMetricBadge('Registered Citizens', '${chain['beneficiary_records_count']}'),
+              _buildMetricBadge('Citizen Intents', '${chain['citizen_intents_count']} (${chain['total_intent_rice_kg']}kg)'),
+              _buildMetricBadge('Inbound Dispatches', '${chain['dispatches_count']} Gatepasses'),
+              _buildMetricBadge('e-PoS Transactions', '${chain['epos_transactions_count']} Records'),
+              _buildMetricBadge('Field Inspections', '${chain['inspection_records_count']} Verified'),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
+        ],
+        const SizedBox(height: 20),
+        if (recon != null) ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.blueGrey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppConstants.textPrimary)),
-                const SizedBox(height: 2),
-                Text(desc, style: const TextStyle(fontSize: 11.5, color: AppConstants.textSecondary)),
+                Text('RECORD RECONCILIATION (${recon['commodity']})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _govBlue)),
+                const SizedBox(height: 10),
+                Text('Opening Stock: ${recon['opening_stock_kg']} kg • Distributed: ${recon['total_distributed_kg']} kg • Physical Balance: ${recon['actual_physical_stock_kg']} kg', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text('Calculated Variance: ${recon['variance_kg']} kg (Status: ${recon['status']})', style: TextStyle(color: recon['status'] == 'MATCHED' ? _green : _red, fontWeight: FontWeight.bold, fontSize: 12)),
               ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMetricBadge(String label, String val) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(val, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _govBlue)),
+          Text(label, style: const TextStyle(fontSize: 11, color: Colors.black87)),
+        ],
+      ),
+    );
+  }
+
+  // Stage 03
+  Widget _buildStage3Content() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Review statutory physical verification logs recorded by Field Food Inspectors.', style: TextStyle(fontSize: 13)),
+        const SizedBox(height: 16),
+        if (_activeInspections.isEmpty)
+          const Text('No field inspection records filed for this Fair Price Shop yet.', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))
+        else
+          ..._activeInspections.map((i) => Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  leading: const Icon(Icons.verified_outlined, color: _green),
+                  title: Text('Inspection ${i['inspection_id'] ?? i['id']} — Compliance Score: ${i['compliance_score']}%', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  subtitle: Text('Inspector: ${i['inspector_id']} • Remarks: ${i['remarks']} • Status: ${i['status']}', style: const TextStyle(fontSize: 12)),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: _govBlue, borderRadius: BorderRadius.circular(4)),
+                    child: Text('Hash: ${(i['sealed_hash'] ?? 'VERIFIED').toString().substring(0, 8)}...', style: const TextStyle(color: Colors.white, fontSize: 10)),
+                  ),
+                ),
+              )),
+      ],
+    );
+  }
+
+  // Stage 04
+  Widget _buildStage4Content() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Record official auditor findings, exceptions, and compliance observations.', style: TextStyle(fontSize: 13)),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: _findingTitleController,
+                decoration: const InputDecoration(labelText: 'Finding Title', hintText: 'e.g. Minor Inventory Discrepancy', border: OutlineInputBorder(), isDense: true),
+              ),
+            ),
+            const SizedBox(width: 12),
+            DropdownButton<String>(
+              value: _findingSeverity,
+              items: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                  .toList(),
+              onChanged: (v) => setState(() => _findingSeverity = v!),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: _isActionLoading || _selectedAudit == null ? null : _handleAddFinding,
+              icon: const Icon(Icons.save_rounded, color: Colors.white, size: 18),
+              label: const Text('Add Finding', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(backgroundColor: _govBlue, padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _findingDescController,
+          decoration: const InputDecoration(labelText: 'Detailed Description', hintText: 'Explain the compliance finding...', border: OutlineInputBorder(), isDense: true),
+        ),
+        const SizedBox(height: 16),
+        if (_selectedAudit != null && _selectedAudit!.findings.isNotEmpty) ...[
+          const Text('RECORDED AUDIT FINDINGS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govBlue)),
+          const SizedBox(height: 8),
+          ..._selectedAudit!.findings.map((f) => Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: Icon(Icons.assignment_late_rounded, color: f.severity == 'CRITICAL' ? _red : _amber),
+                  title: Text(f.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  subtitle: Text('${f.description} (Recorded by ${f.createdBy})', style: const TextStyle(fontSize: 12)),
+                ),
+              )),
+        ],
+      ],
+    );
+  }
+
+  // Stage 05
+  Widget _buildStage5Content() {
+    final reportHash = _selectedAudit?.reportHash;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Generate and finalize the cryptographically sealed audit report.', style: TextStyle(fontSize: 13)),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _reportScopeController,
+          decoration: const InputDecoration(labelText: 'Audit Scope', border: OutlineInputBorder(), isDense: true),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _reportObsController,
+          decoration: const InputDecoration(labelText: 'Auditor Observations & Summary', border: OutlineInputBorder(), isDense: true),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            ElevatedButton.icon(
+              onPressed: _isActionLoading || _selectedAudit == null ? null : _handleGenerateReport,
+              icon: const Icon(Icons.fingerprint_rounded, color: Colors.white, size: 18),
+              label: const Text('Generate SHA-256 Sealed Report', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(backgroundColor: _govBlue),
+            ),
+            const SizedBox(width: 16),
+            ElevatedButton.icon(
+              onPressed: _isActionLoading || _selectedAudit == null || _selectedAudit!.reportId == null ? null : _handleFinalizeReport,
+              icon: const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+              label: const Text('Finalize Report for Closure', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(backgroundColor: _green),
+            ),
+          ],
+        ),
+        if (reportHash != null) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.green.shade300)),
+            child: Row(
+              children: [
+                const Icon(Icons.verified_rounded, color: _green, size: 20),
+                const SizedBox(width: 8),
+                Expanded(child: Text('SHA-256 Digital Digest Seal: $reportHash', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: _green))),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // Stage 06
+  Widget _buildStage6Content() {
+    final isClosed = _selectedAudit?.status == 'AUDIT_CLOSED';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          isClosed ? 'This audit is formally CLOSED and cryptographically sealed as immutable.' : 'Perform final validation checks and formally close the audit record.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        const SizedBox(height: 16),
+        if (!isClosed) ...[
+          TextField(
+            controller: _closeReasonController,
+            decoration: const InputDecoration(labelText: 'Closure Confirmation Reason', border: OutlineInputBorder(), isDense: true),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _isActionLoading || _selectedAudit == null ? null : _handleCloseAudit,
+            icon: const Icon(Icons.lock_rounded, color: Colors.white, size: 18),
+            label: const Text('CLOSE AUDIT & MARK IMMUTABLE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: _red, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16)),
+          ),
+        ] else ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.lock_rounded, color: _navy, size: 20),
+                    SizedBox(width: 8),
+                    Text('AUDIT SEALED & CLOSED', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _navy)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text('Closed At: ${_selectedAudit!.closedAt ?? "N/A"} • Closed By: ${_selectedAudit!.closedBy ?? "auditor_user"}'),
+                Text('Reason: ${_selectedAudit!.closureReason ?? "Completed statutory verification"}'),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildAuditAssignmentsTable() {
+    final filtered = _assignments.where((a) {
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        if (!a.auditId.toLowerCase().contains(q) && !a.fpsId.toLowerCase().contains(q) && !a.fpsName.toLowerCase().contains(q)) {
+          return false;
+        }
+      }
+      if (_selectedDistrictFilter != null && a.district != _selectedDistrictFilter) return false;
+      if (_selectedRiskFilter != null && a.riskLevel != _selectedRiskFilter) return false;
+      if (_activeTableTab == 'EXCEPTIONS' && a.riskLevel != 'HIGH' && a.riskLevel != 'CRITICAL') return false;
+      return true;
+    }).toList();
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('AUDIT ASSIGNMENTS REGISTRY', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _navy)),
+              const Spacer(),
+
+              // Search
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                  decoration: const InputDecoration(hintText: 'Search Audit ID / FPS...', isDense: true, prefixIcon: Icon(Icons.search, size: 18), border: OutlineInputBorder()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Table Tabs
+          Row(
+            children: [
+              _buildTabChip('MY ASSIGNMENTS', 'MY_ASSIGNMENTS'),
+              const SizedBox(width: 8),
+              _buildTabChip('ALL AUDITS', 'ALL_AUDITS'),
+              const SizedBox(width: 8),
+              _buildTabChip('EXCEPTIONS', 'EXCEPTIONS'),
+              const Spacer(),
+
+              // Trace Trigger
+              TextButton.icon(
+                onPressed: _showTraceModal,
+                icon: const Icon(Icons.hub_outlined, size: 16),
+                label: const Text('Cross-Portal Trace Engine'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Data Table
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
+              columns: const [
+                DataColumn(label: Text('Audit ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                DataColumn(label: Text('FPS / Shop Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                DataColumn(label: Text('District', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                DataColumn(label: Text('Stage', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                DataColumn(label: Text('Risk Level', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+              ],
+              rows: filtered.map((a) {
+                final isSel = _selectedAudit?.auditId == a.auditId;
+
+                return DataRow(
+                  selected: isSel,
+                  onSelectChanged: (_) {
+                    setState(() {
+                      _selectedAudit = a;
+                      _activeStage = a.currentStage;
+                    });
+                    _loadStageDataForAudit(a.auditId);
+                  },
+                  cells: [
+                    DataCell(Text(a.auditId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _govBlue))),
+                    DataCell(Text('${a.fpsName} (${a.fpsId})', style: const TextStyle(fontSize: 12))),
+                    DataCell(Text(a.district, style: const TextStyle(fontSize: 12))),
+                    DataCell(Text('Stage 0${a.currentStage}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: a.status == 'AUDIT_CLOSED' ? Colors.green.shade100 : Colors.blue.shade100, borderRadius: BorderRadius.circular(4)),
+                        child: Text(a.status, style: TextStyle(color: a.status == 'AUDIT_CLOSED' ? _green : _govBlue, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: a.riskLevel == 'CRITICAL' ? Colors.red.shade100 : (a.riskLevel == 'HIGH' ? Colors.orange.shade100 : Colors.grey.shade200), borderRadius: BorderRadius.circular(4)),
+                        child: Text(a.riskLevel, style: TextStyle(color: a.riskLevel == 'CRITICAL' ? _red : (a.riskLevel == 'HIGH' ? _amber : Colors.black87), fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    DataCell(
+                      ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _selectedAudit = a;
+                            _activeStage = a.currentStage;
+                          });
+                          _loadStageDataForAudit(a.auditId);
+                        },
+                        style: ElevatedButton.styleFrom(backgroundColor: _govBlue, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
+                        child: const Text('Inspect Stage', style: TextStyle(fontSize: 11, color: Colors.white)),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
             ),
           ),
         ],
@@ -1237,23 +1100,212 @@ class _AuditorDashboardScreenState extends State<AuditorDashboardScreen> with Si
     );
   }
 
-  Widget _buildMetricCard(String title, String val, String sub, IconData icon, Color color) {
+  Widget _buildTabChip(String label, String tabKey) {
+    final isAct = _activeTableTab == tabKey;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isAct ? Colors.white : _navy)),
+      selected: isAct,
+      selectedColor: _govBlue,
+      onSelected: (val) => setState(() => _activeTableTab = tabKey),
+    );
+  }
+
+  Widget _buildRightSidePanels() {
+    return Column(
+      children: [
+        // Current Audit Focus Panel
+        _buildCurrentAuditFocusPanel(),
+        const SizedBox(height: 20),
+
+        // AI Compliance Intelligence Panel
+        _buildAiIntelligencePanel(),
+      ],
+    );
+  }
+
+  Widget _buildCurrentAuditFocusPanel() {
+    final a = _selectedAudit;
+
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppConstants.cardBorder),
-      ),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 6),
-          Text(val, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 2),
-          Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppConstants.textPrimary)),
-          Text(sub, style: const TextStyle(fontSize: 10, color: AppConstants.textSecondary)),
+          const Row(
+            children: [
+              Icon(Icons.center_focus_strong_rounded, color: _govBlue, size: 18),
+              SizedBox(width: 8),
+              Text('CURRENT AUDIT FOCUS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _govBlue)),
+            ],
+          ),
+          const Divider(height: 16),
+          if (a == null)
+            const Text('No audit assignment selected.', style: TextStyle(color: Colors.grey))
+          else ...[
+            Text(a.auditId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _navy)),
+            const SizedBox(height: 4),
+            Text('${a.fpsName} (${a.fpsId})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            Text('District: ${a.district} • Cycle: ${a.cycleId}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: Text('Stage: ${a.stageName}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _govBlue))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: a.riskLevel == 'CRITICAL' ? Colors.red.shade100 : Colors.blue.shade100, borderRadius: BorderRadius.circular(4)),
+                  child: Text('Risk: ${a.riskLevel}', style: TextStyle(color: a.riskLevel == 'CRITICAL' ? _red : _govBlue, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('Assigned Team: ${a.assignedTeam}', style: const TextStyle(fontSize: 11)),
+            Text('Risk Reason: ${a.riskReason}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiIntelligencePanel() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.psychology_rounded, color: _amber, size: 18),
+              SizedBox(width: 8),
+              Text('AI COMPLIANCE INTELLIGENCE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _govBlue)),
+            ],
+          ),
+          const Divider(height: 16),
+          ..._aiInsights.map((ins) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(ins['title']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _navy)),
+                    const SizedBox(height: 2),
+                    Text('Why: ${ins['why']}', style: const TextStyle(fontSize: 11, color: Colors.black87)),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+
+  void _showPlanAuditModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Plan & Schedule Audit Assignment'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _planFpsController,
+                decoration: const InputDecoration(labelText: 'FPS ID', hintText: 'FPS-KA-BLR-002'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _handlePlanAudit();
+            },
+            child: const Text('Plan Audit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTraceModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.hub_outlined, color: _govBlue),
+            SizedBox(width: 8),
+            Text('Cross-Portal End-to-End Trace Engine'),
+          ],
+        ),
+        content: SizedBox(
+          width: 600,
+          height: 450,
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  DropdownButton<String>(
+                    value: _traceEntityType,
+                    items: ['FPS', 'BENEFICIARY', 'MANIFEST', 'TRANSACTION', 'AUDIT']
+                        .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _traceEntityType = v!),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _traceEntityController,
+                      decoration: const InputDecoration(hintText: 'Entity ID...', isDense: true, border: OutlineInputBorder()),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(onPressed: _runCrossPortalTrace, child: const Text('Trace')),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _traceChain.length,
+                  itemBuilder: (context, idx) {
+                    final item = _traceChain[idx];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: _govBlue,
+                        radius: 12,
+                        child: Text('${item['step']}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                      title: Text('${item['layer']} — ${item['entity']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      subtitle: Text(item['details']?.toString() ?? '', style: const TextStyle(fontSize: 11)),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(4)),
+                        child: Text(item['status']?.toString() ?? 'VERIFIED', style: const TextStyle(color: _green, fontSize: 9, fontWeight: FontWeight.bold)),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  Widget _buildErrorView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline_rounded, color: _red, size: 48),
+          const SizedBox(height: 16),
+          Text(_errorMessage!, style: const TextStyle(color: _red, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ElevatedButton(onPressed: _loadInitialAuditData, child: const Text('Retry Connection')),
         ],
       ),
     );
