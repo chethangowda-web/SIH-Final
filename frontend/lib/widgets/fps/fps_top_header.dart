@@ -24,7 +24,6 @@ class FpsTopHeader extends StatelessWidget {
 
   static const Color _govNavy = Color(0xFF0F2942);
   static const Color _govGreen = Color(0xFF16A34A);
-  static const Color _govAmber = Color(0xFFD97706);
   static const Color _govRed = Color(0xFFDC2626);
 
   @override
