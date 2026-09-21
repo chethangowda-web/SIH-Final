@@ -3718,8 +3718,6 @@ def get_dso_command_overview(
     # 4. Operations Metrics
     cursor.execute("SELECT COUNT(DISTINCT fps_id) FROM dso_validated_demand WHERE cycle_id = ?;", (cycle_id,))
     allocated_fps_count = cursor.fetchone()[0]
-    if allocated_fps_count == 0:
-        allocated_fps_count = min(total_fps, 628)
 
     cursor.execute("SELECT COUNT(*) FROM manifests WHERE cycle_id = ?;", (cycle_id,))
     total_manifests = cursor.fetchone()[0]

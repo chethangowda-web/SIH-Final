@@ -122,20 +122,34 @@ class DsoWorkflowCycleRing extends StatelessWidget {
             ),
           ),
 
-          // Stage nodes
+          // Stage nodes — horizontal on desktop/tablet, vertical chain on mobile.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (int i = 0; i < _stages.length; i++) ...[
-                    _buildStageNode(_stages[i], i),
-                    if (i < _stages.length - 1) _buildConnector(_statusForStage(i + 2)),
-                  ],
-                ],
-              ),
+            child: LayoutBuilder(
+              builder: (ctx, constraints) {
+                if (constraints.maxWidth < 600) {
+                  return Column(
+                    children: [
+                      for (int i = 0; i < _stages.length; i++) ...[
+                        _buildStageNodeWide(_stages[i]),
+                        if (i < _stages.length - 1) _buildVerticalConnector(_statusForStage(i + 2)),
+                      ],
+                    ],
+                  );
+                }
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (int i = 0; i < _stages.length; i++) ...[
+                        _buildStageNode(_stages[i], i),
+                        if (i < _stages.length - 1) _buildConnector(_statusForStage(i + 2)),
+                      ],
+                    ],
+                  ),
+                );
+              },
             ),
           ),
 
@@ -224,6 +238,81 @@ class DsoWorkflowCycleRing extends StatelessWidget {
               child: const Text('CURRENT', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.5)),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStageNodeWide(Map<String, Object> stage) {
+    final stageNum = stage['num'] as int;
+    final status = _statusForStage(stageNum);
+    final color = _stageColor(status);
+    final bgColor = _stageBg(status);
+    final isCurrent = status == DsoStageStatus.current;
+    final isCompleted = status == DsoStageStatus.completed;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color, width: isCurrent ? 2 : 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: color, width: 1.5),
+            ),
+            child: Center(
+              child: isCompleted
+                  ? Icon(Icons.check_rounded, color: color, size: 18)
+                  : Text('0$stageNum',
+                      style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              (stage['label'] as String).replaceAll('\n', ' '),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+          ),
+          Text(
+            status.label,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color),
+          ),
+          if (isCurrent) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
+              child: const Text('CURRENT',
+                  style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: Colors.white)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVerticalConnector(DsoStageStatus nextStatus) {
+    final active =
+        nextStatus == DsoStageStatus.completed || nextStatus == DsoStageStatus.current;
+    return Container(
+      width: 2,
+      height: 18,
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      decoration: BoxDecoration(
+        color: active ? const Color(0xFF16A34A) : const Color(0xFFCBD5E1),
+        borderRadius: BorderRadius.circular(1),
       ),
     );
   }

@@ -17,6 +17,7 @@ import '../../widgets/dso/dso_stage_detail_panel.dart';
 import '../../widgets/dso/dso_exception_queue.dart';
 import '../../widgets/dso/dso_activity_timeline.dart';
 import '../../widgets/dso/dso_ai_insights_section.dart';
+import '../../widgets/dso/dso_assignments_table.dart';
 import '../../widgets/dso/dso_data_source_modal.dart';
 
 class DsoCommandCenterScreen extends StatefulWidget {
@@ -51,16 +52,18 @@ class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
   // Action state
   bool _actionLoading = false;
 
-  // Cycle + district
-  String _activeCycle = '2026-09';
-  String _selectedDistrict = 'Bengaluru Urban';
-  List<String> _availableDistricts = ['Bengaluru Urban', 'Ramanagara', 'Mandya'];
+  // Cycle + district — authoritative values loaded from backend in _init().
+  // Empty = not yet loaded (UI shows loading / "No data available").
+  String _activeCycle = '';
+  String _selectedDistrict = '';
+  List<String> _availableDistricts = [];
+  List<String> _availableCycles = [];
 
   String get _officerName {
     final sessionUser = AuthSession.instance.username;
-    if (sessionUser != null && sessionUser.trim().isNotEmpty) return sessionUser;
-    if (widget.username != null && widget.username!.trim().isNotEmpty) return widget.username!;
-    return 'District Supply Officer';
+    if (sessionUser != null && sessionUser.trim().isNotEmpty) return sessionUser.trim();
+    if (widget.username != null && widget.username!.trim().isNotEmpty) return widget.username!.trim();
+    return 'DSO Officer';
   }
 
   @override
@@ -77,25 +80,44 @@ class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
   }
 
   Future<void> _init() async {
-    await _loadDistricts();
-    await _loadAll();
-  }
-
-  Future<void> _loadDistricts() async {
+    // 1. Authoritative active cycle from backend choice-window status.
+    try {
+      final status = await _dsoService.getActiveCycleStatus();
+      final backendCycle = (status['cycle_id'] ?? status['cycleId'] ?? '').toString();
+      if (backendCycle.isNotEmpty && mounted) {
+        setState(() {
+          _activeCycle = backendCycle;
+          _availableCycles = [backendCycle];
+        });
+      }
+    } catch (_) {
+      // _loadAll below will surface the connection error honestly.
+    }
+    // 2. Authoritative district list from fps.district via backend.
     try {
       final districts = await _dsoService.getDistricts();
       if (mounted && districts.isNotEmpty) {
         setState(() {
           _availableDistricts = districts;
-          if (!_availableDistricts.contains(_selectedDistrict)) {
+          if (_selectedDistrict.isEmpty || !_availableDistricts.contains(_selectedDistrict)) {
             _selectedDistrict = _availableDistricts.first;
           }
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      // _loadAll below will surface the connection error honestly.
+    }
+    await _loadAll();
   }
 
   Future<void> _loadAll() async {
+    if (_activeCycle.isEmpty || _selectedDistrict.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = 'No cycle or district data available from backend. Check connection and retry.';
+      });
+      return;
+    }
     setState(() { _loading = true; _error = null; });
     try {
       final overview = await _dsoService.getCommandOverview(
@@ -123,7 +145,14 @@ class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
     setState(() { _stageDataLoading = true; });
     try {
       Map<String, dynamic> data = {};
-      DsoAllocationPlan? plan;
+
+      // Allocation plan powers the Assignments table on every stage.
+      // Best-effort: absence renders "No records available for this cycle".
+      try {
+        _allocationPlan = await _dsoService.getAllocationPlan(cycleId: _activeCycle);
+      } catch (_) {
+        _allocationPlan = null;
+      }
 
       switch (state) {
         case DsoWorkflowState.planningOpen:
@@ -144,10 +173,7 @@ class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
           break;
 
         case DsoWorkflowState.allocated:
-          try {
-            plan = await _dsoService.getAllocationPlan(cycleId: _activeCycle);
-            data = {'allocation_plan': 'loaded'};
-          } catch (_) { data = {}; }
+          data = {'allocation_plan': 'loaded'};
           break;
 
         case DsoWorkflowState.optimized:
@@ -187,13 +213,110 @@ class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
       if (mounted) {
         setState(() {
           _stageData = data;
-          _allocationPlan = plan;
           _stageDataLoading = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() { _stageDataLoading = false; });
     }
+  }
+
+  /// Allocation override with full audit trail (old/new/reason/identity/timestamp
+  /// recorded server-side in dso_allocation_overrides + governance trail).
+  Future<void> _handleAllocationOverride(
+      DsoAllocationItem item, double newKg, String reason) async {
+    setState(() { _actionLoading = true; });
+    try {
+      final result = await _dsoService.overrideAllocation(
+        fpsId: item.fpsId,
+        commodity: item.commodity,
+        newAllocationKg: newKg,
+        reason: reason,
+        cycleId: _activeCycle,
+        officerName: _officerName,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(result['message']?.toString() ?? 'Override recorded with audit trail.'),
+              backgroundColor: const Color(0xFF16A34A),
+              duration: const Duration(seconds: 4)),
+        );
+        await _loadAll();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Override failed: $e'),
+              backgroundColor: const Color(0xFFDC2626), duration: const Duration(seconds: 5)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() { _actionLoading = false; });
+    }
+  }
+
+  /// Per-manifest dispatch authorization against the real backend workflow.
+  Future<void> _handleAuthorizeManifest(String manifestId) async {
+    setState(() { _actionLoading = true; });
+    try {
+      final result = await _dsoService.authorizeDispatch(
+        manifestId: manifestId,
+        cycleId: _activeCycle,
+        officerName: _officerName,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(result['message']?.toString() ?? 'Dispatch authorized.'),
+              backgroundColor: const Color(0xFF16A34A),
+              duration: const Duration(seconds: 4)),
+        );
+        await _loadAll();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Authorization failed: $e'),
+              backgroundColor: const Color(0xFFDC2626), duration: const Duration(seconds: 5)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() { _actionLoading = false; });
+    }
+  }
+
+  void _showAllocationItemDetails(DsoAllocationItem item) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('${item.fpsId} — ${item.commodity}',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('FPS: ${item.name}'),
+            const SizedBox(height: 4),
+            Text('Validated requirement: ${item.validatedRequirementKg.toStringAsFixed(1)} kg'),
+            Text('Existing FPS stock: ${item.existingStockKg.toStringAsFixed(1)} kg'),
+            Text('Net requirement: ${item.netRequirementKg.toStringAsFixed(1)} kg'),
+            Text('Proposed allocation: ${item.proposedAllocationKg.toStringAsFixed(1)} kg'),
+            Text('Shortfall: ${item.shortfallKg.toStringAsFixed(1)} kg'),
+            Text('Priority: ${item.priority}'),
+            if (item.isOverridden) Text('Override reason: ${item.overrideReason ?? 'recorded'}'),
+            const SizedBox(height: 8),
+            const Divider(),
+            Text('Cycle: $_activeCycle',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
+    );
   }
 
   Future<void> _handlePrimaryAction() async {
@@ -302,38 +425,42 @@ class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
 
           const SizedBox(width: 24),
 
-          // Cycle selector
+          // Cycle selector — options are backend-confirmed cycles only.
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(color: Colors.white.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
-            child: DropdownButton<String>(
-              value: _activeCycle,
-              underline: const SizedBox(),
-              dropdownColor: const Color(0xFF0B2942),
-              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-              items: ['2026-09', '2026-08', '2026-07'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-              onChanged: (v) {
-                if (v != null) { setState(() => _activeCycle = v); _loadAll(); }
-              },
-            ),
+            child: _availableCycles.isEmpty
+                ? const Text('Cycle: unavailable', style: TextStyle(color: Color(0xFF93C5FD), fontSize: 12))
+                : DropdownButton<String>(
+                    value: _availableCycles.contains(_activeCycle) ? _activeCycle : _availableCycles.first,
+                    underline: const SizedBox(),
+                    dropdownColor: const Color(0xFF0B2942),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                    items: _availableCycles.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                    onChanged: (v) {
+                      if (v != null) { setState(() => _activeCycle = v); _loadAll(); }
+                    },
+                  ),
           ),
 
           const SizedBox(width: 8),
 
-          // District selector
+          // District selector — options from fps.district via backend only.
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(color: Colors.white.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
-            child: DropdownButton<String>(
-              value: _availableDistricts.contains(_selectedDistrict) ? _selectedDistrict : _availableDistricts.first,
-              underline: const SizedBox(),
-              dropdownColor: const Color(0xFF0B2942),
-              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-              items: _availableDistricts.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
-              onChanged: (v) {
-                if (v != null) { setState(() => _selectedDistrict = v); _loadAll(); }
-              },
-            ),
+            child: _availableDistricts.isEmpty
+                ? const Text('District: unavailable', style: TextStyle(color: Color(0xFF93C5FD), fontSize: 12))
+                : DropdownButton<String>(
+                    value: _availableDistricts.contains(_selectedDistrict) ? _selectedDistrict : _availableDistricts.first,
+                    underline: const SizedBox(),
+                    dropdownColor: const Color(0xFF0B2942),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                    items: _availableDistricts.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                    onChanged: (v) {
+                      if (v != null) { setState(() => _selectedDistrict = v); _loadAll(); }
+                    },
+                  ),
           ),
 
           const Spacer(),
@@ -465,6 +592,16 @@ class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
             stageData: _stageData,
             isLoading: _stageDataLoading,
             allocationPlan: _allocationPlan,
+            onAuthorizeManifest: _handleAuthorizeManifest,
+          ),
+          const SizedBox(height: 20),
+
+          // ── 6b. DSO ASSIGNMENTS (real allocation items, search/filter) ─────
+          DsoAssignmentsTable(
+            allocationPlan: _allocationPlan,
+            isLoading: _stageDataLoading,
+            onOverride: _handleAllocationOverride,
+            onViewDetails: _showAllocationItemDetails,
           ),
           const SizedBox(height: 20),
 
@@ -691,33 +828,19 @@ class _DsoCommandCenterScreenState extends State<DsoCommandCenterScreen> {
             Expanded(child: Text(exc.type, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
           ],
         ),
-        content: Column(
+          content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Exception ID: ${exc.id}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+            Text('Exception ID: ${exc.id.isNotEmpty ? exc.id : 'Not provided'}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
             const SizedBox(height: 4),
-            Text('FPS / Entity: ${exc.fps}'),
+            Text('FPS / Entity: ${exc.fps.isNotEmpty ? exc.fps : 'Not provided'}'),
             const SizedBox(height: 4),
-            Text('Details: ${exc.details}'),
-            const SizedBox(height: 8),
-            const Divider(),
-            const Text('Recommended Action:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-            Text(exc.action, style: const TextStyle(color: Color(0xFF2563EB))),
+            Text('Details: ${exc.details.isNotEmpty ? exc.details : 'Not provided'}'),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Exception ${exc.id} acknowledged. Action recorded in governance trail.')),
-              );
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
-            child: const Text('Acknowledge & Action'),
-          ),
         ],
       ),
     );

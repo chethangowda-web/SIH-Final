@@ -7,6 +7,7 @@ class DsoStageDetailPanel extends StatefulWidget {
   final Map<String, dynamic> stageData;
   final bool isLoading;
   final DsoAllocationPlan? allocationPlan;
+  final Future<void> Function(String manifestId)? onAuthorizeManifest;
 
   const DsoStageDetailPanel({
     super.key,
@@ -14,6 +15,7 @@ class DsoStageDetailPanel extends StatefulWidget {
     required this.stageData,
     this.isLoading = false,
     this.allocationPlan,
+    this.onAuthorizeManifest,
   });
 
   @override
@@ -234,7 +236,7 @@ class _DsoStageDetailPanelState extends State<DsoStageDetailPanel> {
         children: [
           _buildDataRow('Dispatch Manifests', manifests.isEmpty ? 'No records' : manifests.length.toString(), const Color(0xFFD97706)),
           if (manifests.isNotEmpty)
-            for (final m in manifests.take(3))
+            for (final m in manifests.take(10))
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Row(
@@ -243,10 +245,17 @@ class _DsoStageDetailPanelState extends State<DsoStageDetailPanel> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        '${m['manifest_id'] ?? ''} — ${m['truck_id'] ?? ''} — ${m['status'] ?? ''}',
+                        '${(m['manifest_id'] ?? '').toString()} — ${(m['truck_id'] ?? '').toString()} → ${(m['fps_id'] ?? m['destination_fps'] ?? '').toString()} — ${(m['quantity_kg'] ?? m['total_quantity_kg'] ?? '').toString()} kg — ${(m['status'] ?? '').toString()}',
                         style: const TextStyle(fontSize: 12, color: Color(0xFF334155)),
                       ),
                     ),
+                    if (widget.onAuthorizeManifest != null &&
+                        (m['manifest_id']?.toString().isNotEmpty ?? false))
+                      TextButton(
+                        onPressed: () =>
+                            widget.onAuthorizeManifest!(m['manifest_id'].toString()),
+                        child: const Text('Authorize', style: TextStyle(fontSize: 12)),
+                      ),
                   ],
                 ),
               )

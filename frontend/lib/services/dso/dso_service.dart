@@ -9,31 +9,9 @@ class DsoService {
 
   DsoService({http.Client? client}) : _client = client ?? http.Client();
 
-  Future<void> ensureAuthenticated() async {
-    if (!AuthSession.instance.isAuthenticated) {
-      try {
-        final res = await _client.post(
-          Uri.parse('${AppConstants.apiBaseUrl}/auth/login'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({'username': 'dso_user', 'password': 'dso_pass'}),
-        );
-        if (res.statusCode == 200) {
-          final data = json.decode(res.body) as Map<String, dynamic>;
-          AuthSession.instance.setSession(
-            token: data['access_token'] as String,
-            username: data['username'] as String? ?? 'dso_user',
-            role: (data['role'] as String? ?? 'DSO').toUpperCase(),
-            expiresInSeconds: data['expires_in'] as int? ?? 36000,
-          );
-        }
-      } catch (_) {}
-    }
-  }
-
   Future<Map<String, String>> _getHeaders() async {
-    if (!AuthSession.instance.isAuthenticated) {
-      await ensureAuthenticated();
-    }
+    // RBAC: DSO workspace requires an authenticated session from the login
+    // screen. Never silently log in with hardcoded credentials here.
     final token = AuthSession.instance.token;
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -46,30 +24,43 @@ class DsoService {
   }
 
   Future<List<String>> getDistricts() async {
+    // No hardcoded fallback: districts come from fps.district via backend.
     final headers = await _getHeaders();
     final uri = Uri.parse('${AppConstants.apiBaseUrl}/admin/dso/districts');
-    try {
-      final res = await _client.get(uri, headers: headers);
-      if (res.statusCode == 200) {
-        final body = json.decode(res.body) as Map<String, dynamic>;
-        final list = (body['districts'] as List<dynamic>? ?? [])
-            .map((e) => e.toString())
-            .toList();
-        if (list.isNotEmpty) return list;
-      }
-    } catch (_) {}
-    return ['Ramanagara', 'Bengaluru Urban', 'Mandya'];
+    final res = await _client.get(uri, headers: headers);
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return (body['districts'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList();
+    }
+    throw ApiException(res.statusCode, 'Failed to fetch districts');
   }
 
   String _resolveOfficerName(String? name) {
-    if (name != null && name.trim().isNotEmpty && name != 'Dr. S. Kumar') {
-      return name;
+    if (name != null && name.trim().isNotEmpty) {
+      return name.trim();
     }
     final sessionUser = AuthSession.instance.username;
     if (sessionUser != null && sessionUser.trim().isNotEmpty) {
-      return sessionUser;
+      return sessionUser.trim();
     }
-    return 'District Supply Officer';
+    // Backend requires officer_name; surface honestly instead of inventing one.
+    throw ApiException(401, 'DSO session expired. Please log in again.');
+  }
+
+  /// Active planning cycle + choice-window state (public endpoint, no auth).
+  Future<Map<String, dynamic>> getActiveCycleStatus({String? cycleId}) async {
+    final headers = await _getHeaders();
+    final q = (cycleId != null && cycleId.trim().isNotEmpty)
+        ? '?cycle_id=${Uri.encodeComponent(cycleId.trim())}'
+        : '';
+    final uri = Uri.parse('${AppConstants.apiBaseUrl}/choice-window/status$q');
+    final res = await _client.get(uri, headers: headers);
+    if (res.statusCode == 200) {
+      return json.decode(res.body) as Map<String, dynamic>;
+    }
+    throw ApiException(res.statusCode, 'Failed to fetch active cycle status');
   }
 
   Future<DsoCommandOverview> getCommandOverview({
@@ -142,8 +133,9 @@ class DsoService {
     required double newAllocationKg,
     required String reason,
     String cycleId = '2026-09',
-    String officerName = 'Dr. S. Kumar',
+    String? officerName,
   }) async {
+    final resolvedOfficer = _resolveOfficerName(officerName);
     final headers = await _getHeaders();
     final uri = Uri.parse('${AppConstants.apiBaseUrl}/admin/dso/allocation-override');
     final body = json.encode({
@@ -152,7 +144,7 @@ class DsoService {
       'commodity': commodity,
       'new_allocation_kg': newAllocationKg,
       'reason': reason,
-      'officer_name': officerName,
+      'officer_name': resolvedOfficer,
     });
     final res = await _client.post(uri, headers: headers, body: body);
     if (res.statusCode == 200) {
@@ -281,12 +273,22 @@ class DsoService {
   }) async {
     final headers = await _getHeaders();
     final uri = Uri.parse('${AppConstants.apiBaseUrl}/admin/dso/surprise-inspection');
+    final resolvedDso = (dsoId != null && dsoId.trim().isNotEmpty)
+        ? dsoId.trim()
+        : (AuthSession.instance.username != null &&
+                AuthSession.instance.username!.trim().isNotEmpty
+            ? AuthSession.instance.username!.trim()
+            : null);
+    if (resolvedDso == null) {
+      throw ApiException(401, 'DSO session expired. Please log in again.');
+    }
     final body = json.encode({
       'fps_id': fpsId,
       'reason': reason,
       'priority': priority,
-      'inspector_id': inspectorId ?? 'INSP-KA-BLR-04',
-      'dso_id': dsoId ?? AuthSession.instance.username ?? 'dso_user',
+      if (inspectorId != null && inspectorId.trim().isNotEmpty)
+        'inspector_id': inspectorId.trim(),
+      'dso_id': resolvedDso,
     });
     final res = await _client.post(uri, headers: headers, body: body);
     if (res.statusCode == 200) {

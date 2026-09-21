@@ -230,13 +230,13 @@ class DsoExceptionItem {
 
   factory DsoExceptionItem.fromJson(Map<String, dynamic> json) {
     return DsoExceptionItem(
-      id: json['id'] ?? 'EXC-000',
-      type: json['type'] ?? 'Unknown Exception',
-      fps: json['fps'] ?? 'N/A',
-      details: json['details'] ?? 'No details available',
-      severity: json['severity'] ?? 'Medium',
-      detectedAt: json['detected_at'] ?? 'Today',
-      action: json['action'] ?? 'View',
+      id: (json['id'] ?? '').toString(),
+      type: (json['type'] ?? '').toString(),
+      fps: (json['fps'] ?? '').toString(),
+      details: (json['details'] ?? '').toString(),
+      severity: (json['severity'] ?? '').toString(),
+      detectedAt: (json['detected_at'] ?? '').toString(),
+      action: (json['action'] ?? '').toString(),
     );
   }
 }
@@ -260,12 +260,12 @@ class DsoAiInsightItem {
 
   factory DsoAiInsightItem.fromJson(Map<String, dynamic> json) {
     return DsoAiInsightItem(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      summary: json['summary'] ?? '',
-      severity: json['severity'] ?? 'Info',
-      why: json['why'] ?? 'Analysis based on historical and intent signals.',
-      evidence: json['evidence'] ?? 'Source: pds_demandsync.db',
+      id: (json['id'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      summary: (json['summary'] ?? '').toString(),
+      severity: (json['severity'] ?? '').toString(),
+      why: (json['why'] ?? '').toString(),
+      evidence: (json['evidence'] ?? '').toString(),
     );
   }
 }
@@ -317,9 +317,9 @@ class DsoCommandOverview {
     final stageStr = json['current_stage'] as String? ?? 'PLANNING_OPEN';
 
     return DsoCommandOverview(
-      status: json['status'] ?? 'success',
-      district: json['district'] ?? 'Bengaluru Urban',
-      cycleId: json['cycle_id'] ?? '2026-09',
+      status: (json['status'] ?? '').toString(),
+      district: (json['district'] ?? '').toString(),
+      cycleId: (json['cycle_id'] ?? '').toString(),
       currentStage: stageStr,
       workflowState: DsoWorkflowState.fromString(stageStr),
       metrics: metricsMap,
@@ -405,14 +405,14 @@ class DsoAllocationPlan {
         .toList();
 
     return DsoAllocationPlan(
-      cycleId: json['cycle_id'] ?? '2026-09',
-      availableDepotStockMt: (json['available_depot_stock_mt'] as num?)?.toDouble() ?? 850.0,
-      totalValidatedDemandMt: (json['total_validated_demand_mt'] as num?)?.toDouble() ?? 276.7,
-      totalExistingFpsStockMt: (json['total_existing_fps_stock_mt'] as num?)?.toDouble() ?? 24.5,
-      totalNetRequirementMt: (json['total_net_requirement_mt'] as num?)?.toDouble() ?? 252.2,
-      totalProposedAllocationMt: (json['total_proposed_allocation_mt'] as num?)?.toDouble() ?? 252.2,
+      cycleId: (json['cycle_id'] ?? '').toString(),
+      availableDepotStockMt: (json['available_depot_stock_mt'] as num?)?.toDouble() ?? 0.0,
+      totalValidatedDemandMt: (json['total_validated_demand_mt'] as num?)?.toDouble() ?? 0.0,
+      totalExistingFpsStockMt: (json['total_existing_fps_stock_mt'] as num?)?.toDouble() ?? 0.0,
+      totalNetRequirementMt: (json['total_net_requirement_mt'] as num?)?.toDouble() ?? 0.0,
+      totalProposedAllocationMt: (json['total_proposed_allocation_mt'] as num?)?.toDouble() ?? 0.0,
       totalShortfallMt: (json['total_shortfall_mt'] as num?)?.toDouble() ?? 0.0,
-      unallocatedDepotBalanceMt: (json['unallocated_depot_balance_mt'] as num?)?.toDouble() ?? 597.8,
+      unallocatedDepotBalanceMt: (json['unallocated_depot_balance_mt'] as num?)?.toDouble() ?? 0.0,
       items: list,
     );
   }
@@ -448,13 +448,13 @@ class GovernanceEventItem {
             : '');
 
     return GovernanceEventItem(
-      eventId: json['event_id'] ?? '',
-      eventType: json['event_type'] ?? '',
-      action: json['action'] ?? '',
-      entity: ent,
-      actor: act,
-      notes: json['notes'] ?? '',
-      timestamp: json['timestamp'] ?? 'Just now',
+      eventId: (json['event_id'] ?? '').toString(),
+      eventType: (json['event_type'] ?? '').toString(),
+      action: (json['action'] ?? '').toString(),
+      entity: ent.toString(),
+      actor: act.toString(),
+      notes: (json['notes'] ?? '').toString(),
+      timestamp: (json['timestamp'] ?? '').toString(),
     );
   }
 }
