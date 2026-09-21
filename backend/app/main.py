@@ -126,6 +126,14 @@ api_router.include_router(grain_atm_router)
 api_router.include_router(tts_router)
 app.include_router(api_router)
 
+api_v1_router = APIRouter(prefix="/api/v1")
+for r in [auth_router, health_router, beneficiaries_router, fps_router, intent_router,
+         demand_inventory_router, dashboard_router, admin_router, scarcity_router,
+         anomaly_router, routing_router, csv_import_router, reports_router,
+         feedback_router, webhook_router, officer_router, grain_atm_router, tts_router]:
+    api_v1_router.include_router(r)
+app.include_router(api_v1_router, include_in_schema=False)
+
 # Register Root-level compatibility aliases (hidden from OpenAPI schema to prevent duplication)
 app.include_router(health_router, include_in_schema=False)
 app.include_router(beneficiaries_router, include_in_schema=False)

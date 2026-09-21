@@ -7,6 +7,7 @@ import '../../services/voice_assistant_service.dart';
 import 'beneficiary_home_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
 import '../dso/dso_command_center_screen.dart';
+import '../inspector/inspector_command_center_screen.dart';
 import '../admin/field_food_inspector_dashboard_screen.dart';
 import '../admin/fps_owner_dashboard_screen.dart';
 import '../admin/auditor_dashboard_screen.dart';
@@ -869,7 +870,7 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
       if (role == 'DSO' || role == 'DISTRICT_SUPPLY_OFFICER' || role == 'ADMIN' || uName == 'dso_user' || uName == 'admin_user' || uName == 'admin') {
         targetScreen = DsoCommandCenterScreen(apiService: _apiService, username: uName);
       } else if (role == 'FIELD_FOOD_INSPECTOR' || role == 'FIELD_OFFICER' || uName == 'inspector_user' || uName == 'field_officer_user' || uName.startsWith('INSP-')) {
-        targetScreen = FieldFoodInspectorDashboardScreen(apiService: _apiService, username: uName);
+        targetScreen = InspectorCommandCenterScreen(apiService: _apiService, username: uName);
       } else if (role == 'FPS_OWNER' || uName.startsWith('FPS') || uName == 'fps_user') {
         targetScreen = FpsOwnerDashboardScreen(apiService: _apiService, username: uName);
       } else if (role == 'AUDITOR' || uName == 'auditor_user') {
