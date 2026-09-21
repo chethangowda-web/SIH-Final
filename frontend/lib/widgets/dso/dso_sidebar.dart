@@ -5,6 +5,7 @@ class DsoSidebar extends StatelessWidget {
   final int selectedNavIndex; // 0: Overview, 1-7: Stages 1-7, 8: AI, 9: Exceptions, 10: Decision Trace, 11: Data Sources
   final ValueChanged<int> onSelectNav;
   final int exceptionCount;
+  final String district;
 
   const DsoSidebar({
     super.key,
@@ -12,12 +13,12 @@ class DsoSidebar extends StatelessWidget {
     required this.selectedNavIndex,
     required this.onSelectNav,
     this.exceptionCount = 7,
+    this.district = 'Ramanagara',
   });
 
   @override
   Widget build(BuildContext context) {
     const bgNavy = Color(0xFF0B132B);
-    const itemActiveBg = Color(0xFF1C2D5A);
     const textMuted = Color(0xFF8D99AE);
     const textBright = Colors.white;
 
@@ -175,12 +176,12 @@ class DsoSidebar extends StatelessWidget {
                 const SizedBox(width: 8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text(
-                      'Ramanagara',
-                      style: TextStyle(color: textBright, fontSize: 13, fontWeight: FontWeight.w600),
+                      district,
+                      style: const TextStyle(color: textBright, fontSize: 13, fontWeight: FontWeight.w600),
                     ),
-                    Text(
+                    const Text(
                       'Karnataka',
                       style: TextStyle(color: textMuted, fontSize: 11),
                     ),

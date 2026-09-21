@@ -3,23 +3,46 @@ import 'package:flutter/material.dart';
 class DsoTopHeader extends StatelessWidget {
   final String activeCycle;
   final String selectedDistrict;
+  final List<String> availableDistricts;
   final ValueChanged<String?> onDistrictChanged;
   final ValueChanged<String?> onCycleChanged;
   final VoidCallback? onNotificationsTap;
   final String officerName;
+  final int notificationCount;
+  final String systemStatus;
 
   const DsoTopHeader({
     super.key,
     required this.activeCycle,
     required this.selectedDistrict,
+    this.availableDistricts = const [],
     required this.onDistrictChanged,
     required this.onCycleChanged,
     this.onNotificationsTap,
-    this.officerName = 'Dr. S. Kumar',
+    this.officerName = 'District Supply Officer',
+    this.notificationCount = 0,
+    this.systemStatus = 'Operational',
   });
 
   @override
   Widget build(BuildContext context) {
+    // Build unique districts list ensuring selectedDistrict is present
+    final districtsList = <String>[];
+    if (availableDistricts.isNotEmpty) {
+      districtsList.addAll(availableDistricts);
+    } else {
+      districtsList.addAll(['Ramanagara', 'Bengaluru Urban', 'Mandya']);
+    }
+    if (!districtsList.contains(selectedDistrict) && selectedDistrict.isNotEmpty) {
+      districtsList.insert(0, selectedDistrict);
+    }
+
+    final initials = officerName.trim().isNotEmpty
+        ? (officerName.trim().length >= 2
+            ? officerName.trim().substring(0, 2).toUpperCase()
+            : officerName.trim().toUpperCase())
+        : 'DS';
+
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -67,14 +90,15 @@ class DsoTopHeader extends StatelessWidget {
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
-                  value: selectedDistrict,
+                  value: districtsList.contains(selectedDistrict) ? selectedDistrict : districtsList.first,
                   isDense: true,
                   style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B), fontWeight: FontWeight.w600),
-                  items: const [
-                    DropdownMenuItem(value: 'Ramanagara', child: Text('District: Ramanagara')),
-                    DropdownMenuItem(value: 'Bengaluru Urban', child: Text('District: Bengaluru Urban')),
-                    DropdownMenuItem(value: 'Mandya', child: Text('District: Mandya')),
-                  ],
+                  items: districtsList.map((d) {
+                    return DropdownMenuItem<String>(
+                      value: d,
+                      child: Text('District: $d'),
+                    );
+                  }).toList(),
                   onChanged: onDistrictChanged,
                 ),
               ),
@@ -129,12 +153,12 @@ class DsoTopHeader extends StatelessWidget {
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.circle, color: Color(0xFF16A34A), size: 8),
-                  SizedBox(width: 6),
+                children: [
+                  const Icon(Icons.circle, color: Color(0xFF16A34A), size: 8),
+                  const SizedBox(width: 6),
                   Text(
-                    'Operational',
-                    style: TextStyle(
+                    systemStatus,
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF15803D),
@@ -155,21 +179,22 @@ class DsoTopHeader extends StatelessWidget {
                     padding: const EdgeInsets.all(8),
                     child: const Icon(Icons.notifications_none_rounded, color: Color(0xFF64748B), size: 22),
                   ),
-                  Positioned(
-                    right: 4,
-                    top: 4,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFEF4444),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Text(
-                        '3',
-                        style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                  if (notificationCount > 0)
+                    Positioned(
+                      right: 4,
+                      top: 4,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFEF4444),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '$notificationCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -182,7 +207,7 @@ class DsoTopHeader extends StatelessWidget {
                   radius: 18,
                   backgroundColor: const Color(0xFF1E3A8A),
                   child: Text(
-                    officerName.startsWith('Dr') ? 'DS' : officerName.substring(0, 2).toUpperCase(),
+                    initials,
                     style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                 ),

@@ -1,5 +1,7 @@
 """District Admin Analytics & Supply Chain Management API Router."""
 import sqlite3
+import json
+import hashlib
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -3536,15 +3538,24 @@ class DsoCloseCycleIn(BaseModel):
     officer_name: str = "Dr. S. Kumar"
     notes: Optional[str] = "Cycle physical reconciliation verified and officially closed."
 
+@router.get("/admin/dso/districts")
+def get_dso_districts(db: sqlite3.Connection = Depends(get_db)):
+    """Fetch distinct districts from authoritative fps table."""
+    cursor = db.cursor()
+    cursor.execute("SELECT DISTINCT district FROM fps WHERE district IS NOT NULL AND district != '' ORDER BY district ASC;")
+    rows = [r[0] for r in cursor.fetchall()]
+    return {"status": "success", "districts": rows}
+
+
 @router.get("/admin/dso/command-overview")
 def get_dso_command_overview(
     cycle_id: str = Query(settings.CURRENT_CYCLE),
-    district: str = Query("Ramanagara"),
+    district: Optional[str] = Query(None),
     db: sqlite3.Connection = Depends(get_db)
 ):
     """
     Stage 01 Command Overview:
-    Aggregates real PDS demand, supply, operations, exceptions, and AI insights from SQLite database.
+    Aggregates real PDS demand, supply, operations, exceptions, and AI insights strictly from SQLite database.
     """
     cursor = db.cursor()
 
@@ -3552,60 +3563,157 @@ def get_dso_command_overview(
     curr_state = workflow_manager.get_current_state(db, cycle_id)
 
     # 2. Demand Metrics from Real Tables
-    cursor.execute("SELECT COUNT(*) FROM beneficiaries;")
-    total_beneficiaries = cursor.fetchone()[0]
+    if district:
+        cursor.execute("""
+        SELECT COUNT(*) FROM beneficiaries b
+        JOIN fps f ON b.registered_fps_id = f.fps_id
+        WHERE f.district = ?;
+        """, (district,))
+        total_beneficiaries = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*), COALESCE(SUM(declared_quantity_kg), 0.0) FROM intent WHERE cycle_id = ?;", (cycle_id,))
-    intent_row = cursor.fetchone()
-    active_intents_count = intent_row[0]
-    intent_demand_kg = float(intent_row[1])
+        cursor.execute("""
+        SELECT COUNT(*), COALESCE(SUM(i.declared_quantity_kg), 0.0)
+        FROM intent i
+        JOIN fps f ON i.intended_fps_id = f.fps_id
+        WHERE i.cycle_id = ? AND f.district = ?;
+        """, (cycle_id, district))
+        intent_row = cursor.fetchone()
+        active_intents_count = intent_row[0]
+        intent_demand_kg = float(intent_row[1])
 
-    cursor.execute("SELECT COALESCE(SUM(declared_quantity_kg), 0.0) FROM intent WHERE cycle_id = ? AND commodity = 'Rice';", (cycle_id,))
-    intent_rice_kg = float(cursor.fetchone()[0])
+        cursor.execute("""
+        SELECT COALESCE(SUM(i.declared_quantity_kg), 0.0)
+        FROM intent i
+        JOIN fps f ON i.intended_fps_id = f.fps_id
+        WHERE i.cycle_id = ? AND i.commodity = 'Rice' AND f.district = ?;
+        """, (cycle_id, district))
+        intent_rice_kg = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT COALESCE(SUM(declared_quantity_kg), 0.0) FROM intent WHERE cycle_id = ? AND commodity = 'Wheat';", (cycle_id,))
-    intent_wheat_kg = float(cursor.fetchone()[0])
+        cursor.execute("""
+        SELECT COALESCE(SUM(i.declared_quantity_kg), 0.0)
+        FROM intent i
+        JOIN fps f ON i.intended_fps_id = f.fps_id
+        WHERE i.cycle_id = ? AND i.commodity = 'Wheat' AND f.district = ?;
+        """, (cycle_id, district))
+        intent_wheat_kg = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
-    forecast_demand_kg = float(cursor.fetchone()[0])
+        cursor.execute("""
+        SELECT COALESCE(SUM(fc.predicted_quantity_kg), 0.0)
+        FROM forecast fc
+        JOIN fps f ON fc.fps_id = f.fps_id
+        WHERE fc.cycle_id = ? AND f.district = ?;
+        """, (cycle_id, district))
+        forecast_demand_kg = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ? AND commodity = 'Rice';", (cycle_id,))
-    forecast_rice_kg = float(cursor.fetchone()[0])
+        cursor.execute("""
+        SELECT COALESCE(SUM(fc.predicted_quantity_kg), 0.0)
+        FROM forecast fc
+        JOIN fps f ON fc.fps_id = f.fps_id
+        WHERE fc.cycle_id = ? AND fc.commodity = 'Rice' AND f.district = ?;
+        """, (cycle_id, district))
+        forecast_rice_kg = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ? AND commodity = 'Wheat';", (cycle_id,))
-    forecast_wheat_kg = float(cursor.fetchone()[0])
+        cursor.execute("""
+        SELECT COALESCE(SUM(fc.predicted_quantity_kg), 0.0)
+        FROM forecast fc
+        JOIN fps f ON fc.fps_id = f.fps_id
+        WHERE fc.cycle_id = ? AND fc.commodity = 'Wheat' AND f.district = ?;
+        """, (cycle_id, district))
+        forecast_wheat_kg = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT COALESCE(SUM(monthly_entitlement_kg), 0.0), COALESCE(SUM(monthly_rice_kg), 0.0), COALESCE(SUM(monthly_wheat_kg), 0.0) FROM beneficiaries;")
-    ben_row = cursor.fetchone()
-    baseline_demand_kg = float(ben_row[0])
-    baseline_rice_kg = float(ben_row[1])
-    baseline_wheat_kg = float(ben_row[2])
+        cursor.execute("""
+        SELECT COALESCE(SUM(b.monthly_entitlement_kg), 0.0),
+               COALESCE(SUM(b.monthly_rice_kg), 0.0),
+               COALESCE(SUM(b.monthly_wheat_kg), 0.0)
+        FROM beneficiaries b
+        JOIN fps f ON b.registered_fps_id = f.fps_id
+        WHERE f.district = ?;
+        """, (district,))
+        ben_row = cursor.fetchone()
+        baseline_demand_kg = float(ben_row[0])
+        baseline_rice_kg = float(ben_row[1])
+        baseline_wheat_kg = float(ben_row[2])
 
-    # 3. Supply Metrics (Godowns / Inventory)
-    cursor.execute("""
-    SELECT COALESCE(SUM(available_stock_mt), 0.0),
-           COALESCE(SUM(rice_stock_mt), 0.0),
-           COALESCE(SUM(wheat_stock_mt), 0.0)
-    FROM depots;
-    """)
-    depot_row = cursor.fetchone()
-    depot_stock_kg = round(float(depot_row[0]) * 1000.0, 1)
-    depot_rice_kg = round(float(depot_row[1]) * 1000.0, 1)
-    depot_wheat_kg = round(float(depot_row[2]) * 1000.0, 1)
+        cursor.execute("SELECT COUNT(*) FROM fps WHERE district = ?;", (district,))
+        total_fps = cursor.fetchone()[0]
 
-    cursor.execute("""
-    SELECT COALESCE(SUM(available_quantity_kg), 0.0),
-           COALESCE(SUM(CASE WHEN commodity = 'Rice' THEN available_quantity_kg ELSE 0 END), 0.0),
-           COALESCE(SUM(CASE WHEN commodity = 'Wheat' THEN available_quantity_kg ELSE 0 END), 0.0)
-    FROM inventory;
-    """)
-    inv_row = cursor.fetchone()
-    fps_inventory_kg = round(float(inv_row[0]), 1)
-    fps_rice_kg = round(float(inv_row[1]), 1)
-    fps_wheat_kg = round(float(inv_row[2]), 1)
+        cursor.execute("""
+        SELECT COALESCE(SUM(available_stock_mt), 0.0),
+               COALESCE(SUM(rice_stock_mt), 0.0),
+               COALESCE(SUM(wheat_stock_mt), 0.0)
+        FROM depots WHERE district = ?;
+        """, (district,))
+        depot_row = cursor.fetchone()
+        depot_stock_kg = round(float(depot_row[0]) * 1000.0, 1)
+        depot_rice_kg = round(float(depot_row[1]) * 1000.0, 1)
+        depot_wheat_kg = round(float(depot_row[2]) * 1000.0, 1)
 
-    cursor.execute("SELECT COUNT(*) FROM fps;")
-    total_fps = cursor.fetchone()[0]
+        cursor.execute("""
+        SELECT COALESCE(SUM(inv.available_quantity_kg), 0.0),
+               COALESCE(SUM(CASE WHEN inv.commodity = 'Rice' THEN inv.available_quantity_kg ELSE 0 END), 0.0),
+               COALESCE(SUM(CASE WHEN inv.commodity = 'Wheat' THEN inv.available_quantity_kg ELSE 0 END), 0.0)
+        FROM inventory inv
+        JOIN fps f ON inv.fps_id = f.fps_id
+        WHERE f.district = ?;
+        """, (district,))
+        inv_row = cursor.fetchone()
+        fps_inventory_kg = round(float(inv_row[0]), 1)
+        fps_rice_kg = round(float(inv_row[1]), 1)
+        fps_wheat_kg = round(float(inv_row[2]), 1)
+    else:
+        cursor.execute("SELECT COUNT(*) FROM beneficiaries;")
+        total_beneficiaries = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*), COALESCE(SUM(declared_quantity_kg), 0.0) FROM intent WHERE cycle_id = ?;", (cycle_id,))
+        intent_row = cursor.fetchone()
+        active_intents_count = intent_row[0]
+        intent_demand_kg = float(intent_row[1])
+
+        cursor.execute("SELECT COALESCE(SUM(declared_quantity_kg), 0.0) FROM intent WHERE cycle_id = ? AND commodity = 'Rice';", (cycle_id,))
+        intent_rice_kg = float(cursor.fetchone()[0])
+
+        cursor.execute("SELECT COALESCE(SUM(declared_quantity_kg), 0.0) FROM intent WHERE cycle_id = ? AND commodity = 'Wheat';", (cycle_id,))
+        intent_wheat_kg = float(cursor.fetchone()[0])
+
+        cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
+        forecast_demand_kg = float(cursor.fetchone()[0])
+
+        cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ? AND commodity = 'Rice';", (cycle_id,))
+        forecast_rice_kg = float(cursor.fetchone()[0])
+
+        cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ? AND commodity = 'Wheat';", (cycle_id,))
+        forecast_wheat_kg = float(cursor.fetchone()[0])
+
+        cursor.execute("SELECT COALESCE(SUM(monthly_entitlement_kg), 0.0), COALESCE(SUM(monthly_rice_kg), 0.0), COALESCE(SUM(monthly_wheat_kg), 0.0) FROM beneficiaries;")
+        ben_row = cursor.fetchone()
+        baseline_demand_kg = float(ben_row[0])
+        baseline_rice_kg = float(ben_row[1])
+        baseline_wheat_kg = float(ben_row[2])
+
+        cursor.execute("SELECT COUNT(*) FROM fps;")
+        total_fps = cursor.fetchone()[0]
+
+        cursor.execute("""
+        SELECT COALESCE(SUM(available_stock_mt), 0.0),
+               COALESCE(SUM(rice_stock_mt), 0.0),
+               COALESCE(SUM(wheat_stock_mt), 0.0)
+        FROM depots;
+        """)
+        depot_row = cursor.fetchone()
+        depot_stock_kg = round(float(depot_row[0]) * 1000.0, 1)
+        depot_rice_kg = round(float(depot_row[1]) * 1000.0, 1)
+        depot_wheat_kg = round(float(depot_row[2]) * 1000.0, 1)
+
+        cursor.execute("""
+        SELECT COALESCE(SUM(available_quantity_kg), 0.0),
+               COALESCE(SUM(CASE WHEN commodity = 'Rice' THEN available_quantity_kg ELSE 0 END), 0.0),
+               COALESCE(SUM(CASE WHEN commodity = 'Wheat' THEN available_quantity_kg ELSE 0 END), 0.0)
+        FROM inventory;
+        """)
+        inv_row = cursor.fetchone()
+        fps_inventory_kg = round(float(inv_row[0]), 1)
+        fps_rice_kg = round(float(inv_row[1]), 1)
+        fps_wheat_kg = round(float(inv_row[2]), 1)
 
     # 4. Operations Metrics
     cursor.execute("SELECT COUNT(DISTINCT fps_id) FROM dso_validated_demand WHERE cycle_id = ?;", (cycle_id,))
@@ -3613,27 +3721,50 @@ def get_dso_command_overview(
     if allocated_fps_count == 0:
         allocated_fps_count = min(total_fps, 628)
 
-    cursor.execute("SELECT COUNT(*) FROM manifests;")
+    cursor.execute("SELECT COUNT(*) FROM manifests WHERE cycle_id = ?;", (cycle_id,))
     total_manifests = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM manifests WHERE status = 'DISPATCHED' OR status = 'DELIVERED';")
+    cursor.execute("SELECT COUNT(*) FROM manifests WHERE cycle_id = ? AND status IN ('DISPATCHED', 'DELIVERED');", (cycle_id,))
     dispatched_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM manifests WHERE status = 'DELIVERED';")
+    cursor.execute("SELECT COUNT(*) FROM manifests WHERE cycle_id = ? AND status = 'DELIVERED';", (cycle_id,))
     delivered_count = cursor.fetchone()[0]
 
-    # 5. Real Exception Queue from Database Forecast Shortfall & Inventory Risk
-    cursor.execute("""
-    SELECT 'EXC-' || printf('%03d', f.id) as id,
-           CASE WHEN f.risk_level = 'CRITICAL' THEN 'Demand Anomaly' ELSE 'Stock Shortage' END as type,
-           f.fps_id as fps,
-           f.fps_id || ' predicted shortfall risk: ' || f.risk_level as details,
-           CASE WHEN f.risk_level = 'CRITICAL' THEN 'Critical' ELSE 'High' END as severity,
-           datetime(f.created_at) as detected_at
-    FROM forecast f
-    WHERE f.risk_level IN ('CRITICAL', 'HIGH')
-    LIMIT 10;
-    """)
+    # 5. Authoritative Exception Queue from Database Forecast Shortfall & Inventory Risk
+    if district:
+        cursor.execute("""
+        SELECT 'EXC-' || printf('%04d', f.id) as id,
+               CASE WHEN f.risk_level = 'CRITICAL' THEN 'Demand Anomaly' ELSE 'Stock Shortage' END as type,
+               f.fps_id as fps,
+               f.fps_id || ' (' || fp.name || ') predicted ' || f.commodity || ': ' || round(f.predicted_quantity_kg, 1) || ' kg (' || f.risk_level || ' risk)' as details,
+               CASE WHEN f.risk_level = 'CRITICAL' THEN 'Critical' ELSE 'High' END as severity,
+               datetime(f.created_at) as detected_at,
+               f.confidence,
+               f.predicted_quantity_kg,
+               f.commodity
+        FROM forecast f
+        JOIN fps fp ON f.fps_id = fp.fps_id
+        WHERE f.cycle_id = ? AND f.risk_level IN ('CRITICAL', 'HIGH') AND fp.district = ?
+        ORDER BY f.predicted_quantity_kg DESC
+        LIMIT 10;
+        """, (cycle_id, district))
+    else:
+        cursor.execute("""
+        SELECT 'EXC-' || printf('%04d', f.id) as id,
+               CASE WHEN f.risk_level = 'CRITICAL' THEN 'Demand Anomaly' ELSE 'Stock Shortage' END as type,
+               f.fps_id as fps,
+               f.fps_id || ' (' || fp.name || ') predicted ' || f.commodity || ': ' || round(f.predicted_quantity_kg, 1) || ' kg (' || f.risk_level || ' risk)' as details,
+               CASE WHEN f.risk_level = 'CRITICAL' THEN 'Critical' ELSE 'High' END as severity,
+               datetime(f.created_at) as detected_at,
+               f.confidence,
+               f.predicted_quantity_kg,
+               f.commodity
+        FROM forecast f
+        JOIN fps fp ON f.fps_id = fp.fps_id
+        WHERE f.cycle_id = ? AND f.risk_level IN ('CRITICAL', 'HIGH')
+        ORDER BY f.predicted_quantity_kg DESC
+        LIMIT 10;
+        """, (cycle_id,))
     exc_rows = cursor.fetchall()
 
     exceptions = []
@@ -3651,24 +3782,11 @@ def get_dso_command_overview(
             "fps": r["fps"],
             "details": r["details"],
             "severity": r["severity"],
-            "detected_at": r["detected_at"] or "Today 09:42",
+            "detected_at": r["detected_at"] or datetime.now().strftime("%Y-%m-%d %H:%M"),
             "action": "View"
         })
 
-    # Supplemental realistic exceptions if table has few
-    if len(exceptions) < 5:
-        default_excs = [
-            {"id": "EXC-001", "type": "Demand Anomaly", "fps": "FPS-KA-017", "details": "+42% intent vs historical", "severity": "Critical", "detected_at": "Today 09:42", "action": "View"},
-            {"id": "EXC-002", "type": "Stock Shortage", "fps": "FPS-KA-042", "details": "Only 2 days stock remaining", "severity": "Critical", "detected_at": "Today 08:17", "action": "View"},
-            {"id": "EXC-003", "type": "Dispatch Delay", "fps": "FPS-KA-087", "details": "Truck delayed by 3 hrs", "severity": "High", "detected_at": "Today 07:56", "action": "View"},
-            {"id": "EXC-004", "type": "Delivery Variance", "fps": "FPS-KA-121", "details": "Received 85% of dispatched", "severity": "High", "detected_at": "Today 06:32", "action": "View"},
-            {"id": "EXC-005", "type": "Inspection Issue", "fps": "FPS-KA-156", "details": "Quality complaint logged", "severity": "Medium", "detected_at": "Yesterday 18:24", "action": "View"}
-        ]
-        exceptions = default_excs
-        crit_count = 2
-        warn_count = 3
-
-    # 6. AI Operational Intelligence Findings grounded on data
+    # 6. AI Operational Intelligence Findings grounded strictly on data
     ai_insights = [
         {
             "id": "INS-001",
@@ -3676,7 +3794,7 @@ def get_dso_command_overview(
             "summary": f"Aggregated {active_intents_count:,} citizen intent declarations for cycle {cycle_id}.",
             "severity": "Critical" if crit_count > 0 else "Info",
             "why": f"Citizen demand signals aggregate to {intent_demand_kg:,.1f} kg compared to {baseline_demand_kg:,.1f} kg baseline entitlement.",
-            "evidence": f"Source: intent_signals.csv & beneficiaries_master.csv ({active_intents_count:,} records)."
+            "evidence": f"Source: intent table & beneficiaries table ({active_intents_count:,} active signals)."
         },
         {
             "id": "INS-002",
@@ -3692,9 +3810,31 @@ def get_dso_command_overview(
             "summary": f"Central Godowns maintain {depot_stock_kg:,.1f} kg available grain reserves.",
             "severity": "Info",
             "why": f"Depot buffer stock is {round(depot_stock_kg / (intent_demand_kg or 1.0), 1)}x of monthly district demand.",
-            "evidence": "Source: depots table (godowns_master.csv) available_stock_mt aggregation."
+            "evidence": "Source: depots table available_stock_mt aggregation."
         }
     ]
+
+    # Deterministic AI recommendation derived from actual database anomalies
+    if exc_rows:
+        top_fps_list = [r["fps"] for r in exc_rows[:3]]
+        top_fps_str = ", ".join(top_fps_list)
+        top_conf = exc_rows[0]["confidence"]
+        conf_str = f"{round(float(top_conf) * 100, 1)}%" if top_conf is not None else "Confidence unavailable"
+        ai_recommendation = {
+            "title": f"Prioritize replenishment for {top_fps_str}",
+            "description": f"Statistical shortfall detected across {len(exc_rows)} centers in cycle {cycle_id}.",
+            "confidence": conf_str,
+            "why": f"{exc_rows[0]['fps']} flagged with elevated requirement ({round(float(exc_rows[0]['predicted_quantity_kg']), 1)} kg {exc_rows[0]['commodity']}) requiring prioritized dispatch.",
+            "evidence": f"Source: forecast table & inventory table ({len(exc_rows)} anomalies flagged)"
+        }
+    else:
+        ai_recommendation = {
+            "title": "Supply and Demand Balanced",
+            "description": "All monitored Fair Price Shops are operating within standard safety thresholds.",
+            "confidence": "Confidence unavailable",
+            "why": "No critical or high shortage risks identified in current planning forecast.",
+            "evidence": "Source: forecast table & inventory table"
+        }
 
     var_intent_forecast = round(intent_demand_kg - forecast_demand_kg, 1)
     var_intent_forecast_pct = round((var_intent_forecast / (forecast_demand_kg or 1.0)) * 100, 1)
@@ -3703,7 +3843,7 @@ def get_dso_command_overview(
 
     res = {
         "status": "success",
-        "district": district,
+        "district": district or "All Districts",
         "cycle_id": cycle_id,
         "current_stage": curr_state,
         "metrics": {
@@ -3715,20 +3855,20 @@ def get_dso_command_overview(
             "depot_stock_kg": {"count": depot_stock_kg, "rice_kg": depot_rice_kg, "wheat_kg": depot_wheat_kg},
             "fps_inventory_kg": {"count": fps_inventory_kg, "rice_kg": fps_rice_kg, "wheat_kg": fps_wheat_kg},
             "active_allocations": {"count": allocated_fps_count, "total_fps": total_fps},
-            "dispatches": {"count": dispatched_count, "total_routes": total_manifests or 62},
-            "deliveries": {"count": delivered_count, "dispatched": dispatched_count or 48},
+            "dispatches": {"count": dispatched_count, "total_routes": total_manifests or 0},
+            "deliveries": {"count": delivered_count, "dispatched": dispatched_count},
             "open_exceptions": {"count": len(exceptions), "critical": crit_count, "warning": warn_count}
         },
         "demand_breakdown": {
             "rice": {
-                "intent_kg": intent_rice_kg or round(intent_demand_kg * 0.75, 1),
-                "forecast_kg": forecast_rice_kg or round(forecast_demand_kg * 0.75, 1),
-                "baseline_kg": baseline_rice_kg or round(baseline_demand_kg * 0.75, 1)
+                "intent_kg": intent_rice_kg,
+                "forecast_kg": forecast_rice_kg,
+                "baseline_kg": baseline_rice_kg
             },
             "wheat": {
-                "intent_kg": intent_wheat_kg or round(intent_demand_kg * 0.25, 1),
-                "forecast_kg": forecast_wheat_kg or round(forecast_demand_kg * 0.25, 1),
-                "baseline_kg": baseline_wheat_kg or round(baseline_demand_kg * 0.25, 1)
+                "intent_kg": intent_wheat_kg,
+                "forecast_kg": forecast_wheat_kg,
+                "baseline_kg": baseline_wheat_kg
             },
             "variance": {
                 "intent_minus_forecast_kg": var_intent_forecast,
@@ -3739,13 +3879,7 @@ def get_dso_command_overview(
         },
         "exceptions": exceptions,
         "ai_insights": ai_insights,
-        "ai_recommendation": {
-            "title": "Prioritize replenishment for FPS-KA-017, FPS-KA-042 and FPS-KA-087.",
-            "description": "Based on predicted shortfall and historical consumption patterns.",
-            "confidence": "94.8%",
-            "why": "FPS-KA-017 has 42% intent surge, FPS-KA-042 has under 2 days stock, and FPS-KA-087 has transit delay.",
-            "evidence": "Source: forecast_engine.py & stockout_risk_engine.py"
-        },
+        "ai_recommendation": ai_recommendation,
         "data_last_updated": datetime.now().strftime("%I:%M %p"),
         "demo_notice": DEMO_NOTICE
     }
@@ -3758,6 +3892,7 @@ def get_dso_command_overview(
 @router.get("/admin/dso/demand-validation")
 def get_dso_demand_validation(
     cycle_id: str = Query(settings.CURRENT_CYCLE),
+    district: Optional[str] = Query(None),
     db: sqlite3.Connection = Depends(get_db)
 ):
     """
@@ -3776,17 +3911,67 @@ def get_dso_demand_validation(
     is_sealed = snap_row is not None and snap_row["lock_status"] == "LOCKED"
 
     # Aggregate demand
-    cursor.execute("SELECT COALESCE(SUM(declared_quantity_kg), 0.0) FROM intent WHERE cycle_id = ?;", (cycle_id,))
-    intent_total = float(cursor.fetchone()[0])
+    if district:
+        cursor.execute("""
+        SELECT COALESCE(SUM(i.declared_quantity_kg), 0.0)
+        FROM intent i
+        JOIN fps f ON i.intended_fps_id = f.fps_id
+        WHERE i.cycle_id = ? AND f.district = ?;
+        """, (cycle_id, district))
+        intent_total = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
-    forecast_total = float(cursor.fetchone()[0])
+        cursor.execute("""
+        SELECT COALESCE(SUM(fc.predicted_quantity_kg), 0.0)
+        FROM forecast fc
+        JOIN fps f ON fc.fps_id = f.fps_id
+        WHERE fc.cycle_id = ? AND f.district = ?;
+        """, (cycle_id, district))
+        forecast_total = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT COALESCE(SUM(monthly_entitlement_kg), 0.0) FROM beneficiaries;")
-    baseline_total = float(cursor.fetchone()[0])
+        cursor.execute("""
+        SELECT COALESCE(SUM(b.monthly_entitlement_kg), 0.0)
+        FROM beneficiaries b
+        JOIN fps f ON b.registered_fps_id = f.fps_id
+        WHERE f.district = ?;
+        """, (district,))
+        baseline_total = float(cursor.fetchone()[0])
+    else:
+        cursor.execute("SELECT COALESCE(SUM(declared_quantity_kg), 0.0) FROM intent WHERE cycle_id = ?;", (cycle_id,))
+        intent_total = float(cursor.fetchone()[0])
+
+        cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
+        forecast_total = float(cursor.fetchone()[0])
+
+        cursor.execute("SELECT COALESCE(SUM(monthly_entitlement_kg), 0.0) FROM beneficiaries;")
+        baseline_total = float(cursor.fetchone()[0])
+
+    # Dynamic Data Quality Signals from Real DB
+    cursor.execute("SELECT COUNT(DISTINCT beneficiary_id) FROM intent WHERE cycle_id = ?;", (cycle_id,))
+    active_intent_bens = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM beneficiaries;")
+    total_bens = cursor.fetchone()[0]
+    ben_cov_pct = round((active_intent_bens / (total_bens or 1)) * 100, 1)
+
+    cursor.execute("SELECT COUNT(*) FROM fps WHERE latitude != 0 AND longitude != 0;")
+    geo_tagged_fps = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM fps;")
+    total_fps = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM forecast WHERE cycle_id = ? AND risk_level IN ('CRITICAL', 'HIGH');", (cycle_id,))
+    outlier_count = cursor.fetchone()[0]
+
+    var_pct = round(abs((forecast_total - baseline_total) / (baseline_total or 1.0)) * 100, 1)
+
+    data_quality_signals = [
+        {"check": "Intent Signal Coverage", "status": f"{active_intent_bens:,}/{total_bens:,} Beneficiaries ({ben_cov_pct}%)", "passed": ben_cov_pct > 10.0},
+        {"check": "FPS Geo-tag Integrity", "status": f"{geo_tagged_fps}/{total_fps} Centers Verified", "passed": geo_tagged_fps == total_fps},
+        {"check": "Statistical Demand Anomalies", "status": f"{outlier_count} Centers Flagged for Scrutiny", "passed": True},
+        {"check": "Historical Baseline Divergence", "status": f"{var_pct}% Variance vs Statutory Entitlement", "passed": var_pct < 25.0}
+    ]
 
     return {
         "cycle_id": cycle_id,
+        "district": district or "All Districts",
         "is_sealed": is_sealed,
         "snapshot_id": snap_row["snapshot_id"] if is_sealed else f"SNAP-{cycle_id}-DRAFT",
         "canonical_hash": snap_row["canonical_hash"] if is_sealed else "Pending Validation",
@@ -3799,12 +3984,7 @@ def get_dso_demand_validation(
             "baseline_demand_kg": baseline_total,
             "validated_demand_kg": snap_row["total_locked_demand_kg"] if is_sealed else forecast_total
         },
-        "data_quality_signals": [
-            {"check": "Intent Signal Coverage", "status": "98.4% Beneficiary Participation", "passed": True},
-            {"check": "FPS Geo-tag Integrity", "status": "628/628 Shops Verified", "passed": True},
-            {"check": "Anomaly Outliers Filtered", "status": "3 Severe Outliers Excluded", "passed": True},
-            {"check": "Historical Baseline Match", "status": "Within 5% Tolerance", "passed": True}
-        ]
+        "data_quality_signals": data_quality_signals
     }
 
 
@@ -3815,20 +3995,93 @@ def post_dso_validate_demand(
 ):
     """
     Stage 02 Statutory DSO Demand Seal Action:
-    Locks canonical demand snapshot, computes SHA-256 seal, updates workflow state to VALIDATED, and logs governance event.
+    1. Retrieves authoritative demand records from SQLite.
+    2. Calculates canonical snapshot.
+    3. Serializes deterministically.
+    4. Computes SHA-256 integrity seal.
+    5. Persists immutable demand_snapshot.
+    6. Creates governance audit event.
+    7. Transitions workflow state to VALIDATED.
     """
-    from app.services.planning_cycle_engine import planning_cycle_engine
+    cursor = db.cursor()
 
-    # Lock demand snapshot via engine
-    lock_res = planning_cycle_engine.lock_demand_snapshot(
-        db, payload.cycle_id, locked_by=payload.officer_name, notes=payload.notes
-    )
+    cursor.execute("""
+    SELECT COUNT(*), COALESCE(SUM(predicted_quantity_kg), 0.0)
+    FROM forecast WHERE cycle_id = ?;
+    """, (payload.cycle_id,))
+    fc_info = cursor.fetchone()
+    fc_count = fc_info[0]
+    total_demand_kg = float(fc_info[1])
+
+    cursor.execute("""
+    SELECT COUNT(*), COALESCE(SUM(declared_quantity_kg), 0.0)
+    FROM intent WHERE cycle_id = ?;
+    """, (payload.cycle_id,))
+    it_info = cursor.fetchone()
+    total_intent_kg = float(it_info[1])
+
+    cursor.execute("""
+    SELECT fps_id, commodity, predicted_quantity_kg
+    FROM forecast WHERE cycle_id = ?
+    ORDER BY fps_id ASC, commodity ASC;
+    """, (payload.cycle_id,))
+    fps_records = [{"fps_id": r[0], "commodity": r[1], "qty": float(r[2])} for r in cursor.fetchall()]
+
+    snapshot_id = f"SNAP-{payload.cycle_id}-DSO"
+    canonical_dict = {
+        "snapshot_id": snapshot_id,
+        "cycle_id": payload.cycle_id,
+        "total_demand_kg": round(total_demand_kg, 1),
+        "total_intent_kg": round(total_intent_kg, 1),
+        "record_count": fc_count,
+        "records": fps_records
+    }
+    canonical_json = json.dumps(canonical_dict, sort_keys=True, separators=(',', ':'))
+    canonical_hash = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS demand_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        snapshot_id TEXT UNIQUE NOT NULL,
+        cycle_id TEXT NOT NULL,
+        version TEXT NOT NULL DEFAULT 'v1.0',
+        lock_status TEXT NOT NULL DEFAULT 'LOCKED',
+        lock_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        locked_by TEXT NOT NULL,
+        total_beneficiary_requests INTEGER NOT NULL,
+        total_declared_intent_kg REAL NOT NULL,
+        total_locked_demand_kg REAL NOT NULL,
+        fps_demand_json TEXT NOT NULL,
+        commodity_quantities_json TEXT NOT NULL,
+        location_distribution_json TEXT NOT NULL,
+        canonical_hash TEXT NOT NULL,
+        is_frozen INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    cursor.execute("""
+    INSERT OR REPLACE INTO demand_snapshots (
+        snapshot_id, cycle_id, version, lock_status, lock_timestamp, locked_by,
+        total_beneficiary_requests, total_declared_intent_kg, total_locked_demand_kg,
+        fps_demand_json, commodity_quantities_json, location_distribution_json,
+        canonical_hash, is_frozen, created_at
+    ) VALUES (?, ?, 'v1.0', 'LOCKED', ?, ?, ?, ?, ?, ?, '{}', '{}', ?, 1, ?);
+    """, (
+        snapshot_id, payload.cycle_id, now_str, payload.officer_name,
+        fc_count, total_intent_kg, total_demand_kg,
+        canonical_json, canonical_hash, now_str
+    ))
+
+    # Freeze forecast records
+    cursor.execute("UPDATE forecast SET status = 'FORECAST_LOCKED' WHERE cycle_id = ?;", (payload.cycle_id,))
 
     # Transition workflow state to VALIDATED
     workflow_manager.transition_state(
         db, payload.cycle_id, WorkflowState.VALIDATED,
         payload.officer_name, "DISTRICT_SUPPLY_OFFICER",
-        f"DSO validated canonical demand snapshot. Hash: {lock_res.get('canonical_hash')}", force=True
+        f"DSO validated canonical demand snapshot. Hash: {canonical_hash}", force=True
     )
 
     # Log governance event
@@ -3837,12 +4090,12 @@ def post_dso_validate_demand(
         event_type="DSO_DEMAND_VALIDATED",
         action="VALIDATE_AND_SEAL_DEMAND",
         entity_type="DEMAND_SNAPSHOT",
-        entity_id=lock_res.get("snapshot_id", f"SNAP-{payload.cycle_id}"),
+        entity_id=snapshot_id,
         actor_name=payload.officer_name,
         actor_role="DISTRICT_SUPPLY_OFFICER",
         cycle_id=payload.cycle_id,
-        notes=f"Sealed demand snapshot with SHA-256: {lock_res.get('canonical_hash')}",
-        integrity_metadata={"hash": lock_res.get("canonical_hash"), "snapshot_id": lock_res.get("snapshot_id")},
+        notes=f"Sealed statutory demand snapshot with SHA-256: {canonical_hash}",
+        integrity_metadata={"hash": canonical_hash, "snapshot_id": snapshot_id},
         is_success=True
     )
     db.commit()
@@ -3850,18 +4103,19 @@ def post_dso_validate_demand(
     return {
         "status": "VALIDATED",
         "cycle_id": payload.cycle_id,
-        "snapshot_id": lock_res.get("snapshot_id"),
-        "canonical_hash": lock_res.get("canonical_hash"),
+        "snapshot_id": snapshot_id,
+        "canonical_hash": canonical_hash,
         "validated_by": payload.officer_name,
-        "validated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC+05:30"),
+        "validated_at": f"{now_str} UTC+05:30",
         "seal_status": "SEALED_IMMUTABLE",
-        "message": "Demand snapshot successfully sealed and marked immutable."
+        "message": "Authoritative demand snapshot successfully sealed with SHA-256 and marked immutable."
     }
 
 
 @router.get("/admin/dso/allocation-plan")
 def get_dso_allocation_plan_endpoint(
     cycle_id: str = Query(settings.CURRENT_CYCLE),
+    district: Optional[str] = Query(None),
     db: sqlite3.Connection = Depends(get_db)
 ):
     """
@@ -3872,32 +4126,44 @@ def get_dso_allocation_plan_endpoint(
     """
     cursor = db.cursor()
 
-    # 1. Available Depot Stock
-    cursor.execute("SELECT COALESCE(SUM(available_stock_mt), 0.0) FROM depots WHERE depot_id = 'DEPOT-01';")
+    # 1. Available Depot Stock strictly from database
+    if district:
+        cursor.execute("SELECT COALESCE(SUM(available_stock_mt), 0.0) FROM depots WHERE district = ?;", (district,))
+    else:
+        cursor.execute("SELECT COALESCE(SUM(available_stock_mt), 0.0) FROM depots;")
     depot_stock_row = cursor.fetchone()
-    depot_stock_mt = float(depot_stock_row[0]) if depot_stock_row and depot_stock_row[0] > 0 else 850.0
+    depot_stock_mt = float(depot_stock_row[0]) if depot_stock_row and depot_stock_row[0] is not None else 0.0
     depot_stock_kg = depot_stock_mt * 1000.0
 
     # 2. Fetch Overrides
     cursor.execute("SELECT fps_id, commodity, new_allocation_kg, reason, officer_name FROM dso_allocation_overrides WHERE cycle_id = ?;", (cycle_id,))
     overrides_map = {(r[0], r[1]): {"new_alloc": r[2], "reason": r[3], "officer": r[4]} for r in cursor.fetchall()}
 
-    # 3. Build itemized allocation matrix
-    cursor.execute("""
-    SELECT f.fps_id, f.name, f.district, f.capacity_kg,
-           fc.commodity,
-           COALESCE(fc.predicted_quantity_kg, 0.0) as validated_req,
-           COALESCE((SELECT available_quantity_kg FROM inventory WHERE fps_id = f.fps_id AND commodity = fc.commodity), 0.0) as current_stock,
-           fc.risk_level
-    FROM fps f
-    JOIN forecast fc ON f.fps_id = fc.fps_id AND fc.cycle_id = ?
-    WHERE f.district LIKE '%Bengaluru%' OR f.fps_id IN ('FPS-001', 'FPS-KA-BLR-015', 'FPS-KA-BLR-008', 'FPS-KA-BLR-003', 'FPS-KA-017', 'FPS-KA-042', 'FPS-KA-087')
-    ORDER BY CASE
-        WHEN f.fps_id IN ('FPS-001', 'FPS-KA-017') THEN 1
-        WHEN f.fps_id IN ('FPS-KA-BLR-015', 'FPS-KA-042') THEN 2
-        WHEN f.fps_id IN ('FPS-KA-BLR-008', 'FPS-KA-087') THEN 3
-        ELSE 4 END, f.fps_id, fc.commodity;
-    """, (cycle_id,))
+    # 3. Build itemized allocation matrix from real database
+    if district:
+        cursor.execute("""
+        SELECT f.fps_id, f.name, f.district, f.capacity_kg,
+               fc.commodity,
+               COALESCE(fc.predicted_quantity_kg, 0.0) as validated_req,
+               COALESCE((SELECT available_quantity_kg FROM inventory WHERE fps_id = f.fps_id AND commodity = fc.commodity), 0.0) as current_stock,
+               fc.risk_level
+        FROM fps f
+        JOIN forecast fc ON f.fps_id = fc.fps_id AND fc.cycle_id = ?
+        WHERE f.district = ?
+        ORDER BY CASE WHEN fc.risk_level = 'CRITICAL' THEN 1 WHEN fc.risk_level = 'HIGH' THEN 2 ELSE 3 END, f.fps_id, fc.commodity;
+        """, (cycle_id, district))
+    else:
+        cursor.execute("""
+        SELECT f.fps_id, f.name, f.district, f.capacity_kg,
+               fc.commodity,
+               COALESCE(fc.predicted_quantity_kg, 0.0) as validated_req,
+               COALESCE((SELECT available_quantity_kg FROM inventory WHERE fps_id = f.fps_id AND commodity = fc.commodity), 0.0) as current_stock,
+               fc.risk_level
+        FROM fps f
+        JOIN forecast fc ON f.fps_id = fc.fps_id AND fc.cycle_id = ?
+        ORDER BY CASE WHEN fc.risk_level = 'CRITICAL' THEN 1 WHEN fc.risk_level = 'HIGH' THEN 2 ELSE 3 END, f.fps_id, fc.commodity
+        LIMIT 40;
+        """, (cycle_id,))
     rows = cursor.fetchall()
 
     items = []
@@ -3964,8 +4230,9 @@ def get_dso_allocation_plan_endpoint(
     return {
         "status": "success",
         "cycle_id": cycle_id,
+        "district": district or "All Districts",
         "available_depot_stock_mt": round(depot_stock_mt, 1),
-        "total_validated_demand_mt": round(tot_req_kg / 1000.0, 1) if tot_req_kg > 0 else 276.7,
+        "total_validated_demand_mt": round(tot_req_kg / 1000.0, 1),
         "total_existing_fps_stock_mt": round(tot_stock_kg / 1000.0, 1),
         "total_net_requirement_mt": round(tot_net_kg / 1000.0, 1),
         "total_proposed_allocation_mt": round(tot_alloc_kg / 1000.0, 1),
@@ -4059,6 +4326,7 @@ def post_dso_allocation_approve(
 @router.get("/admin/dso/supply-routes")
 def get_dso_supply_routes(
     cycle_id: str = Query(settings.CURRENT_CYCLE),
+    district: Optional[str] = Query(None),
     db: sqlite3.Connection = Depends(get_db)
 ):
     """
@@ -4067,80 +4335,87 @@ def get_dso_supply_routes(
     Sources real trucks from vehicles table and real routes from routes table.
     """
     cursor = db.cursor()
-    cursor.execute("""
-    SELECT v.truck_id, v.model, v.vehicle_type, v.corridor, v.max_payload_kg,
-           v.driver_name, v.driver_phone, v.source_depot_id, v.status as vehicle_status
-    FROM vehicles v
-    WHERE v.source_depot_id = 'DEPOT-01' OR v.corridor LIKE '%Corridor%'
-    LIMIT 6;
-    """)
+
+    if district:
+        cursor.execute("""
+        SELECT v.truck_id, v.model, v.vehicle_type, v.corridor, v.max_payload_kg,
+               v.driver_name, v.driver_phone, v.source_depot_id, v.status as vehicle_status,
+               d.name as depot_name
+        FROM vehicles v
+        LEFT JOIN depots d ON v.source_depot_id = d.depot_id
+        WHERE v.corridor = ? OR d.district = ?
+        LIMIT 10;
+        """, (district, district))
+    else:
+        cursor.execute("""
+        SELECT v.truck_id, v.model, v.vehicle_type, v.corridor, v.max_payload_kg,
+               v.driver_name, v.driver_phone, v.source_depot_id, v.status as vehicle_status,
+               d.name as depot_name
+        FROM vehicles v
+        LEFT JOIN depots d ON v.source_depot_id = d.depot_id
+        LIMIT 10;
+        """)
     vehicles = cursor.fetchall()
 
     routes_plan = []
-    corridor_stops_map = {
-        "TRK-KA-0032": {
-            "corridor": "East Corridor / IT Belt",
-            "stops": [{"sequence": 1, "fps_id": "FPS-KA-BLR-015", "fps_name": "Fair Price Shop 15 (Bengaluru Urban)", "commodity": "Rice", "quantity_kg": 2850.0, "distance_km": 18.4, "eta": "45 mins"}],
-            "distance_km": 18.4,
-            "total_qty_kg": 2850.0
-        },
-        "TRK-KA-0031": {
-            "corridor": "North-West Heavy Corridor",
-            "stops": [
-                {"sequence": 1, "fps_id": "FPS-KA-BLR-003", "fps_name": "Fair Price Shop 3 (Bengaluru Urban)", "commodity": "Rice", "quantity_kg": 1750.0, "distance_km": 5.8, "eta": "24 mins"},
-                {"sequence": 2, "fps_id": "FPS-001", "fps_name": "Fair Price Shop 1 (Bengaluru Urban)", "commodity": "Rice", "quantity_kg": 1700.0, "distance_km": 14.9, "eta": "46 mins"}
-            ],
-            "distance_km": 20.7,
-            "total_qty_kg": 3450.0
-        },
-        "TRK-KA-0033": {
-            "corridor": "Central Heritage Urban Cluster",
-            "stops": [{"sequence": 1, "fps_id": "FPS-KA-BLR-008", "fps_name": "Fair Price Shop 8 (Bengaluru Urban)", "commodity": "Rice", "quantity_kg": 1300.0, "distance_km": 9.6, "eta": "33 mins"}],
-            "distance_km": 9.6,
-            "total_qty_kg": 1300.0
-        },
-        "TRK-KA-0034": {
-            "corridor": "South Industrial Corridor",
-            "stops": [
-                {"sequence": 1, "fps_id": "FPS-KA-BLR-U-0004", "fps_name": "Fair Price Shop 4 (Bengaluru Urban)", "commodity": "Rice", "quantity_kg": 1500.0, "distance_km": 6.2, "eta": "25 mins"},
-                {"sequence": 2, "fps_id": "FPS-KA-BLR-U-0005", "fps_name": "Fair Price Shop 5 (Bengaluru Urban)", "commodity": "Rice", "quantity_kg": 1500.0, "distance_km": 6.9, "eta": "27 mins"}
-            ],
-            "distance_km": 13.1,
-            "total_qty_kg": 3000.0
-        }
-    }
-
     for v in vehicles:
         tid = v["truck_id"]
-        c_info = corridor_stops_map.get(tid, {
-            "corridor": v["corridor"] or "Standard Arterial Corridor",
-            "stops": [],
-            "distance_km": 15.0,
-            "total_qty_kg": 2500.0
-        })
+        depot_id = v["source_depot_id"] or "GDN-KA-0001"
+        depot_name = v["depot_name"] or f"Depot {depot_id}"
+
+        # Query real routes for this vehicle's source depot
+        cursor.execute("""
+        SELECT r.route_id, r.destination_fps_id, r.distance_km, r.estimated_time_mins,
+               f.name as fps_name,
+               COALESCE((SELECT SUM(predicted_quantity_kg) FROM forecast WHERE fps_id = r.destination_fps_id AND cycle_id = ?), 0.0) as total_demand_kg
+        FROM routes r
+        JOIN fps f ON r.destination_fps_id = f.fps_id
+        WHERE r.source_depot_id = ?
+        ORDER BY r.distance_km ASC
+        LIMIT 2;
+        """, (cycle_id, depot_id))
+        route_rows = cursor.fetchall()
+
+        stops = []
+        tot_dist = 0.0
+        tot_qty = 0.0
+        for seq, rr in enumerate(route_rows, start=1):
+            fps_qty = float(rr["total_demand_kg"])
+            dist = float(rr["distance_km"])
+            time_mins = int(rr["estimated_time_mins"])
+            tot_dist += dist
+            tot_qty += fps_qty
+            stops.append({
+                "sequence": seq,
+                "fps_id": rr["destination_fps_id"],
+                "fps_name": rr["fps_name"],
+                "commodity": "Rice & Wheat",
+                "quantity_kg": round(fps_qty, 1),
+                "distance_km": dist,
+                "eta": f"{time_mins} mins"
+            })
 
         routes_plan.append({
             "truck_id": tid,
             "truck_model": v["model"],
             "vehicle_type": v["vehicle_type"],
-            "payload_capacity_kg": float(v["max_payload_kg"]),
-            "driver_name": v["driver_name"],
-            "driver_phone": v["driver_phone"],
-            "corridor": c_info["corridor"],
-            "origin_depot": "Bengaluru Central FCI Godown (DEPOT-01)",
-            "total_quantity_kg": c_info["total_qty_kg"],
-            "estimated_distance_km": c_info["distance_km"],
-            "stops_count": len(c_info["stops"]),
-            "stops": c_info["stops"],
-            "route_status": "READY FOR LOADING",
+            "payload_capacity_kg": float(v["max_payload_kg"] or 10000.0),
+            "driver_name": v["driver_name"] or "Driver information unavailable",
+            "driver_phone": v["driver_phone"] or "Contact unavailable",
+            "corridor": v["corridor"] or "Standard Route Corridor",
+            "origin_depot": f"{depot_name} ({depot_id})",
+            "total_quantity_kg": round(tot_qty, 1),
+            "estimated_distance_km": round(tot_dist, 1),
+            "stops_count": len(stops),
+            "stops": stops,
+            "route_status": "READY FOR LOADING" if stops else "NO ACTIVE STOPS",
             "fleet_readiness": "INSPECTED & READY"
         })
 
     return {
         "status": "success",
         "cycle_id": cycle_id,
-        "depot_id": "DEPOT-01",
-        "depot_name": "Bengaluru Central FCI Godown (Hebbal)",
+        "district": district or "All Districts",
         "active_routes_count": len(routes_plan),
         "routes": routes_plan,
         "scenario_mode_active": False,
@@ -4198,8 +4473,10 @@ def get_dso_dispatch_manifests(
            g.gatepass_id, g.security_token, g.status as gatepass_status
     FROM manifests m
     LEFT JOIN gatepasses g ON m.manifest_id = g.manifest_id
-    LIMIT 10;
-    """)
+    WHERE m.cycle_id = ?
+    ORDER BY m.id ASC
+    LIMIT 20;
+    """, (cycle_id,))
     rows = cursor.fetchall()
 
     manifests_list = []
@@ -4212,19 +4489,19 @@ def get_dso_dispatch_manifests(
         manifests_list.append({
             "manifest_id": mid,
             "truck_id": tid,
-            "depot": r["source_depot_id"] or "DEPOT-01",
-            "corridor": r["corridor"] or "North Corridor",
-            "total_quantity_kg": float(r["total_quantity_kg"] or 3450.0),
-            "driver_name": r["driver_name"] or "Ramesh Kumar",
-            "driver_phone": r["driver_phone"] or "+91-9876543210",
-            "gatepass_id": g_id or f"GP-{mid}",
+            "depot": r["source_depot_id"] or "Depot unassigned",
+            "corridor": r["corridor"] or "Corridor unassigned",
+            "total_quantity_kg": float(r["total_quantity_kg"] or 0.0),
+            "driver_name": r["driver_name"] or "Driver information unavailable",
+            "driver_phone": r["driver_phone"] or "Contact unavailable",
+            "gatepass_id": g_id or "Gatepass pending",
             "status": stat,
             "readiness": {
                 "allocation_approved": True,
                 "truck_assigned": tid is not None,
                 "route_assigned": True,
                 "cargo_available": True,
-                "manifest_complete": True,
+                "manifest_complete": bool(r["total_quantity_kg"] and r["total_quantity_kg"] > 0),
                 "gatepass_ready": g_id is not None,
                 "security_clearance": True
             }
@@ -4240,13 +4517,13 @@ def get_dso_dispatch_manifests(
 
 @router.get("/admin/dso/dispatch-check")
 def get_dso_dispatch_preauthorization_check(
-    manifest_id: str = Query("MAN-2026-0912"),
+    manifest_id: str = Query(...),
     cycle_id: str = Query(settings.CURRENT_CYCLE),
     db: sqlite3.Connection = Depends(get_db)
 ):
     """
     Stage 5 Pre-Authorization Verification Engine:
-    Validates all 7 statutory conditions before dispatch departure.
+    Validates all statutory conditions before dispatch departure.
     """
     cursor = db.cursor()
 
@@ -4273,7 +4550,7 @@ def get_dso_dispatch_preauthorization_check(
         WorkflowState.VERIFIED, WorkflowState.EVALUATED, WorkflowState.CYCLE_CLOSED
     ]
 
-    cursor.execute("SELECT COUNT(*) FROM routes WHERE source_depot_id = 'DEPOT-01';")
+    cursor.execute("SELECT COUNT(*) FROM routes WHERE source_depot_id = ?;", (m_row["source_depot_id"] if m_row else "GDN-KA-0001",))
     routes_count = cursor.fetchone()[0]
     route_available = (routes_count > 0)
 
@@ -4325,7 +4602,7 @@ def post_dso_dispatch_authorize(
 ):
     """
     Stage 5 DSO Movement Authorization:
-    Validates the 7 prerequisites, records authorization, and updates workflow state to DISPATCHED.
+    Validates the prerequisites, records authorization, and updates workflow state to DISPATCHED.
     """
     check_res = get_dso_dispatch_preauthorization_check(payload.manifest_id, payload.cycle_id, db)
     if not check_res["can_authorize"]:
@@ -4382,6 +4659,7 @@ def get_dso_delivery_verification(
     """
     Stage 6 Operational Delivery Verification & Inspection Integration:
     Fetches real telemetry status, delivery reconciliation, and inspector findings.
+    Zero demo data fallback.
     """
     cursor = db.cursor()
 
@@ -4389,6 +4667,7 @@ def get_dso_delivery_verification(
     SELECT t.truck_id, t.target_fps_id, t.current_lat, t.current_lon,
            t.distance_to_target_km, t.arrival_status, t.updated_at
     FROM truck_telemetry t
+    ORDER BY t.id DESC
     LIMIT 10;
     """)
     telemetry_rows = cursor.fetchall()
@@ -4405,11 +4684,12 @@ def get_dso_delivery_verification(
             "updated_at": r["updated_at"]
         })
 
-    # Fetch inspections
+    # Fetch real inspections
     cursor.execute("""
     SELECT i.inspection_id, i.fps_id, i.inspector_id, i.compliance_score, i.remarks, i.status, i.created_at
     FROM fps_inspections i
-    LIMIT 5;
+    ORDER BY i.id DESC
+    LIMIT 10;
     """)
     insp_rows = cursor.fetchall()
 
@@ -4429,10 +4709,7 @@ def get_dso_delivery_verification(
         "status": "success",
         "cycle_id": cycle_id,
         "telemetry_available": len(active_shipments) > 0,
-        "active_shipments": active_shipments if active_shipments else [
-            {"truck_id": "TRK-KA-0031", "fps_id": "FPS-KA-BLR-003", "distance_km": 5.8, "status": "IN_TRANSIT", "eta": "24 mins"},
-            {"truck_id": "TRK-KA-0032", "fps_id": "FPS-KA-BLR-015", "distance_km": 18.4, "status": "IN_TRANSIT", "eta": "45 mins"}
-        ],
+        "active_shipments": active_shipments,
         "delivery_discrepancies": [],
         "inspections": inspections
     }
@@ -4479,36 +4756,79 @@ def post_dso_surprise_inspection(
 @router.get("/admin/dso/reconciliation")
 def get_dso_physical_reconciliation(
     cycle_id: str = Query(settings.CURRENT_CYCLE),
+    district: Optional[str] = Query(None),
     db: sqlite3.Connection = Depends(get_db)
 ):
     """
     Stage 7 Closed-Loop Physical Reconciliation:
-    ALLOCATED -> DISPATCHED -> RECEIVED -> DISTRIBUTED -> REMAINING
+    ALLOCATED -> DISPATCHED -> RECEIVED -> DISTRIBUTED -> REMAINING.
+    Calculated purely from real SQLite database tables.
     """
-    allocated_kg = 276731.7
-    dispatched_kg = 276731.7
-    received_kg = 276731.7
-    distributed_kg = 271420.0
-    remaining_kg = round(received_kg - distributed_kg, 1)
-    unexplained_kg = round(dispatched_kg - received_kg, 1)
+    cursor = db.cursor()
+
+    # Allocated quantity from forecast / validated demand
+    if district:
+        cursor.execute("""
+        SELECT COALESCE(SUM(fc.predicted_quantity_kg), 0.0)
+        FROM forecast fc
+        JOIN fps f ON fc.fps_id = f.fps_id
+        WHERE fc.cycle_id = ? AND f.district = ?;
+        """, (cycle_id, district))
+    else:
+        cursor.execute("SELECT COALESCE(SUM(predicted_quantity_kg), 0.0) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
+    allocated_kg = round(float(cursor.fetchone()[0]), 1)
+
+    # Dispatched from manifests
+    cursor.execute("""
+    SELECT COALESCE(SUM(total_quantity_kg), 0.0)
+    FROM manifests
+    WHERE cycle_id = ? AND status IN ('DISPATCHED', 'DELIVERED');
+    """, (cycle_id,))
+    dispatched_kg = round(float(cursor.fetchone()[0]), 1)
+
+    # Received from delivered manifests
+    cursor.execute("""
+    SELECT COALESCE(SUM(total_quantity_kg), 0.0)
+    FROM manifests
+    WHERE cycle_id = ? AND status = 'DELIVERED';
+    """, (cycle_id,))
+    received_kg = round(float(cursor.fetchone()[0]), 1)
+
+    # Distributed from actual_distribution or epos_transactions
+    cursor.execute("SELECT COALESCE(SUM(actual_quantity_kg), 0.0) FROM actual_distribution WHERE cycle_id = ?;", (cycle_id,))
+    dist_row = cursor.fetchone()
+    distributed_kg = round(float(dist_row[0]), 1) if dist_row else 0.0
+
+    remaining_kg = max(0.0, round(received_kg - distributed_kg, 1))
+    unexplained_kg = max(0.0, round(dispatched_kg - received_kg, 1))
+
+    allocated_mt = round(allocated_kg / 1000.0, 1)
+    dispatched_mt = round(dispatched_kg / 1000.0, 1)
+    received_mt = round(received_kg / 1000.0, 1)
+    distributed_mt = round(distributed_kg / 1000.0, 1)
+    remaining_mt = round(remaining_kg / 1000.0, 1)
+    unexplained_mt = round(unexplained_kg / 1000.0, 1)
+
+    offtake_pct = round((distributed_kg / (received_kg or 1.0)) * 100.0, 1) if received_kg > 0 else 0.0
 
     return {
         "cycle_id": cycle_id,
-        "allocated_mt": 276.7,
-        "dispatched_mt": 276.7,
-        "received_mt": 276.7,
-        "distributed_mt": 271.4,
-        "remaining_fps_buffer_mt": 5.3,
-        "unexplained_variance_mt": 0.0,
+        "district": district or "All Districts",
+        "allocated_mt": allocated_mt,
+        "dispatched_mt": dispatched_mt,
+        "received_mt": received_mt,
+        "distributed_mt": distributed_mt,
+        "remaining_fps_buffer_mt": remaining_mt,
+        "unexplained_variance_mt": unexplained_mt,
         "allocated_kg": allocated_kg,
         "dispatched_kg": dispatched_kg,
         "received_kg": received_kg,
         "distributed_kg": distributed_kg,
         "remaining_fps_buffer_kg": remaining_kg,
         "unexplained_variance_kg": unexplained_kg,
-        "offtake_rate_pct": 98.1,
-        "reconciliation_status": "CLEAN_CLOSED_LOOP",
-        "variance_notes": "Zero unexplained discrepancy across supply chain. 5.3 MT surplus buffer securely preserved at Fair Price Shops for cycle rollover.",
+        "offtake_rate_pct": offtake_pct,
+        "reconciliation_status": "CLEAN_CLOSED_LOOP" if unexplained_kg == 0.0 else "VARIANCE_FLAGGED",
+        "variance_notes": f"Reconciliation derived from authoritative manifests and transaction records for cycle {cycle_id}.",
         "demo_notice": DEMO_NOTICE
     }
 
@@ -4520,26 +4840,54 @@ def get_dso_cycle_evaluation(
 ):
     """
     Stage 7 Forecast Accuracy Evaluation & AI Cycle Summary.
+    Computes statistical evaluation metrics against actual historical distributions.
     """
+    cursor = db.cursor()
+
+    # Compare forecast vs historical demand if matching cycle exists
+    cursor.execute("""
+    SELECT AVG(ABS(f.predicted_quantity_kg - h.actual_quantity_kg)) as mae,
+           AVG(ABS(f.predicted_quantity_kg - h.actual_quantity_kg) / NULLIF(h.actual_quantity_kg, 0)) * 100.0 as mape,
+           AVG(f.predicted_quantity_kg - h.actual_quantity_kg) as bias
+    FROM forecast f
+    JOIN historical_demand h ON f.fps_id = h.fps_id AND f.commodity = h.commodity
+    WHERE f.cycle_id = ?;
+    """, (cycle_id,))
+    eval_row = cursor.fetchone()
+
+    has_eval_data = eval_row and eval_row[0] is not None
+    mae_val = round(float(eval_row[0]), 1) if has_eval_data else None
+    mape_val = round(float(eval_row[1]), 1) if has_eval_data else None
+    bias_val = round(float(eval_row[2]), 1) if has_eval_data else None
+    acc_val = round(100.0 - (mape_val or 0.0), 1) if mape_val is not None else None
+
+    # Count actual forecast and intent records
+    cursor.execute("SELECT COUNT(*) FROM forecast WHERE cycle_id = ?;", (cycle_id,))
+    fc_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM intent WHERE cycle_id = ?;", (cycle_id,))
+    it_count = cursor.fetchone()[0]
+
     return {
         "status": "success",
         "cycle_id": cycle_id,
         "metrics": {
-            "mae_kg": 420.5,
-            "mape_pct": 4.2,
-            "bias_kg": 150.0,
-            "accuracy_score_pct": 95.8
+            "mae_kg": mae_val,
+            "mape_pct": mape_val,
+            "bias_kg": bias_val,
+            "accuracy_score_pct": acc_val,
+            "note": "Insufficient actual distribution data for MAPE" if not has_eval_data else "Statistically verified against distribution baseline"
         },
         "ai_cycle_summary": {
-            "title": "Cycle Operational Performance Summary",
+            "title": f"Cycle {cycle_id} Operational Summary",
             "findings": [
-                "Intent declaration accuracy improved demand forecast accuracy by +12.4%.",
-                "Route optimization reduced transit time across corridors by 38 minutes average.",
-                "Zero unexplained physical stock discrepancies detected during closed-loop reconciliation."
+                f"Aggregated {it_count:,} forward-looking citizen intent signals across statewide distribution points.",
+                f"Generated deterministic forecasts for {fc_count:,} Fair Price Shop commodity quotas.",
+                "Closed-loop supply chain reconciliation completed."
             ],
             "recommendations": [
-                "Increase baseline allocation for FPS-KA-017 by 15% in next cycle.",
-                "Rebalance truck fleet load on North-West Heavy Corridor."
+                "Maintain statutory safety stock buffer at godown depots for next distribution cycle.",
+                "Review high-shortfall centers identified during cycle operations."
             ]
         }
     }
@@ -4554,9 +4902,6 @@ def post_dso_close_cycle(
     Stage 7 Final Cycle Closure Action:
     Verifies closure prerequisites and updates cycle status to CYCLE_CLOSED.
     """
-    # Verify prerequisites
-    curr_state = workflow_manager.get_current_state(db, payload.cycle_id)
-
     workflow_manager.transition_state(
         db, payload.cycle_id, WorkflowState.CYCLE_CLOSED,
         payload.officer_name, "DISTRICT_SUPPLY_OFFICER",
@@ -4595,6 +4940,7 @@ def get_governance_events(
     """
     Decision Trace Drawer API:
     Returns immutable audit log events for decision traceability.
+    Zero demo fallback.
     """
     cursor = db.cursor()
     cursor.execute("""
@@ -4616,14 +4962,6 @@ def get_governance_events(
             "metadata": r["integrity_metadata"],
             "timestamp": r["timestamp"] or "Just now"
         })
-
-    if not events:
-        events = [
-            {"event_id": "EVT-101", "event_type": "AI_ANOMALY_DETECTED", "action": "DETECT_DEMAND_SPIKE", "entity": "FPS: FPS-KA-017", "actor": "DemandSync AI Engine", "notes": "AI detected +42% demand anomaly in FPS-KA-017", "timestamp": "10:24 AM"},
-            {"event_id": "EVT-102", "event_type": "DSO_DEMAND_VALIDATED", "action": "SEAL_DEMAND_SNAPSHOT", "entity": "SNAPSHOT: SNAP-2026-09", "actor": "Dr. S. Kumar (DSO)", "notes": "Validated demand snapshot. SHA-256 sealed.", "timestamp": "10:32 AM"},
-            {"event_id": "EVT-103", "event_type": "AI_RECOMMENDATION", "action": "GENERATE_ALLOCATION_PLAN", "entity": "PLAN: ALLOC-2026-09", "actor": "DemandSync AI Engine", "notes": "Generated statutory net requirement allocation plan.", "timestamp": "11:05 AM"},
-            {"event_id": "EVT-104", "event_type": "DSO_ALLOCATION_APPROVED", "action": "APPROVE_ALLOCATION", "entity": "PLAN: ALLOC-2026-09", "actor": "Dr. S. Kumar (DSO)", "notes": "Approved stock allocation plan.", "timestamp": "11:20 AM"}
-        ]
 
     return {
         "status": "success",

@@ -45,6 +45,33 @@ class DsoService {
     return headers;
   }
 
+  Future<List<String>> getDistricts() async {
+    final headers = await _getHeaders();
+    final uri = Uri.parse('${AppConstants.apiBaseUrl}/admin/dso/districts');
+    try {
+      final res = await _client.get(uri, headers: headers);
+      if (res.statusCode == 200) {
+        final body = json.decode(res.body) as Map<String, dynamic>;
+        final list = (body['districts'] as List<dynamic>? ?? [])
+            .map((e) => e.toString())
+            .toList();
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+    return ['Ramanagara', 'Bengaluru Urban', 'Mandya'];
+  }
+
+  String _resolveOfficerName(String? name) {
+    if (name != null && name.trim().isNotEmpty && name != 'Dr. S. Kumar') {
+      return name;
+    }
+    final sessionUser = AuthSession.instance.username;
+    if (sessionUser != null && sessionUser.trim().isNotEmpty) {
+      return sessionUser;
+    }
+    return 'District Supply Officer';
+  }
+
   Future<DsoCommandOverview> getCommandOverview({
     String cycleId = '2026-09',
     String district = 'Ramanagara',
@@ -76,14 +103,15 @@ class DsoService {
 
   Future<Map<String, dynamic>> validateDemand({
     String cycleId = '2026-09',
-    String officerName = 'Dr. S. Kumar',
+    String? officerName,
     String? notes,
   }) async {
+    final resolvedOfficer = _resolveOfficerName(officerName);
     final headers = await _getHeaders();
     final uri = Uri.parse('${AppConstants.apiBaseUrl}/admin/dso/validate-demand');
     final body = json.encode({
       'cycle_id': cycleId,
-      'officer_name': officerName,
+      'officer_name': resolvedOfficer,
       'notes': notes ?? 'Statutory demand snapshot validated and sealed with SHA-256.',
     });
     final res = await _client.post(uri, headers: headers, body: body);
@@ -136,11 +164,12 @@ class DsoService {
 
   Future<Map<String, dynamic>> approveAllocation({
     String cycleId = '2026-09',
-    String officerName = 'Dr. S. Kumar',
+    String? officerName,
   }) async {
+    final resolvedOfficer = _resolveOfficerName(officerName);
     final headers = await _getHeaders();
     final uri = Uri.parse(
-        '${AppConstants.apiBaseUrl}/admin/dso/allocation-approve?cycle_id=$cycleId&officer_name=${Uri.encodeComponent(officerName)}');
+        '${AppConstants.apiBaseUrl}/admin/dso/allocation-approve?cycle_id=$cycleId&officer_name=${Uri.encodeComponent(resolvedOfficer)}');
     final res = await _client.post(uri, headers: headers);
     if (res.statusCode == 200) {
       return json.decode(res.body) as Map<String, dynamic>;
@@ -164,11 +193,12 @@ class DsoService {
 
   Future<Map<String, dynamic>> approveOptimization({
     String cycleId = '2026-09',
-    String officerName = 'Dr. S. Kumar',
+    String? officerName,
   }) async {
+    final resolvedOfficer = _resolveOfficerName(officerName);
     final headers = await _getHeaders();
     final uri = Uri.parse(
-        '${AppConstants.apiBaseUrl}/admin/dso/approve-optimization?cycle_id=$cycleId&officer_name=${Uri.encodeComponent(officerName)}');
+        '${AppConstants.apiBaseUrl}/admin/dso/approve-optimization?cycle_id=$cycleId&officer_name=${Uri.encodeComponent(resolvedOfficer)}');
     final res = await _client.post(uri, headers: headers);
     if (res.statusCode == 200) {
       return json.decode(res.body) as Map<String, dynamic>;
@@ -208,15 +238,16 @@ class DsoService {
   Future<Map<String, dynamic>> authorizeDispatch({
     required String manifestId,
     String cycleId = '2026-09',
-    String officerName = 'Dr. S. Kumar',
+    String? officerName,
     String? notes,
   }) async {
+    final resolvedOfficer = _resolveOfficerName(officerName);
     final headers = await _getHeaders();
     final uri = Uri.parse('${AppConstants.apiBaseUrl}/admin/dso/dispatch-authorize');
     final body = json.encode({
       'cycle_id': cycleId,
       'manifest_id': manifestId,
-      'officer_name': officerName,
+      'officer_name': resolvedOfficer,
       'notes': notes ?? 'Statutory pre-dispatch movement authorized by DSO.',
     });
     final res = await _client.post(uri, headers: headers, body: body);
@@ -246,7 +277,7 @@ class DsoService {
     required String reason,
     String priority = 'HIGH',
     String? inspectorId,
-    String dsoId = 'dso_user',
+    String? dsoId,
   }) async {
     final headers = await _getHeaders();
     final uri = Uri.parse('${AppConstants.apiBaseUrl}/admin/dso/surprise-inspection');
@@ -255,7 +286,7 @@ class DsoService {
       'reason': reason,
       'priority': priority,
       'inspector_id': inspectorId ?? 'INSP-KA-BLR-04',
-      'dso_id': dsoId,
+      'dso_id': dsoId ?? AuthSession.instance.username ?? 'dso_user',
     });
     final res = await _client.post(uri, headers: headers, body: body);
     if (res.statusCode == 200) {
@@ -293,14 +324,15 @@ class DsoService {
 
   Future<Map<String, dynamic>> closeCycle({
     String cycleId = '2026-09',
-    String officerName = 'Dr. S. Kumar',
+    String? officerName,
     String? notes,
   }) async {
+    final resolvedOfficer = _resolveOfficerName(officerName);
     final headers = await _getHeaders();
     final uri = Uri.parse('${AppConstants.apiBaseUrl}/admin/dso/close-cycle');
     final body = json.encode({
       'cycle_id': cycleId,
-      'officer_name': officerName,
+      'officer_name': resolvedOfficer,
       'notes': notes ?? 'Cycle physical reconciliation verified and officially closed.',
     });
     final res = await _client.post(uri, headers: headers, body: body);

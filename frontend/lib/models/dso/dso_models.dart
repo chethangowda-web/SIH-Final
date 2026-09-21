@@ -251,12 +251,21 @@ class GovernanceEventItem {
   });
 
   factory GovernanceEventItem.fromJson(Map<String, dynamic> json) {
+    final ent = json['entity'] ??
+        (json['entity_type'] != null
+            ? '${json['entity_type']}: ${json['entity_id'] ?? ''}'
+            : '');
+    final act = json['actor'] ??
+        (json['actor_name'] != null
+            ? '${json['actor_name']} (${json['actor_role'] ?? ''})'
+            : '');
+
     return GovernanceEventItem(
       eventId: json['event_id'] ?? '',
       eventType: json['event_type'] ?? '',
       action: json['action'] ?? '',
-      entity: json['entity'] ?? '',
-      actor: json['actor'] ?? '',
+      entity: ent,
+      actor: act,
       notes: json['notes'] ?? '',
       timestamp: json['timestamp'] ?? 'Just now',
     );
