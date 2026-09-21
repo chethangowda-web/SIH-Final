@@ -12,12 +12,13 @@ def get_db_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     conn = sqlite3.connect(
         target_path,
         check_same_thread=False,
-        timeout=30.0
+        timeout=60.0,
+        isolation_level=None
     )
     conn.row_factory = sqlite3.Row
     # Enable WAL mode and foreign keys for performance and referential integrity
     conn.execute("PRAGMA journal_mode = WAL;")
-    conn.execute("PRAGMA busy_timeout = 30000;")
+    conn.execute("PRAGMA busy_timeout = 60000;")
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 

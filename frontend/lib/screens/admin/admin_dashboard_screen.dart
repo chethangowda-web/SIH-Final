@@ -22,7 +22,7 @@ import 'citizen_request_queue_dialog.dart';
 import 'causal_trace_dialog.dart';
 import 'incident_detail_dialog.dart';
 import '../beneficiary/demo_login_screen.dart';
-import 'dso_dashboard_screen.dart';
+import '../dso/dso_command_center_screen.dart';
 
 class _WorkflowStageMeta {
   final String title;
@@ -1337,7 +1337,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           'color': const Color(0xFF0F2942),
           'onTap': () {
             Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => DsoDashboardScreen(apiService: _apiService, username: widget.username)),
+              MaterialPageRoute(builder: (_) => DsoCommandCenterScreen(apiService: _apiService, username: widget.username)),
             );
           },
         },
