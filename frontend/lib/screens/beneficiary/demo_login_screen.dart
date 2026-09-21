@@ -1546,11 +1546,6 @@ class _DemoLoginScreenState extends State<DemoLoginScreen> {
 
         const SizedBox(height: 14),
 
-        // Compact Accessibility Voice Assistant Card
-        _buildCompactVoiceAssistantCard(isSmall),
-
-        const SizedBox(height: 14),
-
         // Field 1: Ration Card Number
         Text(tr('login.ration_card_label'), style: TextStyle(fontSize: isSmall ? 11 : 11.5, fontWeight: FontWeight.w600, color: _slate700)),
         const SizedBox(height: 4),

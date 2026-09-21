@@ -43,7 +43,7 @@ void main() {
     expect(find.text('Tap to Speak 🎙️'), findsNothing);
   });
 
-  testWidgets('2. Selecting Citizen OTP displays compact voice assistant card and in-field mic icons', (tester) async {
+  testWidgets('2. Selecting Citizen OTP displays clean form without voice helper card', (tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -64,15 +64,12 @@ void main() {
     // Voice assistant mode remains OFF on login screen
     expect(VoiceAssistantService.instance.isVoiceAssistantMode, isFalse);
 
-    // Old large voice login cards must NOT appear
+    // Old voice login cards and helper cards must NOT appear
     expect(find.text('One-Touch Voice Login (Speak)'), findsNothing);
     expect(find.text('Smart One-Touch Voice Login'), findsNothing);
     expect(find.text('Tap to Speak 🎙️'), findsNothing);
-
-    // Compact Voice Assistance component IS displayed near the top of the form
-    expect(find.text('Need help entering your details?'), findsOneWidget);
-    expect(find.text('Tap the microphone and say your ration card number and registered mobile number.'), findsOneWidget);
-    expect(find.text('Speak'), findsOneWidget);
+    expect(find.text('Need help entering your details?'), findsNothing);
+    expect(find.text('Speak'), findsNothing);
 
     // Citizen OTP form is displayed with in-field mic buttons (for accessibility input assistance)
     expect(find.byKey(const ValueKey('citizen_otp')), findsOneWidget);
