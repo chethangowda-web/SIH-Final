@@ -12,21 +12,37 @@ enum DsoWorkflowState {
   cycleClosed,
   unknown;
 
+  /// Maps the authoritative backend WorkflowState (workflow_manager.py,
+  /// 11 states) plus legacy forecast-engine states onto the 7 DSO stages.
+  /// Unknown strings stay [unknown] — never guessed.
   static DsoWorkflowState fromString(String? s) {
     switch (s?.toUpperCase()) {
       case 'PLANNING_OPEN':
+      case 'FORECASTED':
+      case 'DRAFT_GENERATED':
         return DsoWorkflowState.planningOpen;
       case 'DEMAND_VALIDATED':
+      case 'VALIDATED':
+      case 'FORECAST_LOCKED':
         return DsoWorkflowState.demandValidated;
       case 'ALLOCATED':
         return DsoWorkflowState.allocated;
       case 'OPTIMIZED':
         return DsoWorkflowState.optimized;
       case 'DISPATCH_AUTHORIZED':
+      case 'MANIFEST_DRAFT':
+      case 'MANIFEST_LOCKED':
+      case 'GATEPASS_READY':
+      case 'DISPATCHED':
+      case 'DISPATCH_GENERATED':
         return DsoWorkflowState.dispatchAuthorized;
       case 'DELIVERY_VERIFICATION':
+      case 'VERIFIED':
+      case 'ACTUAL_DISTRIBUTION_SIMULATED':
         return DsoWorkflowState.deliveryVerification;
       case 'EVALUATED':
+      case 'FORECAST_EVALUATED':
+      case 'MODEL_CALIBRATED':
         return DsoWorkflowState.evaluated;
       case 'CYCLE_CLOSED':
         return DsoWorkflowState.cycleClosed;
@@ -57,16 +73,18 @@ enum DsoWorkflowState {
     }
   }
 
+  /// Canonical 7-stage PDS operational cycle labels.
+  /// Backend states map onto these stages; labels never invent workflow state.
   String get displayLabel {
     switch (this) {
       case DsoWorkflowState.planningOpen:
-        return 'Plan & Forecast';
+        return 'Monitor & Triage';
       case DsoWorkflowState.demandValidated:
         return 'Validate Demand';
       case DsoWorkflowState.allocated:
-        return 'Approve Allocation';
+        return 'Allocate';
       case DsoWorkflowState.optimized:
-        return 'Optimize Supply';
+        return 'Optimize';
       case DsoWorkflowState.dispatchAuthorized:
         return 'Authorize Dispatch';
       case DsoWorkflowState.deliveryVerification:
@@ -83,19 +101,19 @@ enum DsoWorkflowState {
   String get currentActionMessage {
     switch (this) {
       case DsoWorkflowState.planningOpen:
-        return 'Citizen intent signals are being collected. Review forecast vs baseline demand and validate when ready.';
+        return 'Triage live demand conditions, then continue to demand validation.';
       case DsoWorkflowState.demandValidated:
-        return 'Demand snapshot validated and sealed. Review stock allocation plan before approving.';
+        return 'Demand snapshot sealed. Approve the allocation plan to proceed.';
       case DsoWorkflowState.allocated:
-        return 'Stock allocation approved. Review supply route optimization plan before authorizing.';
+        return 'Allocation approved. Approve route optimization to proceed.';
       case DsoWorkflowState.optimized:
-        return 'Route optimization approved. Review dispatch manifests and authorize truck movements.';
+        return 'Optimization approved. Authorize each dispatch manifest to release trucks.';
       case DsoWorkflowState.dispatchAuthorized:
-        return 'Dispatch authorized. Monitor truck movements and verify deliveries at FPS locations.';
+        return 'Dispatch authorized. Verify physical deliveries at FPS locations.';
       case DsoWorkflowState.deliveryVerification:
-        return 'Delivery verification in progress. Review FPS receipts and reconciliation data.';
+        return 'Delivery verification in progress. Review receipts and reconciliation.';
       case DsoWorkflowState.evaluated:
-        return 'Cycle evaluation complete. Review reconciliation summary and close the cycle when satisfied.';
+        return 'Evaluation complete. Close the cycle when reconciliation is satisfied.';
       case DsoWorkflowState.cycleClosed:
         return 'Planning cycle officially closed and archived. All records sealed.';
       default:
@@ -106,7 +124,7 @@ enum DsoWorkflowState {
   String get primaryActionLabel {
     switch (this) {
       case DsoWorkflowState.planningOpen:
-        return 'Validate Demand';
+        return 'Continue to Validate';
       case DsoWorkflowState.demandValidated:
         return 'Approve Allocation';
       case DsoWorkflowState.allocated:
@@ -298,7 +316,9 @@ class DsoCommandOverview {
   });
 
   factory DsoCommandOverview.fromJson(Map<String, dynamic> json) {
-    final mRaw = json['metrics'] as Map<String, dynamic>? ?? {};
+    final mRaw = json['metrics'] is Map
+        ? Map<String, dynamic>.from(json['metrics'] as Map)
+        : <String, dynamic>{};
     final metricsMap = <String, MetricItem>{};
     mRaw.forEach((key, val) {
       if (val is Map<String, dynamic>) {
@@ -323,10 +343,14 @@ class DsoCommandOverview {
       currentStage: stageStr,
       workflowState: DsoWorkflowState.fromString(stageStr),
       metrics: metricsMap,
-      demandBreakdown: json['demand_breakdown'] as Map<String, dynamic>? ?? {},
+      demandBreakdown: json['demand_breakdown'] is Map
+          ? Map<String, dynamic>.from(json['demand_breakdown'] as Map)
+          : <String, dynamic>{},
       exceptions: excList,
       aiInsights: aiList,
-      aiRecommendation: json['ai_recommendation'] as Map<String, dynamic>? ?? {},
+      aiRecommendation: json['ai_recommendation'] is Map
+          ? Map<String, dynamic>.from(json['ai_recommendation'] as Map)
+          : <String, dynamic>{},
       dataLastUpdated: json['data_last_updated'] ?? '',
     );
   }
