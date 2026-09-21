@@ -163,7 +163,14 @@ class FpsService {
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     }
-    throw Exception('Beneficiary verification failed: ${response.statusCode}');
+    String errorDetail = 'Status ${response.statusCode}';
+    try {
+      final err = jsonDecode(response.body);
+      if (err is Map && err.containsKey('detail')) {
+        errorDetail = err['detail'].toString();
+      }
+    } catch (_) {}
+    throw Exception('Beneficiary verification failed: $errorDetail');
   }
 
   /// 10. Atomic e-PoS Dispense

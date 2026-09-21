@@ -50,6 +50,7 @@ class _FpsCommandCenterScreenState extends State<FpsCommandCenterScreen> {
 
   // e-PoS Active Terminal State
   final TextEditingController _beneficiarySearchController = TextEditingController(text: 'BEN-KA-0001');
+  final TextEditingController _eposOtpController = TextEditingController(text: '123456');
   bool _isCheckingEligibility = false;
   FpsEposEligibility? _activeEligibility;
   String _verificationMode = 'AADHAAR_BIOMETRIC'; // AADHAAR_BIOMETRIC, OTP
@@ -157,15 +158,16 @@ class _FpsCommandCenterScreenState extends State<FpsCommandCenterScreen> {
         _activeFpsId,
         _activeEligibility!.beneficiaryId,
         _verificationMode,
+        otpCode: _verificationMode == 'OTP' ? _eposOtpController.text.trim() : '123456',
       );
       setState(() {
         _isVerified = true;
         _isActionLoading = false;
       });
-      _showSnackbar('Beneficiary identity successfully verified.');
+      _showSnackbar('Beneficiary identity successfully verified via ${_verificationMode == 'OTP' ? 'OTP' : 'Aadhaar Biometric'}.');
     } catch (e) {
       setState(() => _isActionLoading = false);
-      _showSnackbar('Biometric verification failed: $e', isError: true);
+      _showSnackbar('Beneficiary verification failed: $e', isError: true);
     }
   }
 
@@ -1086,14 +1088,37 @@ class _FpsCommandCenterScreenState extends State<FpsCommandCenterScreen> {
                         ChoiceChip(
                           label: const Text('Aadhaar Biometric Scan'),
                           selected: _verificationMode == 'AADHAAR_BIOMETRIC',
-                          onSelected: (val) => setState(() => _verificationMode = 'AADHAAR_BIOMETRIC'),
+                          onSelected: (val) => setState(() {
+                            _verificationMode = 'AADHAAR_BIOMETRIC';
+                            _isVerified = false;
+                          }),
                         ),
                         const SizedBox(width: 12),
                         ChoiceChip(
                           label: const Text('Registered Citizen OTP'),
                           selected: _verificationMode == 'OTP',
-                          onSelected: (val) => setState(() => _verificationMode = 'OTP'),
+                          onSelected: (val) => setState(() {
+                            _verificationMode = 'OTP';
+                            _isVerified = false;
+                          }),
                         ),
+                        if (_verificationMode == 'OTP') ...[
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: 140,
+                            child: TextField(
+                              controller: _eposOtpController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                labelText: 'OTP Code',
+                                hintText: '123456',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 24),
                         ElevatedButton.icon(
                           onPressed: _isActionLoading || _isVerified ? null : _verifyBeneficiaryIdentity,
